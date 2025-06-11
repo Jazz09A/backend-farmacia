@@ -1,0 +1,144 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.config.database import get_db
+from app.schemas.auth import (
+    LoginRequest, 
+    RegisterRequest, 
+    Token, 
+    RefreshTokenRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    VerifyEmailRequest,
+    ResendVerificationRequest,
+    AuthResponse
+)
+from app.schemas.user import UserResponse
+from app.services.auth_service import AuthService
+from app.core.dependencies import get_current_active_user, get_current_user
+from app.models.user import User
+
+router = APIRouter()
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    user_data: RegisterRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Registrar un nuevo usuario.
+    
+    - **email**: Email del usuario (debe ser único)
+    - **name**: Nombre completo del usuario
+    - **password**: Contraseña (mínimo 8 caracteres)
+    - **confirm_password**: Confirmación de contraseña
+    - **user_type**: Tipo de usuario (natural o juridico)
+    - **phone**: Teléfono (opcional)
+    - **preferred_currency**: Moneda preferida (VES o USD)
+    """
+    return await AuthService.register_user(db, user_data)
+
+@router.post("/login", response_model=Token)
+async def login(
+    login_data: LoginRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Iniciar sesión con email y contraseña.
+    
+    Retorna tokens de acceso y actualización.
+    """
+    return await AuthService.authenticate_user(db, login_data)
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(
+    refresh_data: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Actualizar token de acceso usando token de actualización.
+    """
+    return await AuthService.refresh_access_token(db, refresh_data.refresh_token)
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Obtener información del usuario actual autenticado.
+    """
+    return current_user
+
+@router.post("/verify-email", response_model=AuthResponse)
+async def verify_email(
+    verify_data: VerifyEmailRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Verificar email del usuario con token.
+    """
+    return await AuthService.verify_email(db, verify_data.token)
+
+@router.post("/resend-verification", response_model=AuthResponse)
+async def resend_verification_email(
+    resend_data: ResendVerificationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reenviar email de verificación.
+    """
+    return await AuthService.resend_verification_email(db, resend_data.email)
+
+@router.post("/forgot-password", response_model=AuthResponse)
+async def forgot_password(
+    forgot_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Solicitar recuperación de contraseña.
+    
+    Se enviará un email con instrucciones si el email existe.
+    """
+    return await AuthService.send_reset_password_email(db, forgot_data.email)
+
+@router.post("/reset-password", response_model=AuthResponse)
+async def reset_password(
+    reset_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Restablecer contraseña con token de recuperación.
+    """
+    return await AuthService.reset_password(db, reset_data.token, reset_data.new_password)
+
+@router.post("/change-password", response_model=AuthResponse)
+async def change_password(
+    current_password: str,
+    new_password: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambiar contraseña del usuario autenticado.
+    """
+    return await AuthService.change_password(
+        db, 
+        current_user.id, 
+        current_password, 
+        new_password
+    )
+
+@router.post("/logout", response_model=AuthResponse)
+async def logout(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Cerrar sesión (invalidar token).
+    
+    Nota: En esta implementación simple, solo confirmamos el logout.
+    En un sistema más avanzado, se podría mantener una lista de tokens revocados.
+    """
+    return AuthResponse(
+        message="Sesión cerrada exitosamente",
+        success=True
+    ) 
