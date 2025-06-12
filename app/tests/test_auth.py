@@ -14,15 +14,17 @@ class TestAuthRegistration:
     """Tests para registro de usuarios"""
     
     def test_register_user_success(self, client: TestClient, test_user_data):
-        """Test registro exitoso de usuario"""
-        response = client.post("/api/v1/auth/register", json=test_user_data)
+        """Test registro exitoso de usuario natural"""
+        response = client.post("/api/v1/auth/register/natural", json=test_user_data)
         
         assert response.status_code == 201
         data = response.json()
         
         assert data["email"] == test_user_data["email"]
-        assert data["name"] == test_user_data["name"]
-        assert data["user_type"] == test_user_data["user_type"]
+        assert data["first_name"] == test_user_data["first_name"]
+        assert data["last_name"] == test_user_data["last_name"]
+        assert data["cedula"] == test_user_data["cedula"]
+        assert data["user_type"] == "natural"
         assert data["phone"] == test_user_data["phone"]
         assert data["preferred_currency"] == test_user_data["preferred_currency"]
         assert data["is_active"] is True
@@ -32,62 +34,79 @@ class TestAuthRegistration:
     
     def test_register_juridico_user_success(self, client: TestClient, test_user_data_juridico):
         """Test registro exitoso de usuario jurídico"""
-        response = client.post("/api/v1/auth/register", json=test_user_data_juridico)
+        response = client.post("/api/v1/auth/register/juridico", json=test_user_data_juridico)
         
         assert response.status_code == 201
         data = response.json()
+        
+        assert data["email"] == test_user_data_juridico["email"]
+        assert data["company_name"] == test_user_data_juridico["company_name"]
+        assert data["rif"] == test_user_data_juridico["rif"]
+        assert data["registro_mercantil"] == test_user_data_juridico["registro_mercantil"]
+        assert data["representante_legal_cedula"] == test_user_data_juridico["representante_legal_cedula"]
+        assert data["representante_legal_nombre"] == test_user_data_juridico["representante_legal_nombre"]
         assert data["user_type"] == "juridico"
         assert data["preferred_currency"] == "USD"
+        assert data["is_active"] is True
+        assert data["is_verified"] is False
     
     def test_register_duplicate_email(self, client: TestClient, test_user_data):
         """Test registro con email duplicado"""
         # Register first user
-        client.post("/api/v1/auth/register", json=test_user_data)
+        client.post("/api/v1/auth/register/natural", json=test_user_data)
         
         # Try to register with same email
-        response = client.post("/api/v1/auth/register", json=test_user_data)
+        response = client.post("/api/v1/auth/register/natural", json=test_user_data)
         
         assert response.status_code == 400
         assert "ya está registrado" in response.json()["detail"]
     
-    def test_register_passwords_dont_match(self, client: TestClient, test_user_data):
-        """Test registro con contraseñas que no coinciden"""
-        test_user_data["confirm_password"] = "DifferentPassword123"
-        
-        response = client.post("/api/v1/auth/register", json=test_user_data)
-        
-        assert response.status_code == 422
-    
-    def test_register_weak_password(self, client: TestClient, test_user_data):
-        """Test registro con contraseña débil"""
+    def test_register_weak_password_natural(self, client: TestClient, test_user_data):
+        """Test registro natural con contraseña débil"""
         test_user_data["password"] = "123"
-        test_user_data["confirm_password"] = "123"
         
-        response = client.post("/api/v1/auth/register", json=test_user_data)
+        response = client.post("/api/v1/auth/register/natural", json=test_user_data)
         
         assert response.status_code == 422
     
-    def test_register_invalid_email(self, client: TestClient, test_user_data):
-        """Test registro con email inválido"""
+    def test_register_invalid_email_natural(self, client: TestClient, test_user_data):
+        """Test registro natural con email inválido"""
         test_user_data["email"] = "invalid-email"
         
-        response = client.post("/api/v1/auth/register", json=test_user_data)
+        response = client.post("/api/v1/auth/register/natural", json=test_user_data)
         
         assert response.status_code == 422
     
-    def test_register_invalid_user_type(self, client: TestClient, test_user_data):
-        """Test registro con tipo de usuario inválido"""
-        test_user_data["user_type"] = "invalid_type"
-        
-        response = client.post("/api/v1/auth/register", json=test_user_data)
-        
-        assert response.status_code == 422
-    
-    def test_register_invalid_currency(self, client: TestClient, test_user_data):
-        """Test registro con moneda inválida"""
+    def test_register_invalid_currency_natural(self, client: TestClient, test_user_data):
+        """Test registro natural con moneda inválida"""
         test_user_data["preferred_currency"] = "EUR"
         
-        response = client.post("/api/v1/auth/register", json=test_user_data)
+        response = client.post("/api/v1/auth/register/natural", json=test_user_data)
+        
+        assert response.status_code == 422
+    
+    def test_register_missing_required_fields_natural(self, client: TestClient):
+        """Test registro natural con campos requeridos faltantes"""
+        incomplete_data = {
+            "email": "test@example.com",
+            "password": "TestPassword123"
+            # Missing required fields: first_name, last_name, cedula, phone
+        }
+        
+        response = client.post("/api/v1/auth/register/natural", json=incomplete_data)
+        
+        assert response.status_code == 422
+    
+    def test_register_missing_required_fields_juridico(self, client: TestClient):
+        """Test registro jurídico con campos requeridos faltantes"""
+        incomplete_data = {
+            "email": "empresa@test.com",
+            "password": "EmpresaPass456",
+            "company_name": "Test Company"
+            # Missing many required fields
+        }
+        
+        response = client.post("/api/v1/auth/register/juridico", json=incomplete_data)
         
         assert response.status_code == 422
 
@@ -154,7 +173,9 @@ class TestAuthTokens:
         data = response.json()
         
         assert data["email"] == test_user.email
-        assert data["name"] == test_user.name
+        assert data["first_name"] == test_user.first_name
+        assert data["last_name"] == test_user.last_name
+        assert data["user_type"] == "natural"
         assert data["id"] == test_user.id
     
     def test_get_current_user_no_token(self, client: TestClient):
@@ -258,7 +279,10 @@ class TestAuthEmailVerification:
         from app.core.security import get_password_hash
         user = User(
             email="verify@example.com",
-            name="Verify User",
+            first_name="Verify",
+            last_name="User",
+            cedula="V12345678",
+            phone="+58414123456",
             hashed_password=get_password_hash("password123"),
             user_type="natural",
             is_verified=False,
@@ -288,7 +312,10 @@ class TestAuthEmailVerification:
         from app.core.security import get_password_hash
         user = User(
             email="resend@example.com",
-            name="Resend User",
+            first_name="Resend",
+            last_name="User",
+            cedula="V87654321",
+            phone="+58414987654",
             hashed_password=get_password_hash("password123"),
             user_type="natural",
             is_verified=False,

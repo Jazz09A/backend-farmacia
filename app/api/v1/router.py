@@ -1,43 +1,42 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import auth, admin, user, public
 
 api_router = APIRouter()
 
-# Include all endpoint routers
+# =============================================================================
+# 🔓 RUTAS PÚBLICAS (Sin Autenticación)
+# =============================================================================
+
+# Información general y catálogo
+api_router.include_router(
+    public.router,
+    tags=["🔓 Público"],
+)
+
+# Autenticación
 api_router.include_router(
     auth.router,
     prefix="/auth",
-    tags=["Autenticación"],
+    tags=["🔓 Autenticación"],
 )
 
-# Note: We'll add more routers as we create them
-# api_router.include_router(
-#     products.router,
-#     prefix="/products",
-#     tags=["Productos"],
-# )
+# =============================================================================
+# 🔐 RUTAS AUTENTICADAS (Usuario Logueado)
+# =============================================================================
 
-# api_router.include_router(
-#     cart.router,
-#     prefix="/cart",
-#     tags=["Carrito"],
-# )
+# Funciones de usuario autenticado
+api_router.include_router(
+    user.router,
+    tags=["🔐 Usuario Autenticado"],
+)
 
-# api_router.include_router(
-#     orders.router,
-#     prefix="/orders",
-#     tags=["Pedidos"],
-# )
+# =============================================================================
+# 👑 RUTAS DE ADMINISTRADOR
+# =============================================================================
 
-# api_router.include_router(
-#     users.router,
-#     prefix="/users",
-#     tags=["Usuarios"],
-# )
-
-# api_router.include_router(
-#     reviews.router,
-#     prefix="/reviews",
-#     tags=["Reseñas"],
-# ) 
+# Panel de administración
+api_router.include_router(
+    admin.router,
+    tags=["👑 Administrador"],
+) 

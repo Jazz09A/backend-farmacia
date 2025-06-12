@@ -1,25 +1,24 @@
 from pydantic import BaseModel, EmailStr, validator, Field
 from typing import Optional
-from app.schemas.user import UserCreate
+from app.schemas.user import UserNaturalCreate, UserJuridicoCreate
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-class RegisterRequest(UserCreate):
-    confirm_password: str
-    
-    @validator('confirm_password')
-    def passwords_match(cls, v, values):
-        if 'password' in values and v != values['password']:
-            raise ValueError('Las contraseñas no coinciden')
-        return v
+# Schemas de registro separados
+class RegisterNaturalRequest(UserNaturalCreate):
+    pass
+
+class RegisterJuridicoRequest(UserJuridicoCreate):
+    pass
 
 class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    role: str
 
 class TokenData(BaseModel):
     email: Optional[str] = None

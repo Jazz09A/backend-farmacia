@@ -71,12 +71,10 @@ async def get_optional_current_user(
     except Exception:
         return None
 
-# Admin role dependency
+# Admin role dependency (Updated for new role system)
 async def get_admin_user(current_user: User = Depends(get_current_verified_user)) -> User:
     """Get current admin user."""
-    # Add admin role checking logic here if you have roles
-    # For now, we'll check if user has admin privileges via a field
-    if not hasattr(current_user, 'is_admin') or not current_user.is_admin:
+    if not current_user.has_role_level("admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos de administrador"

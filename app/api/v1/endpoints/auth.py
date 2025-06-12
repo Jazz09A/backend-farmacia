@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import Union
 
 from app.config.database import get_db
 from app.schemas.auth import (
     LoginRequest, 
-    RegisterRequest, 
+    RegisterNaturalRequest,
+    RegisterJuridicoRequest,
     Token, 
     RefreshTokenRequest,
     ForgotPasswordRequest,
@@ -13,30 +15,56 @@ from app.schemas.auth import (
     ResendVerificationRequest,
     AuthResponse
 )
-from app.schemas.user import UserResponse
+from app.schemas.user import UserNaturalResponse, UserJuridicoResponse
 from app.services.auth_service import AuthService
 from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(
-    user_data: RegisterRequest,
+@router.post("/register/natural", response_model=UserNaturalResponse, status_code=status.HTTP_201_CREATED)
+async def register_natural_user(
+    user_data: RegisterNaturalRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Registrar un nuevo usuario.
+    Registrar un nuevo usuario natural (persona).
     
     - **email**: Email del usuario (debe ser único)
-    - **name**: Nombre completo del usuario
+    - **first_name**: Nombre del usuario
+    - **last_name**: Apellido del usuario
+    - **cedula**: Cédula de identidad
     - **password**: Contraseña (mínimo 8 caracteres)
-    - **confirm_password**: Confirmación de contraseña
-    - **user_type**: Tipo de usuario (natural o juridico)
-    - **phone**: Teléfono (opcional)
+    - **phone**: Teléfono
     - **preferred_currency**: Moneda preferida (VES o USD)
+    - **birth_date**: Fecha de nacimiento (opcional)
+    - **address**: Dirección (opcional)
     """
-    return await AuthService.register_user(db, user_data)
+    return await AuthService.register_natural_user(db, user_data)
+
+@router.post("/register/juridico", response_model=UserJuridicoResponse, status_code=status.HTTP_201_CREATED)
+async def register_juridico_user(
+    user_data: RegisterJuridicoRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Registrar un nuevo usuario jurídico (empresa/farmacia).
+    
+    - **email**: Email de la empresa (debe ser único)
+    - **company_name**: Nombre de la empresa
+    - **rif**: RIF de la empresa
+    - **registro_mercantil**: Número de registro mercantil
+    - **representante_legal_cedula**: Cédula del representante legal
+    - **representante_legal_nombre**: Nombre del representante legal
+    - **referencia_comercial_proveedor**: Referencia comercial
+    - **referencia_bancaria**: Referencia bancaria
+    - **direccion_establecimiento**: Dirección del establecimiento
+    - **password**: Contraseña (mínimo 8 caracteres)
+    - **phone**: Teléfono principal
+    - **preferred_currency**: Moneda preferida (VES o USD)
+    - Y campos opcionales adicionales...
+    """
+    return await AuthService.register_juridico_user(db, user_data)
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -46,6 +74,7 @@ async def login(
     """
     Iniciar sesión con email y contraseña.
     
+    Funciona para ambos tipos de usuario (natural y jurídico).
     Retorna tokens de acceso y actualización.
     """
     return await AuthService.authenticate_user(db, login_data)
@@ -60,14 +89,19 @@ async def refresh_token(
     """
     return await AuthService.refresh_access_token(db, refresh_data.refresh_token)
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=Union[UserNaturalResponse, UserJuridicoResponse])
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
     """
     Obtener información del usuario actual autenticado.
+    
+    Retorna el schema apropiado según el tipo de usuario.
     """
-    return current_user
+    if current_user.user_type == "natural":
+        return UserNaturalResponse.from_orm(current_user)
+    else:
+        return UserJuridicoResponse.from_orm(current_user)
 
 @router.post("/verify-email", response_model=AuthResponse)
 async def verify_email(

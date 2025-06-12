@@ -1,13 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
 
 from app.models.user import User
 from app.models.address import UserPreferences
-from app.schemas.auth import LoginRequest, RegisterRequest, Token
-from app.schemas.user import UserResponse
+from app.schemas.auth import LoginRequest, RegisterNaturalRequest, RegisterJuridicoRequest, Token
+from app.schemas.user import UserNaturalResponse, UserJuridicoResponse
 from app.core.security import (
     verify_password, 
     get_password_hash, 
@@ -29,25 +29,30 @@ from app.config.settings import settings
 
 class AuthService:
     @staticmethod
-    async def register_user(db: Session, user_data: RegisterRequest) -> UserResponse:
-        """Register a new user."""
+    async def register_natural_user(db: Session, user_data: RegisterNaturalRequest) -> UserNaturalResponse:
+        """Register a new natural user."""
         try:
             # Check if user already exists
             existing_user = db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
                 raise UserAlreadyExistsException("El email ya está registrado")
             
-            # Create new user
+            # Create new natural user
             hashed_password = get_password_hash(user_data.password)
             db_user = User(
                 email=user_data.email,
-                name=user_data.name,
+                first_name=user_data.first_name,
+                last_name=user_data.last_name,
+                cedula=user_data.cedula,
+                birth_date=user_data.birth_date,
+                address=user_data.address,
                 hashed_password=hashed_password,
-                user_type=user_data.user_type,
+                user_type="natural",
                 phone=user_data.phone,
                 preferred_currency=user_data.preferred_currency,
+                role="user",
                 verification_token=generate_verification_token(),
-                is_verified=False  # User needs to verify email
+                is_verified=False
             )
             
             db.add(db_user)
@@ -65,7 +70,72 @@ class AuthService:
             # TODO: Send verification email
             # await EmailService.send_verification_email(db_user.email, db_user.verification_token)
             
-            return UserResponse.from_orm(db_user)
+            return UserNaturalResponse.from_orm(db_user)
+            
+        except IntegrityError:
+            db.rollback()
+            raise UserAlreadyExistsException("Error al crear el usuario")
+
+    @staticmethod
+    async def register_juridico_user(db: Session, user_data: RegisterJuridicoRequest) -> UserJuridicoResponse:
+        """Register a new juridico user."""
+        try:
+            # Check if user already exists
+            existing_user = db.query(User).filter(User.email == user_data.email).first()
+            if existing_user:
+                raise UserAlreadyExistsException("El email ya está registrado")
+            
+            # Create new juridico user
+            hashed_password = get_password_hash(user_data.password)
+            db_user = User(
+                email=user_data.email,
+                company_name=user_data.company_name,
+                rif=user_data.rif,
+                registro_mercantil=user_data.registro_mercantil,
+                representante_legal_cedula=user_data.representante_legal_cedula,
+                representante_legal_nombre=user_data.representante_legal_nombre,
+                representantes_adicionales=user_data.representantes_adicionales,
+                referencia_comercial_proveedor=user_data.referencia_comercial_proveedor,
+                referencia_bancaria=user_data.referencia_bancaria,
+                dueno_telefono=user_data.dueno_telefono,
+                dueno_email=user_data.dueno_email,
+                dueno_cumpleanos=user_data.dueno_cumpleanos,
+                encargado_compra_telefono=user_data.encargado_compra_telefono,
+                encargado_compra_email=user_data.encargado_compra_email,
+                encargado_compra_cumpleanos=user_data.encargado_compra_cumpleanos,
+                encargado_cobranza_telefono=user_data.encargado_cobranza_telefono,
+                encargado_cobranza_email=user_data.encargado_cobranza_email,
+                encargado_cobranza_cumpleanos=user_data.encargado_cobranza_cumpleanos,
+                redes_sociales=user_data.redes_sociales,
+                pagina_web=user_data.pagina_web,
+                codigo_sicm=user_data.codigo_sicm,
+                fotos_establecimiento=user_data.fotos_establecimiento,
+                direccion_establecimiento=user_data.direccion_establecimiento,
+                hashed_password=hashed_password,
+                user_type="juridico",
+                phone=user_data.phone,
+                preferred_currency=user_data.preferred_currency,
+                role="user",
+                verification_token=generate_verification_token(),
+                is_verified=False
+            )
+            
+            db.add(db_user)
+            db.commit()
+            db.refresh(db_user)
+            
+            # Create user preferences
+            user_preferences = UserPreferences(
+                user_id=db_user.id,
+                preferred_currency=user_data.preferred_currency
+            )
+            db.add(user_preferences)
+            db.commit()
+            
+            # TODO: Send verification email
+            # await EmailService.send_verification_email(db_user.email, db_user.verification_token)
+            
+            return UserJuridicoResponse.from_orm(db_user)
             
         except IntegrityError:
             db.rollback()
@@ -83,7 +153,7 @@ class AuthService:
             raise InvalidCredentialsException("Cuenta desactivada")
         
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         db.commit()
         
         # Create tokens
@@ -94,7 +164,8 @@ class AuthService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            role=user.role
         )
     
     @staticmethod
@@ -115,7 +186,8 @@ class AuthService:
                 access_token=access_token,
                 refresh_token=new_refresh_token,
                 token_type="bearer",
-                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                role=user.role
             )
         except Exception:
             raise InvalidCredentialsException("Token de actualización inválido")

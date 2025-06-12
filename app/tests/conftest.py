@@ -75,42 +75,55 @@ def client(db: Session) -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def test_user_data():
-    """Test user data for registration."""
+    """Test user data for natural user registration."""
     return {
         "email": "test@example.com",
-        "name": "Test User",
+        "first_name": "Test",
+        "last_name": "User",
+        "cedula": "V12345678",
         "password": "TestPassword123",
-        "confirm_password": "TestPassword123",
-        "user_type": "natural",
         "phone": "+58414123456",
-        "preferred_currency": "VES"
+        "preferred_currency": "VES",
+        "birth_date": "1990-01-01",
+        "address": "Av. Principal 123, Caracas"
     }
 
 @pytest.fixture
 def test_user_data_juridico():
-    """Test user data for juridico registration."""
+    """Test user data for juridico user registration."""
     return {
         "email": "empresa@test.com",
-        "name": "Empresa Test S.A.",
+        "company_name": "Farmacia Test S.A.",
+        "rif": "J123456789",
+        "registro_mercantil": "RM-12345",
+        "representante_legal_cedula": "V87654321",
+        "representante_legal_nombre": "Juan Pérez",
+        "referencia_comercial_proveedor": "Proveedor ABC C.A.",
+        "referencia_bancaria": "Banco Provincial",
+        "direccion_establecimiento": "Av. Comercial 456, Valencia",
         "password": "EmpresaPass456",
-        "confirm_password": "EmpresaPass456",
-        "user_type": "juridico",
         "phone": "+58212987654",
-        "preferred_currency": "USD"
+        "preferred_currency": "USD",
+        "dueno_telefono": "+58414987654",
+        "dueno_email": "dueno@empresa.com",
+        "codigo_sicm": "SICM123456"
     }
 
 @pytest.fixture
 def test_user(db: Session):
-    """Create a test user in the database."""
+    """Create a test natural user in the database."""
     user_data = {
         "email": "testuser@example.com",
-        "name": "Test User",
+        "first_name": "Test",
+        "last_name": "User",
+        "cedula": "V12345678",
         "hashed_password": get_password_hash("testpass123"),
         "user_type": "natural",
         "phone": "+58414123456",
         "preferred_currency": "VES",
         "is_active": True,
-        "is_verified": True
+        "is_verified": True,
+        "address": "Av. Test 123, Caracas"
     }
     
     user = User(**user_data)
@@ -129,16 +142,55 @@ def test_user(db: Session):
     return user
 
 @pytest.fixture
+def test_juridico_user(db: Session):
+    """Create a test juridico user in the database."""
+    user_data = {
+        "email": "farmacia@example.com",
+        "company_name": "Farmacia Test S.A.",
+        "rif": "J987654321",
+        "registro_mercantil": "RM-67890",
+        "representante_legal_cedula": "V11111111",
+        "representante_legal_nombre": "María García",
+        "referencia_comercial_proveedor": "Proveedor XYZ C.A.",
+        "referencia_bancaria": "Banco Test",
+        "direccion_establecimiento": "Av. Test Comercial 789, Maracay",
+        "hashed_password": get_password_hash("farmaciapass123"),
+        "user_type": "juridico",
+        "phone": "+58212123456",
+        "preferred_currency": "USD",
+        "is_active": True,
+        "is_verified": True
+    }
+    
+    user = User(**user_data)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    # Create user preferences
+    preferences = UserPreferences(
+        user_id=user.id,
+        preferred_currency="USD"
+    )
+    db.add(preferences)
+    db.commit()
+    
+    return user
+
+@pytest.fixture
 def test_admin_user(db: Session):
     """Create a test admin user in the database."""
     user_data = {
         "email": "admin@example.com",
-        "name": "Admin User",
+        "first_name": "Admin",
+        "last_name": "User",
+        "cedula": "V99999999",
         "hashed_password": get_password_hash("adminpass123"),
         "user_type": "natural",
+        "phone": "+58414999999",
         "is_active": True,
         "is_verified": True,
-        "is_admin": True
+        "role": "admin"
     }
     
     user = User(**user_data)
