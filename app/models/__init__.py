@@ -7,6 +7,11 @@ from .cart import CartItem
 from .address import Address, UserPreferences
 from .order import Order, OrderItem, OrderAddress
 from .review import Review
+from .support import SupportTicket, SupportResponse
+from .promotion import Promotion, PromotionUsage
+from .notification import UserNotification
+from .blog import BlogCategory, BlogPost
+from .shipping import ShippingZone
 
 __all__ = [
     "User",
@@ -17,5 +22,13 @@ __all__ = [
     "Order",
     "OrderItem", 
     "OrderAddress",
-    "Review"
+    "Review",
+    "SupportTicket",
+    "SupportResponse",
+    "Promotion",
+    "PromotionUsage",
+    "UserNotification",
+    "BlogCategory",
+    "BlogPost",
+    "ShippingZone"
 ] 

@@ -87,6 +87,9 @@ class User(Base):
     reviews = relationship("Review", back_populates="user")
     cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
     preferences = relationship("UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    support_tickets = relationship("SupportTicket", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("UserNotification", back_populates="user", cascade="all, delete-orphan")
+    blog_posts = relationship("BlogPost", back_populates="author", cascade="all, delete-orphan")
     
     def __repr__(self):
         if self.user_type == 'natural':
