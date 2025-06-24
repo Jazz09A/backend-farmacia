@@ -51,8 +51,16 @@ class Product(Base):
     
     # Basic product information
     name = Column(String, nullable=False, index=True)
-    brand = Column(String, nullable=False, index=True)
-    category = Column(String, nullable=False, index=True)
+    slug = Column(String, unique=True, nullable=True, index=True)
+    sku = Column(String, unique=True, nullable=True)
+    
+    # Foreign key references
+    brand_id = Column(String, ForeignKey("brands.id"), nullable=True, index=True)
+    category_id = Column(String, ForeignKey("categories.id"), nullable=True, index=True)
+    
+    # Legacy fields for backward compatibility
+    brand = Column(String, nullable=True, index=True)  # Legacy field
+    category = Column(String, nullable=True, index=True)  # Legacy field
     subcategory = Column(String, nullable=True, index=True)
     patology = Column(String, nullable=True, index=True)
     
@@ -105,6 +113,8 @@ class Product(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    brand_obj = relationship("Brand", back_populates="products")
+    category_obj = relationship("Category", back_populates="products")
     reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product")

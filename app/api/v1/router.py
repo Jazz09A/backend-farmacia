@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands
 
 api_router = APIRouter()
 
@@ -39,4 +39,22 @@ api_router.include_router(
 api_router.include_router(
     admin.router,
     tags=["👑 Administrador"],
+)
+
+# =============================================================================
+# 🛍️ RUTAS DE CATÁLOGO
+# =============================================================================
+
+# Categorías
+api_router.include_router(
+    categories.router,
+    prefix="/api/v1",
+    tags=["📂 Categorías"],
+)
+
+# Marcas
+api_router.include_router(
+    brands.router,
+    prefix="/api/v1",
+    tags=["🏷️ Marcas"],
 ) 

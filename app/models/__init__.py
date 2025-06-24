@@ -8,10 +8,15 @@ from .address import Address, UserPreferences
 from .order import Order, OrderItem, OrderAddress
 from .review import Review
 from .support import SupportTicket, SupportResponse
-from .promotion import Promotion, PromotionUsage
+from .promotion import (
+    Promotion, PromotionUsage, FlashOffer, 
+    PromotionalCode, DiscountType
+)
 from .notification import UserNotification
 from .blog import BlogCategory, BlogPost
 from .shipping import ShippingZone
+from .category import Category, Brand
+from .inventory import InventoryMovement, StockAlert, BatchTracking, MovementType
 
 __all__ = [
     "User",
@@ -27,8 +32,17 @@ __all__ = [
     "SupportResponse",
     "Promotion",
     "PromotionUsage",
+    "FlashOffer",
+    "PromotionalCode",
+    "DiscountType",
     "UserNotification",
     "BlogCategory",
     "BlogPost",
-    "ShippingZone"
+    "ShippingZone",
+    "Category",
+    "Brand",
+    "InventoryMovement",
+    "StockAlert", 
+    "BatchTracking",
+    "MovementType"
 ] 

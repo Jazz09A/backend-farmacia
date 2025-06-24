@@ -1,47 +1,209 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.types import TypeDecorator, JSON
 from app.config.database import Base
 import uuid
 from datetime import datetime
+import json
+import enum
 
-class Promotion(Base):
-    __tablename__ = "promotions"
+# Custom array type for SQLite compatibility
+class ArrayType(TypeDecorator):
+    """Custom type that stores arrays as JSON in SQLite and as ARRAY in PostgreSQL"""
+    
+    impl = JSON
+    cache_ok = True
+    
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(ARRAY(String))
+        else:
+            return dialect.type_descriptor(JSON())
+    
+    def process_bind_param(self, value, dialect):
+        if dialect.name == 'postgresql':
+            return value
+        else:
+            if value is None:
+                return None
+            return json.dumps(value) if isinstance(value, list) else value
+    
+    def process_result_value(self, value, dialect):
+        if dialect.name == 'postgresql':
+            return value
+        else:
+            if value is None:
+                return None
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    return []
+            return value if isinstance(value, list) else []
 
+class DiscountType(enum.Enum):
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+
+class FlashOffer(Base):
+    __tablename__ = "flash_offers"
+    
+    # Primary key
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     
-    code = Column(String, unique=True, nullable=False, index=True)
-    description = Column(String, nullable=True)
+    # Product reference
+    product_id = Column(String, ForeignKey("products.id"), nullable=False, index=True)
     
-    discount_type = Column(String, nullable=False)  # 'percentage' or 'fixed_amount'
+    # Discount configuration
+    discount_type = Column(Enum(DiscountType), default=DiscountType.PERCENTAGE, nullable=False)
     discount_value = Column(Float, nullable=False)
     
-    start_date = Column(DateTime, default=datetime.utcnow)
-    end_date = Column(DateTime, nullable=True)
+    # Time constraints
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
     
-    min_purchase_amount = Column(Float, default=0)
+    # Usage limits
+    max_quantity = Column(Integer, nullable=True)
+    used_quantity = Column(Integer, default=0)
     
-    usage_limit = Column(Integer, default=1) # How many times a user can use it
-    total_usage_limit = Column(Integer, nullable=True) # How many times it can be used in total
+    # Status
+    is_active = Column(Boolean, default=True, index=True)
     
-    is_active = Column(Boolean, default=True)
-
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = relationship("Product", backref="flash_offers")
+    
     def __repr__(self):
-        return f"<Promotion(code='{self.code}', type='{self.discount_type}', value={self.discount_value})>"
+        return f"<FlashOffer(id={self.id}, product_id={self.product_id}, discount={self.discount_value})>"
+    
+    @property
+    def is_valid(self):
+        """Check if flash offer is currently valid."""
+        now = datetime.utcnow()
+        return (
+            self.is_active and
+            self.start_time <= now <= self.end_time and
+            (self.max_quantity is None or self.used_quantity < self.max_quantity)
+        )
+    
+    def calculate_discount_amount(self, original_price: float) -> float:
+        """Calculate discount amount based on type."""
+        if self.discount_type == DiscountType.PERCENTAGE:
+            return original_price * (self.discount_value / 100)
+        else:
+            return min(self.discount_value, original_price)
 
-# You might also want a table to track usage
-class PromotionUsage(Base):
-    __tablename__ = "promotion_usage"
-
+class PromotionalCode(Base):
+    __tablename__ = "promotional_codes"
+    
+    # Primary key
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    promotion_id = Column(String, ForeignKey("promotions.id"), nullable=False, index=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    order_id = Column(String, ForeignKey("orders.id"), nullable=False, index=True)
     
-    used_at = Column(DateTime, default=datetime.utcnow)
-
-    promotion = relationship("Promotion")
-    user = relationship("User")
-    order = relationship("Order")
+    # Code information
+    code = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    
+    # Discount configuration
+    discount_type = Column(Enum(DiscountType), default=DiscountType.PERCENTAGE, nullable=False)
+    discount_value = Column(Float, nullable=False)
+    
+    # Constraints
+    min_amount = Column(Float, nullable=True)  # Minimum order amount
+    max_discount = Column(Float, nullable=True)  # Maximum discount amount
+    
+    # Usage limits
+    usage_limit = Column(Integer, nullable=True)  # Total usage limit
+    used_count = Column(Integer, default=0)
+    user_limit = Column(Integer, default=1)  # Per user limit
+    
+    # Time constraints
+    valid_from = Column(DateTime, nullable=False)
+    valid_until = Column(DateTime, nullable=False)
+    
+    # Applicability
+    applicable_categories = Column(ArrayType(), nullable=True)  # Category IDs
+    applicable_products = Column(ArrayType(), nullable=True)  # Product IDs
+    
+    # Status
+    is_active = Column(Boolean, default=True, index=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    usages = relationship("PromotionUsage", back_populates="promotional_code", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<PromotionUsage(user_id='{self.user_id}', promotion_id='{self.promotion_id}')>" 
+        return f"<PromotionalCode(id={self.id}, code={self.code}, discount={self.discount_value})>"
+    
+    @property
+    def is_valid(self):
+        """Check if promotional code is currently valid."""
+        now = datetime.utcnow()
+        return (
+            self.is_active and
+            self.valid_from <= now <= self.valid_until and
+            (self.usage_limit is None or self.used_count < self.usage_limit)
+        )
+    
+    def can_be_used_by_user(self, user_id: str) -> bool:
+        """Check if code can be used by specific user."""
+        if not self.is_valid:
+            return False
+        
+        user_usage_count = len([u for u in self.usages if u.user_id == user_id])
+        return user_usage_count < self.user_limit
+    
+    def calculate_discount(self, order_amount: float, applicable_amount: float = None) -> float:
+        """Calculate discount amount for given order."""
+        if applicable_amount is None:
+            applicable_amount = order_amount
+            
+        if self.min_amount and order_amount < self.min_amount:
+            return 0
+        
+        if self.discount_type == DiscountType.PERCENTAGE:
+            discount = applicable_amount * (self.discount_value / 100)
+        else:
+            discount = self.discount_value
+        
+        if self.max_discount:
+            discount = min(discount, self.max_discount)
+        
+        return discount
+
+class PromotionUsage(Base):
+    __tablename__ = "promotion_usages"
+    
+    # Primary key
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    
+    # References
+    promotional_code_id = Column(String, ForeignKey("promotional_codes.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    order_id = Column(String, ForeignKey("orders.id"), nullable=True, index=True)
+    
+    # Usage details
+    discount_amount = Column(Float, nullable=False)
+    order_amount = Column(Float, nullable=False)
+    
+    # Timestamps
+    used_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    promotional_code = relationship("PromotionalCode", back_populates="usages")
+    user = relationship("User", backref="promotion_usages")
+    order = relationship("Order", backref="promotion_usage")
+    
+    def __repr__(self):
+        return f"<PromotionUsage(id={self.id}, code_id={self.promotional_code_id}, user_id={self.user_id})>"
+
+# Legacy Promotion class for backward compatibility
+class Promotion(FlashOffer):
+    """Legacy promotion class - inherits from FlashOffer for backward compatibility."""
+    pass 

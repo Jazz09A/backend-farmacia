@@ -31,6 +31,9 @@ def create_tables():
     # Import all models to ensure they are registered with Base
     from app.models import (
         User, Product, CartItem, Address, UserPreferences,
-        Order, OrderItem, OrderAddress, Review
+        Order, OrderItem, OrderAddress, Review, Category, Brand,
+        FlashOffer, PromotionalCode, PromotionUsage, SupportTicket,
+        SupportResponse, UserNotification, BlogCategory, BlogPost,
+        ShippingZone
     )
     Base.metadata.create_all(bind=engine) 
