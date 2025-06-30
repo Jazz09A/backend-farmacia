@@ -41,6 +41,10 @@ Opciones disponibles:
   coverage    - Ejecutar tests con coverage
   verbose     - Ejecutar tests con output detallado
   fast        - Ejecutar tests rápidos (sin los marcados como 'slow')
+  new         - ✨ Ejecutar solo tests de nuevas funcionalidades
+  categories  - ✨ Ejecutar tests de categorías y marcas  
+  promotions  - ✨ Ejecutar tests de sistema de promociones
+  inventory   - ✨ Ejecutar tests de sistema de inventario
 
 Ejemplos:
   python run_tests.py all
@@ -65,7 +69,11 @@ Ejemplos:
         'endpoints': 'pytest app/tests/test_endpoints.py -v',
         'coverage': 'pytest app/tests/ --cov=app --cov-report=html --cov-report=term-missing -v',
         'verbose': 'pytest app/tests/ -v -s --tb=long',
-        'fast': 'pytest app/tests/ -v -m "not slow"'
+        'fast': 'pytest app/tests/ -v -m "not slow"',
+        'new': 'pytest app/tests/test_category_models.py app/tests/test_promotion_models.py app/tests/test_inventory_models.py app/tests/test_category_endpoints.py app/tests/test_schemas.py app/tests/test_new_features_integration.py -v',
+        'categories': 'pytest app/tests/test_category_models.py app/tests/test_category_endpoints.py -v',
+        'promotions': 'pytest app/tests/test_promotion_models.py -v',
+        'inventory': 'pytest app/tests/test_inventory_models.py -v'
     }
     
     if option not in commands:
