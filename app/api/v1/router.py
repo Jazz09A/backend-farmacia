@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites
 
 api_router = APIRouter()
 
@@ -29,6 +29,13 @@ api_router.include_router(
 api_router.include_router(
     user.router,
     tags=["🔐 Usuario Autenticado"],
+)
+
+# Lista de favoritos
+api_router.include_router(
+    favorites.router,
+    prefix="/api/v1",
+    tags=["❤️ Favoritos"],
 )
 
 # =============================================================================

@@ -1,0 +1,31 @@
+from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
+from app.config.database import Base
+import uuid
+from datetime import datetime
+
+class UserFavorite(Base):
+    __tablename__ = "user_favorites"
+    
+    # Primary key
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    
+    # References
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    product_id = Column(String, ForeignKey("products.id"), nullable=False, index=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="favorites")
+    product = relationship("Product", back_populates="favorited_by")
+    
+    # Unique constraint to prevent duplicate favorites
+    __table_args__ = (
+        UniqueConstraint('user_id', 'product_id', name='unique_user_product_favorite'),
+    )
+    
+    def __repr__(self):
+        return f"<UserFavorite(id={self.id}, user_id={self.user_id}, product_id={self.product_id})>" 

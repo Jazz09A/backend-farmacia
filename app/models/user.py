@@ -90,6 +90,7 @@ class User(Base):
     support_tickets = relationship("SupportTicket", back_populates="user", cascade="all, delete-orphan")
     notifications = relationship("UserNotification", back_populates="user", cascade="all, delete-orphan")
     blog_posts = relationship("BlogPost", back_populates="author", cascade="all, delete-orphan")
+    favorites = relationship("UserFavorite", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         if self.user_type == 'natural':

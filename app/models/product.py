@@ -118,6 +118,7 @@ class Product(Base):
     reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product")
+    favorited_by = relationship("UserFavorite", back_populates="product", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Product(id={self.id}, name={self.name}, brand={self.brand})>"

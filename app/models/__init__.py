@@ -17,6 +17,7 @@ from .blog import BlogCategory, BlogPost
 from .shipping import ShippingZone
 from .category import Category, Brand
 from .inventory import InventoryMovement, StockAlert, BatchTracking, MovementType
+from .favorites import UserFavorite
 
 __all__ = [
     "User",
@@ -44,5 +45,6 @@ __all__ = [
     "InventoryMovement",
     "StockAlert", 
     "BatchTracking",
-    "MovementType"
+    "MovementType",
+    "UserFavorite"
 ] 
