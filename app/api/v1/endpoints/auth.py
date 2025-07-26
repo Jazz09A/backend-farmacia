@@ -99,9 +99,9 @@ async def get_current_user_info(
     Retorna el schema apropiado según el tipo de usuario.
     """
     if current_user.user_type == "natural":
-        return UserNaturalResponse.from_orm(current_user)
+        return UserNaturalResponse.model_validate(current_user)
     else:
-        return UserJuridicoResponse.from_orm(current_user)
+        return UserJuridicoResponse.model_validate(current_user)
 
 @router.post("/verify-email", response_model=AuthResponse)
 async def verify_email(

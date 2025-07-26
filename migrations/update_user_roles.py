@@ -6,23 +6,28 @@ Ejecutar este script después de implementar el sistema de roles para:
 2. Migrar usuarios con is_admin=True a rol "admin"
 3. Asegurar que todos los usuarios tengan un rol válido
 """
-
 import sys
-import os
+from pathlib import Path
+
+# Agregar el directorio padre al Python path
+current_dir = Path(__file__).resolve().parent
+parent_dir = current_dir.parent
+sys.path.insert(0, str(parent_dir))
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-
-# Agregar el directorio raíz al path para importar modules
- .append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.config.database import SQLALCHEMY_DATABASE_URL
+from app.config.settings import Settings
 from app.models.user import User
+
+
+
+settings = Settings()
 
 def migrate_user_roles():
     """Migra usuarios existentes al sistema de roles."""
     
     # Crear conexión a la base de datos
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(settings.DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
     
@@ -101,7 +106,7 @@ def migrate_user_roles():
 def create_super_admin():
     """Crea un super administrador si no existe."""
     
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(settings.DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
     

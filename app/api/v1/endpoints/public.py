@@ -97,10 +97,23 @@ async def get_public_products(
     applied_filters["sort_by"] = sort_by
     
     # Get total count for pagination (optimized)
-    total = query.count()
-    
-    # Apply pagination
-    products = query.offset(pagination.skip).limit(pagination.limit).all()
+    if pagination.page == 1:
+        # Primera página: hacer COUNT y buscar datos
+        total = query.count()
+        products = query.offset(pagination.skip).limit(pagination.limit).all()
+    else:
+        # Páginas siguientes: solo buscar datos, evitar COUNT
+        products = query.offset(pagination.skip).limit(pagination.limit + 1).all()
+        
+        # Si trae más registros que el limit, hay más páginas
+        has_more = len(products) > pagination.limit
+        if has_more:
+            products = products[:pagination.limit]
+        
+        # Estimar total basado en página actual
+        total = (pagination.page - 1) * pagination.limit + len(products)
+        if has_more:
+            total += 1  # Indicar que hay más
     
     # Convert to response models
     product_responses = []
