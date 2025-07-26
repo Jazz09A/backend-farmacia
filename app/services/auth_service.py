@@ -20,6 +20,7 @@ from app.core.exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
+from app.schemas.role import UserRole
 from app.config.settings import settings
 
 class AuthService:
@@ -45,7 +46,7 @@ class AuthService:
                 user_type="natural",
                 phone=user_data.phone,
                 preferred_currency=user_data.preferred_currency,
-                role="user",
+                role=UserRole.USER,
                 verification_token=generate_verification_token(),
                 is_verified=False
             )
@@ -110,7 +111,7 @@ class AuthService:
                 user_type="juridico",
                 phone=user_data.phone,
                 preferred_currency=user_data.preferred_currency,
-                role="user",
+                role=UserRole.USER,
                 verification_token=generate_verification_token(),
                 is_verified=False
             )

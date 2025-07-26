@@ -54,17 +54,20 @@ class UserJuridicoBase(UserCommonBase):
     referencia_comercial_proveedor: str = Field(..., description="Referencia comercial de proveedor reconocido")
     referencia_bancaria: str = Field(..., description="Referencia bancaria actual")
     
+    # Dirección del establecimiento (requerida para jurídicos)
+    direccion_establecimiento: str = Field(..., description="Dirección completa del establecimiento")
+    
     # Contactos especializados
     dueno_telefono: Optional[str] = Field(None, description="Teléfono del dueño")
-    dueno_email: Optional[EmailStr] = Field(None, description="Email del dueño")
+    dueno_email: Optional[str] = Field(None, description="Email del dueño")
     dueno_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del dueño")
     
     encargado_compra_telefono: Optional[str] = Field(None, description="Teléfono del encargado de compras")
-    encargado_compra_email: Optional[EmailStr] = Field(None, description="Email del encargado de compras")
+    encargado_compra_email: Optional[str] = Field(None, description="Email del encargado de compras")
     encargado_compra_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del encargado de compras")
     
     encargado_cobranza_telefono: Optional[str] = Field(None, description="Teléfono del encargado de cobranzas")
-    encargado_cobranza_email: Optional[EmailStr] = Field(None, description="Email del encargado de cobranzas")
+    encargado_cobranza_email: Optional[str] = Field(None, description="Email del encargado de cobranzas")
     encargado_cobranza_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del encargado de cobranzas")
     
     # Información adicional
@@ -74,9 +77,6 @@ class UserJuridicoBase(UserCommonBase):
     
     # Fotos del establecimiento
     fotos_establecimiento: Optional[List[str]] = Field(None, description="URLs de las fotos del establecimiento")
-    
-    # Dirección del establecimiento (requerida para jurídicos)
-    direccion_establecimiento: str = Field(..., description="Dirección completa del establecimiento")
 
 class UserJuridicoCreate(UserJuridicoBase):
     password: str = Field(..., min_length=8, max_length=100)
