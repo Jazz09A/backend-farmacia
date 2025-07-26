@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.user import User
 from app.models.address import UserPreferences
-from app.schemas.auth import LoginRequest, RegisterNaturalRequest, RegisterJuridicoRequest, Token
-from app.schemas.user import UserNaturalResponse, UserJuridicoResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, Token
+from app.schemas.user import UserResponse
 from app.core.security import (
     verify_password, 
     get_password_hash, 
@@ -25,64 +25,76 @@ from app.config.settings import settings
 
 class AuthService:
     @staticmethod
-    async def register_natural_user(db: Session, user_data: RegisterNaturalRequest) -> UserNaturalResponse:
-        """Register a new natural user."""
-        try:
-            # Check if user already exists
-            existing_user = db.query(User).filter(User.email == user_data.email).first()
-            if existing_user:
-                raise UserAlreadyExistsException("El email ya está registrado")
-            
-            # Create new natural user
-            hashed_password = get_password_hash(user_data.password)
-            db_user = User(
-                email=user_data.email,
-                first_name=user_data.first_name,
-                last_name=user_data.last_name,
-                cedula=user_data.cedula,
-                birth_date=user_data.birth_date,
-                address=user_data.address,
-                hashed_password=hashed_password,
-                user_type="natural",
-                phone=user_data.phone,
-                preferred_currency=user_data.preferred_currency,
-                role=UserRole.USER,
-                verification_token=generate_verification_token(),
-                is_verified=False
-            )
-            
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
-            
-            # Create user preferences
-            user_preferences = UserPreferences(
-                user_id=db_user.id,
-                preferred_currency=user_data.preferred_currency
-            )
-            db.add(user_preferences)
-            db.commit()
-            
-            # TODO: Send verification email
-            # await EmailService.send_verification_email(db_user.email, db_user.verification_token)
-            
-            return UserNaturalResponse.from_orm(db_user)
-            
-        except IntegrityError:
-            db.rollback()
-            raise UserAlreadyExistsException("Error al crear el usuario")
+    def _convert_user_to_response_dict(db_user: User) -> dict:
+        """Convert User model to dict compatible with UserResponse schema."""
+        return {
+            'id': db_user.id,
+            'email': db_user.email,
+            'phone': db_user.phone,
+            'preferred_currency': db_user.preferred_currency,
+            'user_type': db_user.user_type,
+            'company_name': db_user.company_name,
+            'rif': db_user.rif,
+            'registro_mercantil': db_user.registro_mercantil,
+            'representante_legal_cedula': db_user.representante_legal_cedula,
+            'representante_legal_nombre': db_user.representante_legal_nombre,
+            'representantes_adicionales': db_user.representantes_adicionales or [],
+            'referencia_comercial_proveedor': db_user.referencia_comercial_proveedor,
+            'referencia_bancaria': db_user.referencia_bancaria,
+            'direccion_establecimiento': db_user.direccion_establecimiento,
+            'dueno_telefono': db_user.dueno_telefono,
+            'dueno_email': db_user.dueno_email,
+            'dueno_cumpleanos': db_user.dueno_cumpleanos.strftime('%Y-%m-%d') if db_user.dueno_cumpleanos else None,
+            'encargado_compra_telefono': db_user.encargado_compra_telefono,
+            'encargado_compra_email': db_user.encargado_compra_email,
+            'encargado_compra_cumpleanos': db_user.encargado_compra_cumpleanos.strftime('%Y-%m-%d') if db_user.encargado_compra_cumpleanos else None,
+            'encargado_cobranza_telefono': db_user.encargado_cobranza_telefono,
+            'encargado_cobranza_email': db_user.encargado_cobranza_email,
+            'encargado_cobranza_cumpleanos': db_user.encargado_cobranza_cumpleanos.strftime('%Y-%m-%d') if db_user.encargado_cobranza_cumpleanos else None,
+            'redes_sociales': db_user.redes_sociales,
+            'pagina_web': db_user.pagina_web,
+            'codigo_sicm': db_user.codigo_sicm,
+            'fotos_establecimiento': db_user.fotos_establecimiento or [],
+            'is_active': db_user.is_active,
+            'is_verified': db_user.is_verified,
+            'role': db_user.role,
+            'created_at': db_user.created_at,
+            'last_login': db_user.last_login
+        }
 
     @staticmethod
-    async def register_juridico_user(db: Session, user_data: RegisterJuridicoRequest) -> UserJuridicoResponse:
+    async def register_juridico_user(db: Session, user_data: RegisterRequest) -> UserResponse:
         """Register a new juridico user."""
         try:
+            print("🔍 AuthService: Starting registration for", user_data.email)
             # Check if user already exists
+            print("🔍 AuthService: Checking for existing user...")
             existing_user = db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
+                print("❌ AuthService: User already exists")
                 raise UserAlreadyExistsException("El email ya está registrado")
             
             # Create new juridico user
+            print("🔍 AuthService: Hashing password...")
             hashed_password = get_password_hash(user_data.password)
+            
+            # Convert string dates to date objects
+            def parse_date(date_str):
+                if date_str:
+                    try:
+                        from datetime import datetime
+                        return datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except (ValueError, TypeError):
+                        print(f"⚠️ Warning: Invalid date format: {date_str}")
+                        return None
+                return None
+            
+            print("🔍 AuthService: Parsing dates...")
+            dueno_cumpleanos_date = parse_date(user_data.dueno_cumpleanos)
+            encargado_compra_cumpleanos_date = parse_date(user_data.encargado_compra_cumpleanos)
+            encargado_cobranza_cumpleanos_date = parse_date(user_data.encargado_cobranza_cumpleanos)
+            
+            print("🔍 AuthService: Creating user object...")
             db_user = User(
                 email=user_data.email,
                 company_name=user_data.company_name,
@@ -95,13 +107,13 @@ class AuthService:
                 referencia_bancaria=user_data.referencia_bancaria,
                 dueno_telefono=user_data.dueno_telefono,
                 dueno_email=user_data.dueno_email,
-                dueno_cumpleanos=user_data.dueno_cumpleanos,
+                dueno_cumpleanos=dueno_cumpleanos_date,
                 encargado_compra_telefono=user_data.encargado_compra_telefono,
                 encargado_compra_email=user_data.encargado_compra_email,
-                encargado_compra_cumpleanos=user_data.encargado_compra_cumpleanos,
+                encargado_compra_cumpleanos=encargado_compra_cumpleanos_date,
                 encargado_cobranza_telefono=user_data.encargado_cobranza_telefono,
                 encargado_cobranza_email=user_data.encargado_cobranza_email,
-                encargado_cobranza_cumpleanos=user_data.encargado_cobranza_cumpleanos,
+                encargado_cobranza_cumpleanos=encargado_cobranza_cumpleanos_date,
                 redes_sociales=user_data.redes_sociales,
                 pagina_web=user_data.pagina_web,
                 codigo_sicm=user_data.codigo_sicm,
@@ -116,22 +128,30 @@ class AuthService:
                 is_verified=False
             )
             
+            print("🔍 AuthService: Saving user to database...")
             db.add(db_user)
             db.commit()
             db.refresh(db_user)
+            print("✅ AuthService: User saved successfully with ID:", db_user.id)
             
             # Create user preferences
+            print("🔍 AuthService: Creating user preferences...")
             user_preferences = UserPreferences(
                 user_id=db_user.id,
                 preferred_currency=user_data.preferred_currency
             )
             db.add(user_preferences)
             db.commit()
+            print("✅ AuthService: User preferences saved successfully")
             
             # TODO: Send verification email
             # await EmailService.send_verification_email(db_user.email, db_user.verification_token)
             
-            return UserJuridicoResponse.from_orm(db_user)
+            print("🔍 AuthService: Converting user to response format...")
+            user_dict = AuthService._convert_user_to_response_dict(db_user)
+            
+            print("✅ AuthService: Registration completed successfully!")
+            return UserResponse.model_validate(user_dict)
             
         except IntegrityError:
             db.rollback()
@@ -278,4 +298,10 @@ class AuthService:
         user.hashed_password = get_password_hash(new_password)
         db.commit()
         
-        return {"message": "Contraseña cambiada exitosamente", "success": True} 
+        return {"message": "Contraseña cambiada exitosamente", "success": True}
+    
+    @staticmethod
+    def get_user_info(db_user: User) -> UserResponse:
+        """Get user information as UserResponse."""
+        user_dict = AuthService._convert_user_to_response_dict(db_user)
+        return UserResponse.model_validate(user_dict)

@@ -1,12 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Union
-
 from app.config.database import get_db
 from app.schemas.auth import (
     LoginRequest, 
-    RegisterNaturalRequest,
-    RegisterJuridicoRequest,
+    RegisterRequest,
     Token, 
     RefreshTokenRequest,
     ForgotPasswordRequest,
@@ -15,36 +12,16 @@ from app.schemas.auth import (
     ResendVerificationRequest,
     AuthResponse
 )
-from app.schemas.user import UserNaturalResponse, UserJuridicoResponse
+from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
 
 router = APIRouter()
 
-@router.post("/register/natural", response_model=UserNaturalResponse, status_code=status.HTTP_201_CREATED)
-async def register_natural_user(
-    user_data: RegisterNaturalRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Registrar un nuevo usuario natural (persona).
-    
-    - **email**: Email del usuario (debe ser único)
-    - **first_name**: Nombre del usuario
-    - **last_name**: Apellido del usuario
-    - **cedula**: Cédula de identidad
-    - **password**: Contraseña (mínimo 8 caracteres)
-    - **phone**: Teléfono
-    - **preferred_currency**: Moneda preferida (VES o USD)
-    - **birth_date**: Fecha de nacimiento (opcional)
-    - **address**: Dirección (opcional)
-    """
-    return await AuthService.register_natural_user(db, user_data)
-
-@router.post("/register/juridico", response_model=UserJuridicoResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register/juridico", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_juridico_user(
-    user_data: RegisterJuridicoRequest,
+    user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -64,7 +41,19 @@ async def register_juridico_user(
     - **preferred_currency**: Moneda preferida (VES o USD)
     - Y campos opcionales adicionales...
     """
-    return await AuthService.register_juridico_user(db, user_data)
+    try:
+        print("📥 Received user data:", user_data)
+        result = await AuthService.register_juridico_user(db, user_data)
+        print("✅ Registration successful for:", user_data.email)
+        return result
+    except Exception as e:
+        print("❌ Registration failed:", str(e))
+        print("❌ Exception type:", type(e).__name__)
+        import traceback
+        print("❌ Full traceback:")
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+    
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -89,7 +78,7 @@ async def refresh_token(
     """
     return await AuthService.refresh_access_token(db, refresh_data.refresh_token)
 
-@router.get("/me", response_model=Union[UserNaturalResponse, UserJuridicoResponse])
+@router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -98,10 +87,7 @@ async def get_current_user_info(
     
     Retorna el schema apropiado según el tipo de usuario.
     """
-    if current_user.user_type == "natural":
-        return UserNaturalResponse.model_validate(current_user)
-    else:
-        return UserJuridicoResponse.model_validate(current_user)
+    return AuthService.get_user_info(current_user)
 
 @router.post("/verify-email", response_model=AuthResponse)
 async def verify_email(

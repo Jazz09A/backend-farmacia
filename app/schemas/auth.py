@@ -1,17 +1,49 @@
-from pydantic import BaseModel, EmailStr, validator, Field
-from typing import Optional
-from app.schemas.user import UserNaturalCreate, UserJuridicoCreate
+from pydantic import BaseModel, EmailStr, field_validator, Field
+from typing import Optional, Literal, List
+from app.schemas.user import UserCreate
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-# Schemas de registro separados
-class RegisterNaturalRequest(UserNaturalCreate):
-    pass
-
-class RegisterJuridicoRequest(UserJuridicoCreate):
-    pass
+class RegisterRequest(UserCreate):
+    user_type: Literal['juridico'] = 'juridico'
+    company_name: str
+    rif: str
+    registro_mercantil: str
+    
+    # Representantes legales
+    representante_legal_cedula: str
+    representante_legal_nombre: str
+    representantes_adicionales: Optional[List[str]]
+    
+    # Referencias comerciales y bancarias
+    referencia_comercial_proveedor: str
+    referencia_bancaria: str
+    
+    # Dirección del establecimiento (requerida para jurídicos)
+    direccion_establecimiento: str
+    
+    # Contactos especializados
+    dueno_telefono: Optional[str]
+    dueno_email: Optional[str]
+    dueno_cumpleanos: Optional[str]
+    
+    encargado_compra_telefono: Optional[str]
+    encargado_compra_email: Optional[str]
+    encargado_compra_cumpleanos: Optional[str]
+    
+    encargado_cobranza_telefono: Optional[str]
+    encargado_cobranza_email: Optional[str]
+    encargado_cobranza_cumpleanos: Optional[str]
+    
+    # Información adicional
+    redes_sociales: Optional[str]
+    pagina_web: Optional[str]
+    codigo_sicm: Optional[str]
+    
+    # Fotos del establecimiento
+    fotos_establecimiento: Optional[List[str]]
 
 class Token(BaseModel):
     access_token: str
@@ -35,13 +67,13 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=100)
     confirm_password: str
     
-    @validator('confirm_password')
-    def passwords_match(cls, v, values):
-        if 'new_password' in values and v != values['new_password']:
+    @field_validator('confirm_password')
+    def passwords_match(cls, v, info):
+        if 'new_password' in info.data and v != info.data['new_password']:
             raise ValueError('Las contraseñas no coinciden')
         return v
     
-    @validator('new_password')
+    @field_validator('new_password')
     def validate_new_password(cls, v):
         if len(v) < 8:
             raise ValueError('La contraseña debe tener al menos 8 caracteres')
