@@ -30,7 +30,7 @@ class Category(Base):
     
     # Relationships
     parent = relationship("Category", remote_side=[id], backref="subcategories")
-    products = relationship("Product", back_populates="category")
+    products = relationship("Product", back_populates="category_obj")
     
     def __repr__(self):
         return f"<Category(id={self.id}, name={self.name}, slug={self.slug})>"
@@ -63,7 +63,7 @@ class Brand(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    products = relationship("Product", back_populates="brand")
+    products = relationship("Product", back_populates="brand_obj")
     
     def __repr__(self):
         return f"<Brand(id={self.id}, name={self.name}, slug={self.slug})>" 

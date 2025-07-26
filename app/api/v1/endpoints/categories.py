@@ -13,10 +13,10 @@ from app.schemas.category import (
     CategoryCreate, CategoryUpdate, CategoryResponse, CategoryListResponse,
     CategoryWithSubcategories, CategorySimple
 )
-from app.core.dependencies import get_current_admin_user, PaginationParams, get_pagination_params
+from app.core.dependencies import get_admin_user, PaginationParams, get_pagination_params
 from app.models.user import User
 
-router = APIRouter(prefix="/categories", tags=["Categories"])
+router = APIRouter(prefix="/categories")
 
 # =============================================================================
 # RUTAS PÚBLICAS - CATEGORÍAS
@@ -59,7 +59,7 @@ async def get_categories(
     for category in categories:
         product_count = db.query(func.count(Product.id)).filter(
             Product.category_id == category.id,
-            Product.is_active == True
+            Product.in_stock == True
         ).scalar()
         
         category_dict = category.__dict__.copy()
@@ -99,7 +99,7 @@ async def get_category(
     # Agregar conteo de productos
     product_count = db.query(func.count(Product.id)).filter(
         Product.category_id == category.id,
-        Product.is_active == True
+        Product.in_stock == True
     ).scalar()
     
     category_dict = category.__dict__.copy()
@@ -138,7 +138,7 @@ async def get_subcategories(
     for subcategory in subcategories:
         product_count = db.query(func.count(Product.id)).filter(
             Product.category_id == subcategory.id,
-            Product.is_active == True
+            Product.in_stock == True
         ).scalar()
         
         subcategory_dict = subcategory.__dict__.copy()
@@ -176,7 +176,7 @@ async def get_categories_simple(
 @router.post("/", response_model=CategoryResponse)
 async def create_category(
     category_data: CategoryCreate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -213,7 +213,7 @@ async def create_category(
 async def update_category(
     category_id: str,
     category_data: CategoryUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -251,7 +251,7 @@ async def update_category(
 @router.delete("/{category_id}")
 async def delete_category(
     category_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """

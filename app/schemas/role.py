@@ -58,7 +58,7 @@ class RoleHierarchyResponse(BaseModel):
     roles: dict[str, RoleInfo]
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "roles": {
                     "user": {

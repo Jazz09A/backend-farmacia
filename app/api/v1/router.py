@@ -34,7 +34,7 @@ api_router.include_router(
 # Lista de favoritos
 api_router.include_router(
     favorites.router,
-    prefix="/api/v1",
+    prefix="/favorites",
     tags=["❤️ Favoritos"],
 )
 
@@ -55,13 +55,13 @@ api_router.include_router(
 # Categorías
 api_router.include_router(
     categories.router,
-    prefix="/api/v1",
+    prefix="/categories",
     tags=["📂 Categorías"],
 )
 
 # Marcas
 api_router.include_router(
     brands.router,
-    prefix="/api/v1",
+    prefix="/brands",
     tags=["🏷️ Marcas"],
 ) 

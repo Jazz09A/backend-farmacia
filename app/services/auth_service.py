@@ -1,8 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-import uuid
 
 from app.models.user import User
 from app.models.address import UserPreferences
@@ -14,8 +12,6 @@ from app.core.security import (
     create_access_token, 
     create_refresh_token,
     verify_token,
-    create_url_safe_token,
-    verify_url_safe_token,
     generate_verification_token,
     generate_reset_token
 )
@@ -23,7 +19,6 @@ from app.core.exceptions import (
     InvalidCredentialsException,
     UserAlreadyExistsException,
     UserNotFoundException,
-    EmailNotVerifiedException
 )
 from app.config.settings import settings
 

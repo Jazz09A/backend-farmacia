@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
+from main import app
 from app.config.database import get_db, Base
 from app.config.settings import settings
 from app.core.security import create_access_token, get_password_hash

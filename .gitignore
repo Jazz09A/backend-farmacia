@@ -500,6 +500,8 @@ sandbox/
 NOTES.md
 TODO_personal.md
 ideas.txt
+seed_data.py
+run_tests.py
 
 # =============================================================================
 # 🔄 ARCHIVOS DE RESPALDO Y VERSIONES

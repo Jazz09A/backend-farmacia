@@ -12,10 +12,10 @@ from app.models.product import Product
 from app.schemas.category import (
     BrandCreate, BrandUpdate, BrandResponse, BrandListResponse, BrandSimple
 )
-from app.core.dependencies import get_current_admin_user, PaginationParams, get_pagination_params
+from app.core.dependencies import get_admin_user, PaginationParams, get_pagination_params
 from app.models.user import User
 
-router = APIRouter(prefix="/brands", tags=["Brands"])
+router = APIRouter(prefix="/brands")
 
 # =============================================================================
 # RUTAS PÚBLICAS - MARCAS
@@ -59,7 +59,7 @@ async def get_brands(
     for brand in brands:
         product_count = db.query(func.count(Product.id)).filter(
             Product.brand_id == brand.id,
-            Product.is_active == True
+            Product.in_stock == True
         ).scalar()
         
         brand_dict = brand.__dict__.copy()
@@ -95,7 +95,7 @@ async def get_featured_brands(
     for brand in brands:
         product_count = db.query(func.count(Product.id)).filter(
             Product.brand_id == brand.id,
-            Product.is_active == True
+            Product.in_stock == True
         ).scalar()
         
         brand_dict = brand.__dict__.copy()
@@ -128,7 +128,7 @@ async def get_brand(
     # Agregar conteo de productos
     product_count = db.query(func.count(Product.id)).filter(
         Product.brand_id == brand.id,
-        Product.is_active == True
+        Product.in_stock == True
     ).scalar()
     
     brand_dict = brand.__dict__.copy()
@@ -165,7 +165,7 @@ async def get_brands_simple(
 @router.post("/", response_model=BrandResponse)
 async def create_brand(
     brand_data: BrandCreate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -193,7 +193,7 @@ async def create_brand(
 async def update_brand(
     brand_id: str,
     brand_data: BrandUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -231,7 +231,7 @@ async def update_brand(
 @router.delete("/{brand_id}")
 async def delete_brand(
     brand_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """

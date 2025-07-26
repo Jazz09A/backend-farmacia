@@ -1,21 +1,318 @@
 """
-Endpoints de administración para gestión de usuarios y roles.
+Endpoints de administración para gestión de usuarios, roles y productos.
 """
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func, desc, asc, or_
 from app.config.database import get_db
 from app.core.auth import require_admin, require_super_admin, get_admin_user, get_super_admin_user
 from app.models.user import User
+from app.models.product import Product
 from app.services.role_service import RoleService
 from app.schemas.role import (
     UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse,
     PromotionRequest, PromotionResponse, UserRole
 )
 from app.schemas.user import UserResponse
+from app.schemas.product import (
+    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
+)
 from app.core.dependencies import PaginationParams, get_pagination_params
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+# =============================================================================
+# GESTIÓN DE PRODUCTOS - ADMIN
+# =============================================================================
+
+@router.get("/products", response_model=ProductListResponse)
+async def get_admin_products(
+    pagination: PaginationParams = Depends(get_pagination_params),
+    search: Optional[str] = Query(None, description="Buscar productos"),
+    category_id: Optional[str] = Query(None, description="Filtrar por categoría"),
+    brand_id: Optional[str] = Query(None, description="Filtrar por marca"),
+    in_stock: Optional[bool] = Query(None, description="Filtrar por stock disponible"),
+    featured: Optional[bool] = Query(None, description="Solo productos destacados"),
+    is_offer: Optional[bool] = Query(None, description="Solo productos en oferta"),
+    prescription: Optional[bool] = Query(None, description="Requiere receta"),
+    sort_by: str = Query("created_at", description="Ordenar por: name, price, stock, created_at, rating"),
+    sort_order: str = Query("desc", description="Orden: asc, desc"),
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    📦 **Gestión de productos (Admin)**
+    
+    Lista todos los productos del sistema con filtros avanzados y paginación.
+    """
+    # Base query (include out of stock products for admin)
+    query = db.query(Product)
+    
+    # Build filters
+    applied_filters = {}
+    
+    if search:
+        search_filter = or_(
+            Product.name.ilike(f"%{search}%"),
+            Product.description.ilike(f"%{search}%"),
+            Product.brand.ilike(f"%{search}%"),
+            Product.sku.ilike(f"%{search}%")
+        )
+        query = query.filter(search_filter)
+        applied_filters["search"] = search
+    
+    if category_id:
+        query = query.filter(Product.category_id == category_id)
+        applied_filters["category_id"] = category_id
+    
+    if brand_id:
+        query = query.filter(Product.brand_id == brand_id)
+        applied_filters["brand_id"] = brand_id
+    
+    if in_stock is not None:
+        query = query.filter(Product.in_stock == in_stock)
+        applied_filters["in_stock"] = in_stock
+    
+    if featured is not None:
+        query = query.filter(Product.featured == featured)
+        applied_filters["featured"] = featured
+    
+    if is_offer is not None:
+        query = query.filter(Product.is_offer == is_offer)
+        applied_filters["is_offer"] = is_offer
+    
+    if prescription is not None:
+        query = query.filter(Product.prescription == prescription)
+        applied_filters["prescription"] = prescription
+    
+    # Apply sorting
+    order_func = desc if sort_order == "desc" else asc
+    
+    if sort_by == "name":
+        query = query.order_by(order_func(Product.name))
+    elif sort_by == "price":
+        query = query.order_by(order_func(Product.price_ves))
+    elif sort_by == "stock":
+        query = query.order_by(order_func(Product.stock))
+    elif sort_by == "rating":
+        query = query.order_by(order_func(Product.rating))
+    else:  # created_at (default)
+        query = query.order_by(order_func(Product.created_at))
+    
+    applied_filters.update({"sort_by": sort_by, "sort_order": sort_order})
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply pagination
+    products = query.offset(pagination.skip).limit(pagination.limit).all()
+    
+    # Convert to response models
+    product_responses = []
+    for product in products:
+        product_dict = {
+            **product.__dict__,
+            'current_price': product.current_price,
+            'discount_percentage': product.discount_percentage,
+            'is_available': product.in_stock and product.stock > 0
+        }
+        product_responses.append(ProductResponse.model_validate(product_dict))
+    
+    return ProductListResponse.create(
+        products=product_responses,
+        total=total,
+        page=pagination.page,
+        limit=pagination.limit,
+        filters=applied_filters
+    )
+
+@router.post("/products", response_model=ProductResponse)
+async def create_product(
+    product_data: ProductCreate,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    ➕ **Crear producto**
+    
+    Crea un nuevo producto en el sistema.
+    """
+    # Generate slug if not provided
+    if not product_data.slug:
+        import re
+        slug_base = re.sub(r'[^a-zA-Z0-9\s-]', '', product_data.name.lower())
+        slug_base = re.sub(r'\s+', '-', slug_base.strip())
+        product_data.slug = slug_base
+    
+    # Check if slug already exists
+    if db.query(Product).filter(Product.slug == product_data.slug).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ya existe un producto con este slug"
+        )
+    
+    # Create product
+    db_product = Product(**product_data.model_dump())
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    
+    # Convert to response model
+    product_dict = {
+        **db_product.__dict__,
+        'current_price': db_product.current_price,
+        'discount_percentage': db_product.discount_percentage,
+        'is_available': db_product.in_stock and db_product.stock > 0
+    }
+    
+    return ProductResponse.model_validate(product_dict)
+
+@router.get("/products/{product_id}", response_model=ProductResponse)
+async def get_admin_product(
+    product_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    📋 **Obtener producto (Admin)**
+    
+    Obtiene detalles completos de un producto (incluye productos fuera de stock).
+    """
+    product = db.query(Product).filter(Product.id == product_id).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Producto no encontrado"
+        )
+    
+    product_dict = {
+        **product.__dict__,
+        'current_price': product.current_price,
+        'discount_percentage': product.discount_percentage,
+        'is_available': product.in_stock and product.stock > 0
+    }
+    
+    return ProductResponse.model_validate(product_dict)
+
+@router.put("/products/{product_id}", response_model=ProductResponse)
+async def update_product(
+    product_id: str,
+    product_data: ProductUpdate,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    ✏️ **Actualizar producto**
+    
+    Actualiza la información de un producto existente.
+    """
+    product = db.query(Product).filter(Product.id == product_id).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Producto no encontrado"
+        )
+    
+    # Update only provided fields
+    update_data = product_data.model_dump(exclude_unset=True)
+    
+    # Check slug uniqueness if being updated
+    if 'slug' in update_data and update_data['slug']:
+        existing_slug = db.query(Product).filter(
+            Product.slug == update_data['slug'],
+            Product.id != product_id
+        ).first()
+        if existing_slug:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe un producto con este slug"
+            )
+    
+    for field, value in update_data.items():
+        setattr(product, field, value)
+    
+    product.updated_at = func.now()
+    db.commit()
+    db.refresh(product)
+    
+    product_dict = {
+        **product.__dict__,
+        'current_price': product.current_price,
+        'discount_percentage': product.discount_percentage,
+        'is_available': product.in_stock and product.stock > 0
+    }
+    
+    return ProductResponse.model_validate(product_dict)
+
+@router.delete("/products/{product_id}")
+async def delete_product(
+    product_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🗑️ **Eliminar producto**
+    
+    Elimina un producto del sistema.
+    """
+    product = db.query(Product).filter(Product.id == product_id).first()
+    
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Producto no encontrado"
+        )
+    
+    # Store product name for response
+    product_name = product.name
+    
+    # Delete product
+    db.delete(product)
+    db.commit()
+    
+    return {"message": f"Producto '{product_name}' eliminado exitosamente"}
+
+@router.get("/products/stats/summary")
+async def get_products_stats(
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 **Estadísticas de productos**
+    
+    Obtiene estadísticas generales de productos.
+    """
+    total_products = db.query(Product).count()
+    in_stock_products = db.query(Product).filter(Product.in_stock == True).count()
+    featured_products = db.query(Product).filter(Product.featured == True).count()
+    offer_products = db.query(Product).filter(Product.is_offer == True).count()
+    low_stock_products = db.query(Product).filter(Product.stock <= 5, Product.in_stock == True).count()
+    
+    # Average rating
+    avg_rating_result = db.query(func.avg(Product.rating)).scalar()
+    avg_rating = round(float(avg_rating_result or 0), 2)
+    
+    # Products by category
+    category_stats = db.query(
+        Product.category,
+        func.count(Product.id)
+    ).group_by(Product.category).all()
+    
+    return {
+        "summary": {
+            "total_products": total_products,
+            "in_stock_products": in_stock_products,
+            "out_of_stock_products": total_products - in_stock_products,
+            "featured_products": featured_products,
+            "offer_products": offer_products,
+            "low_stock_products": low_stock_products,
+            "avg_rating": avg_rating
+        },
+        "categories": [{"name": cat, "count": count} for cat, count in category_stats]
+    }
 
 # =============================================================================
 # ENDPOINTS DE INFORMACIÓN DE ROLES

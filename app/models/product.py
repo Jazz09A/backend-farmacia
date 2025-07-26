@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, Table
+from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, Table, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.types import TypeDecorator, JSON
@@ -52,7 +52,7 @@ class Product(Base):
     # Basic product information
     name = Column(String, nullable=False, index=True)
     slug = Column(String, unique=True, nullable=True, index=True)
-    sku = Column(String, unique=True, nullable=True)
+    sku = Column(String, unique=True, nullable=True, index=True)
     
     # Foreign key references
     brand_id = Column(String, ForeignKey("brands.id"), nullable=True, index=True)
@@ -65,7 +65,7 @@ class Product(Base):
     patology = Column(String, nullable=True, index=True)
     
     # Pricing
-    price_ves = Column(Float, nullable=False)
+    price_ves = Column(Float, nullable=False, index=True)  # Add index for price filtering
     price_ref = Column(Float, nullable=False)
     original_price = Column(Float, nullable=True)  # For offers
     
@@ -79,13 +79,13 @@ class Product(Base):
     
     # Stock management
     in_stock = Column(Boolean, default=True, index=True)
-    stock = Column(Integer, default=0)
+    stock = Column(Integer, default=0, index=True)  # Add index for stock filtering
     
     # Prescription requirement
     prescription = Column(Boolean, default=False, index=True)
     
     # Rating and reviews
-    rating = Column(Float, default=0.0)
+    rating = Column(Float, default=0.0, index=True)  # Add index for rating sorting
     review_count = Column(Integer, default=0)
     
     # Offers and promotions
@@ -109,7 +109,7 @@ class Product(Base):
     meta_description = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Add index for date sorting
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
@@ -137,20 +137,22 @@ class Product(Base):
             return round(((self.original_price - self.price_ves) / self.original_price) * 100, 2)
         return 0
     
-    @property
-    def is_available(self):
-        """Check if product is available (in stock and active)."""
-        return self.in_stock and self.stock > 0
-    
-    def update_rating(self, new_rating: float, is_new_review: bool = True):
-        """Update product rating based on new review."""
-        if is_new_review:
-            total_rating = (self.rating * self.review_count) + new_rating
-            self.review_count += 1
-            self.rating = round(total_rating / self.review_count, 2)
-        else:
-            # Recalculate rating from all reviews
-            from app.models.review import Review
-            from sqlalchemy import func
-            # This would need the session to calculate
-            pass 
+    # Add compound indexes for common query patterns
+    __table_args__ = (
+        # Index for filtering products in stock with category
+        Index('idx_product_stock_category', 'in_stock', 'category_id'),
+        # Index for filtering products in stock with brand
+        Index('idx_product_stock_brand', 'in_stock', 'brand_id'),
+        # Index for featured products that are in stock
+        Index('idx_product_featured_stock', 'featured', 'in_stock'),
+        # Index for offers that are in stock
+        Index('idx_product_offer_stock', 'is_offer', 'in_stock'),
+        # Index for prescription filtering with stock
+        Index('idx_product_prescription_stock', 'prescription', 'in_stock'),
+        # Index for price range queries with stock
+        Index('idx_product_price_stock', 'price_ves', 'in_stock'),
+        # Index for sorting by rating with stock
+        Index('idx_product_rating_stock', 'rating', 'in_stock'),
+        # Index for sorting by creation date
+        Index('idx_product_created_stock', 'created_at', 'in_stock'),
+    ) 

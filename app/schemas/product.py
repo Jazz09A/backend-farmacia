@@ -148,6 +148,32 @@ class ProductSearchResponse(BaseModel):
     has_next: bool
     has_prev: bool
 
+class ProductListResponse(BaseModel):
+    """Enhanced paginated response for product listings"""
+    products: List[ProductResponse]
+    pagination: dict
+    filters_applied: dict
+    total: int
+    
+    @classmethod
+    def create(cls, products: List[ProductResponse], total: int, page: int, limit: int, filters: dict = None):
+        total_pages = (total + limit - 1) // limit if total > 0 else 0
+        return cls(
+            products=products,
+            pagination={
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+                "next_page": page + 1 if page < total_pages else None,
+                "prev_page": page - 1 if page > 1 else None
+            },
+            filters_applied=filters or {},
+            total=total
+        )
+
 class CategoryResponse(BaseModel):
     name: str
     count: int

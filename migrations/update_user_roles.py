@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 # Agregar el directorio raíz al path para importar modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ .append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config.database import SQLALCHEMY_DATABASE_URL
 from app.models.user import User

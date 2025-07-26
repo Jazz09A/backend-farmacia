@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.config.database import get_db
+from app.config.settings import settings
 from app.core.security import verify_token
 from app.models.user import User
 
@@ -81,13 +82,20 @@ async def get_admin_user(current_user: User = Depends(get_current_verified_user)
         )
     return current_user
 
-# Pagination dependency
+# Enhanced Pagination dependency with configuration
 class PaginationParams:
-    def __init__(self, page: int = 1, limit: int = 20):
+    def __init__(self, page: int = 1, limit: int = None):
+        # Use settings for default values
+        if limit is None:
+            limit = settings.DEFAULT_PAGE_SIZE
+            
         self.page = max(1, page)
-        self.limit = min(100, max(1, limit))  # Max 100 items per page
+        self.limit = min(settings.MAX_PAGE_SIZE, max(settings.MIN_PAGE_SIZE, limit))
         self.skip = (self.page - 1) * self.limit
 
-def get_pagination_params(page: int = 1, limit: int = 20) -> PaginationParams:
-    """Get pagination parameters."""
+def get_pagination_params(
+    page: int = 1, 
+    limit: int = None
+) -> PaginationParams:
+    """Get pagination parameters with configurable defaults."""
     return PaginationParams(page, limit) 
