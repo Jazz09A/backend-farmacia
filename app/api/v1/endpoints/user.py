@@ -29,7 +29,7 @@ async def get_user_profile(
     Obtiene información del perfil del usuario actual.
     Requiere autenticación.
     """
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 @router.put("/profile", response_model=UserResponse)
 async def update_user_profile(
@@ -50,7 +50,7 @@ async def update_user_profile(
     db.commit()
     db.refresh(current_user)
     
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 @router.post("/change-password")
 async def change_password(

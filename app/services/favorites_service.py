@@ -2,8 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.models.favorites import UserFavorite
 from app.models.product import Product
-from app.models.user import User
-from typing import List, Optional
+from typing import List 
 from fastapi import HTTPException, status
 
 class FavoritesService:
