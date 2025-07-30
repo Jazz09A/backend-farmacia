@@ -628,7 +628,7 @@ async def get_admin_dashboard(
     
     # Usuarios recientes (últimos 7 días)
     from datetime import datetime, timedelta
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(datetime.timezone.utc) - timedelta(days=7)
     recent_users = db.query(User).filter(User.created_at >= week_ago).count()
     
     return {
