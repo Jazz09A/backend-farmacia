@@ -1,12 +1,14 @@
 """
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
+import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
 from app.config.database import get_db
-from app.core.auth import require_admin, require_super_admin, get_admin_user, get_super_admin_user
+from app.core.auth import get_admin_user, get_super_admin_user
+from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.models.product import Product
 from app.services.role_service import RoleService
@@ -14,13 +16,32 @@ from app.schemas.role import (
     UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse,
     PromotionRequest, PromotionResponse, UserRole
 )
-from app.schemas.user import UserResponse
+from app.schemas.dashboard import DashboardData, DashboardStats, OrderStatusSummary, RecentOrder
 from app.schemas.product import (
     ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
 )
 from app.core.dependencies import PaginationParams, get_pagination_params
+from app.services import dashboard_service # Import the new service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+# =============================================================================
+# INDEX ADMIN PAGE
+# =============================================================================
+
+@router.get("/", response_model=DashboardData)
+async def get_admin_dashboard(
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get aggregated data for the admin dashboard.
+    """
+    dashboard_data = dashboard_service.get_dashboard_data(db=db, days_filter=7)
+    return dashboard_data
+
+
+
 
 # =============================================================================
 # GESTIÓN DE PRODUCTOS - ADMIN

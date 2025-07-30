@@ -3,6 +3,13 @@ from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
 from datetime import datetime
+from enum import Enum
+
+class OrderStatus(Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
 
 class Order(Base):
     __tablename__ = "orders"
@@ -42,8 +49,8 @@ class Order(Base):
     admin_notes = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(datetime.timezone.utc), onupdate=datetime.now(datetime.timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="orders")
@@ -93,7 +100,7 @@ class OrderItem(Base):
     product_image = Column(String, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
     
     # Relationships
     order = relationship("Order", back_populates="items")
@@ -127,7 +134,7 @@ class OrderAddress(Base):
     delivery_instructions = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
     
     # Relationships
     order = relationship("Order", back_populates="shipping_address")
