@@ -85,14 +85,50 @@ class UserUpdate(BaseModel):
             raise ValueError('La moneda debe ser VES o USD')
         return v
 
-class UserResponse(UserJuridicoBase):
+class UserResponse(BaseModel):
     id: str
+    email: EmailStr
+    phone: str
     is_active: bool
     is_verified: bool
     role: str
     created_at: datetime
-    last_login: Optional[datetime]
+    last_login: Optional[datetime] = None
+    preferred_currency: str
+    user_type: Optional[str] = None
+
+    # Juridico fields (optional for admin/other roles)
+    company_name: Optional[str] = None
+    rif: Optional[str] = None
+    registro_mercantil: Optional[str] = None
     
+    representante_legal_cedula: Optional[str] = None
+    representante_legal_nombre: Optional[str] = None
+    representantes_adicionales: Optional[List[str]] = None
+    
+    referencia_comercial_proveedor: Optional[str] = None
+    referencia_bancaria: Optional[str] = None
+    
+    direccion_establecimiento: Optional[str] = None
+    
+    dueno_telefono: Optional[str] = None
+    dueno_email: Optional[str] = None
+    dueno_cumpleanos: Optional[str] = None
+    
+    encargado_compra_telefono: Optional[str] = None
+    encargado_compra_email: Optional[str] = None
+    encargado_compra_cumpleanos: Optional[str] = None
+    
+    encargado_cobranza_telefono: Optional[str] = None
+    encargado_cobranza_email: Optional[str] = None
+    encargado_cobranza_cumpleanos: Optional[str] = None
+    
+    redes_sociales: Optional[str] = None
+    pagina_web: Optional[str] = None
+    codigo_sicm: Optional[str] = None
+    
+    fotos_establecimiento: Optional[List[str]] = None
+
     class Config:
         from_attributes = True
 
