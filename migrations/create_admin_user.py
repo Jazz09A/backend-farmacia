@@ -54,7 +54,7 @@ def create_admin():
             id=str(uuid.uuid4()),
             email=email,
             hashed_password=get_password_hash(password),
-            user_type="natural",
+            user_type="juridico",
             phone="0000-000-0000",  # Placeholder
             preferred_currency="VES",
             role=role,

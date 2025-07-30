@@ -9,8 +9,15 @@ import os
 from datetime import datetime
 from typing import List, Optional
 
-# Agregar el directorio raíz al path para importar módulos de la app
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Agregar el directorio raíz del proyecto al sys.path
+# Esto permite que el script encuentre los módulos de la aplicación (como 'app.config.database')
+# sin importar desde dónde se ejecute el script.
+# os.path.abspath(__file__) -> ruta absoluta del script actual
+# os.path.dirname(...) -> directorio del script (migrations)
+# os.path.dirname(...) -> directorio padre (raíz del proyecto)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 
 from sqlalchemy.orm import Session
 from app.config.database import SessionLocal
@@ -245,4 +252,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
