@@ -23,10 +23,7 @@ async def get_public_product(
     """
     Get product details for public.
     """
-    print(product_id)
     product = db.query(Product).filter(Product.id == product_id).first()
-    if product:
-        print(product.name)
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     

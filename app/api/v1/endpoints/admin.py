@@ -239,7 +239,14 @@ async def update_product(
         )
     
     # Update only provided fields
-    update_data = product_data.model_dump(exclude_unset=True)
+    try:
+        update_data = product_data.model_dump(exclude_unset=True)
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Error al actualizar el producto"
+        )
     
     # Check slug uniqueness if being updated
     if 'slug' in update_data and update_data['slug']:

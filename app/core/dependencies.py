@@ -29,7 +29,6 @@ async def get_current_user(
         user = db.query(User).filter(User.email == email).first()
         if user is None:
             raise credentials_exception
-            
         return user
     except Exception:
         raise credentials_exception
