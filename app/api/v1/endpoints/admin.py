@@ -652,7 +652,7 @@ async def get_admin_dashboard(
 @router.post("/products/{product_id}/images")
 async def add_product_images(
     product_id: str,
-    images: List[UploadFile] = File(...),
+    images: List[str] = Query(...),
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
