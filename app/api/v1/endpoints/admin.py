@@ -1,9 +1,9 @@
 """
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
-import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
 from app.config.database import get_db
@@ -22,9 +22,10 @@ from app.schemas.product import (
 )
 from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
+from app.services.imges_service import ImageService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
-
+image_service = ImageService()
 # =============================================================================
 # INDEX ADMIN PAGE
 # =============================================================================
@@ -136,7 +137,7 @@ async def get_admin_products(
             **product.__dict__,
             'current_price': product.current_price,
             'discount_percentage': product.discount_percentage,
-            'is_available': product.in_stock and product.stock > 0
+            'is_available': True if product.in_stock and product.stock > 0 else False
         }
         product_responses.append(ProductResponse.model_validate(product_dict))
     
@@ -184,7 +185,7 @@ async def create_product(
         **db_product.__dict__,
         'current_price': db_product.current_price,
         'discount_percentage': db_product.discount_percentage,
-        'is_available': db_product.in_stock and db_product.stock > 0
+        'is_available': db_product.is_available
     }
     
     return ProductResponse.model_validate(product_dict)
@@ -212,7 +213,7 @@ async def get_admin_product(
         **product.__dict__,
         'current_price': product.current_price,
         'discount_percentage': product.discount_percentage,
-        'is_available': product.in_stock and product.stock > 0
+        'is_available': product.is_available
     }
     
     return ProductResponse.model_validate(product_dict)
@@ -263,7 +264,7 @@ async def update_product(
         **product.__dict__,
         'current_price': product.current_price,
         'discount_percentage': product.discount_percentage,
-        'is_available': product.in_stock and product.stock > 0
+        'is_available': product.is_available
     }
     
     return ProductResponse.model_validate(product_dict)
@@ -627,8 +628,7 @@ async def get_admin_dashboard(
     admin_users = db.query(User).filter(User.role.in_(["admin", "super_admin"])).count()
     
     # Usuarios recientes (últimos 7 días)
-    from datetime import datetime, timedelta
-    week_ago = datetime.now(datetime.timezone.utc) - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     recent_users = db.query(User).filter(User.created_at >= week_ago).count()
     
     return {
@@ -645,3 +645,32 @@ async def get_admin_dashboard(
             "permissions": RoleService.get_user_permissions(current_user).permissions
         }
     } 
+    
+# =============================================================================
+# GESTIÓN DE IMÁGENES
+# =============================================================================
+@router.post("/products/{product_id}/images")
+async def add_product_images(
+    product_id: str,
+    images: List[UploadFile] = File(...),
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🖼️ **Agregar imágenes a producto**
+    
+    Agrega imágenes a un producto existente.
+    """
+    return image_service.add_images_to_product(product_id, images)
+
+@router.get("/products/{product_id}/images")
+async def delete_product_images(
+    product_id: str,
+    image_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🖼️ **Obtener imágenes de producto**
+    """
+    return image_service.delete_image_from_product(product_id, image_id)

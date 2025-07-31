@@ -14,6 +14,30 @@ from app.core.dependencies import get_optional_current_user
 
 router = APIRouter(prefix="/public")
 
+@router.get("/products/{product_id}", response_model=ProductResponse)
+async def get_public_product(
+    product_id: str,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get product details for public.
+    """
+    print(product_id)
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product:
+        print(product.name)
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    product_dict = {
+        **product.__dict__,
+        'current_price': product.current_price,
+        'discount_percentage': product.discount_percentage,
+        'is_available': product.is_available
+    }
+    return ProductResponse.model_validate(product_dict)
+
 # =============================================================================
 # CATÁLOGO Y PRODUCTOS - PÚBLICO
 # =============================================================================

@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Foreig
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 class OrderStatus(Enum):
@@ -49,8 +49,8 @@ class Order(Base):
     admin_notes = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(datetime.timezone.utc), onupdate=datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="orders")
@@ -100,7 +100,7 @@ class OrderItem(Base):
     product_image = Column(String, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     
     # Relationships
     order = relationship("Order", back_populates="items")
@@ -134,7 +134,7 @@ class OrderAddress(Base):
     delivery_instructions = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     
     # Relationships
     order = relationship("Order", back_populates="shipping_address")

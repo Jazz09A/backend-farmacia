@@ -40,7 +40,8 @@ class ArrayType(TypeDecorator):
                 try:
                     return json.loads(value)
                 except json.JSONDecodeError:
-                    return []
+                    pass
+
             return value if isinstance(value, list) else []
 
 class Product(Base):
@@ -136,6 +137,12 @@ class Product(Base):
         if self.is_offer and self.original_price and self.original_price > 0:
             return round(((self.original_price - self.price_ves) / self.original_price) * 100, 2)
         return 0
+    
+    @property
+    def is_available(self):
+        """Check if product is available based on stock."""
+        return self.in_stock and self.stock > 0
+
     
     # Add compound indexes for common query patterns
     __table_args__ = (
