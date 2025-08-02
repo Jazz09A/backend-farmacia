@@ -670,14 +670,14 @@ async def add_product_images(
     """
     return image_service.add_images_to_product(product_id, images)
 
-@router.get("/products/{product_id}/images")
+@router.get("/products/{product_id}/images/{image_url}")
 async def delete_product_images(
     product_id: str,
-    image_id: str,
+    image_url: str,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
     🖼️ **Obtener imágenes de producto**
     """
-    return image_service.delete_image_from_product(product_id, image_id)
+    return image_service.delete_image_from_product(product_id, image_url)

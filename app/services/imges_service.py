@@ -40,10 +40,10 @@ class ImageService:
     # =============================================================================
     # DELETE IMAGE FROM PRODUCT
     # =============================================================================
-    async def delete_image_from_product(self, product_id: str, image_id: str):
+    async def delete_image_from_product(self, product_id: str, image_url: str):
         product = self.get_product_by_id(product_id)
         
-        product.images.remove(image_id)
+        product.images.remove(image_url)
         self.db.commit()
         return product
     

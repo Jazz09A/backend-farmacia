@@ -10,8 +10,9 @@ from app.models.user import User
 from app.models.cart import CartItem
 from app.models.order import Order
 from app.schemas.user import UserResponse, UserUpdate
-# from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
+from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
 # from app.schemas.order import OrderResponse, OrderCreate
+from app.services.cart_service import CartService
 
 router = APIRouter(prefix="/user", tags=["User Protected"])
 
@@ -110,7 +111,7 @@ async def delete_user_account(
 # CARRITO DE COMPRAS
 # =============================================================================
 
-@router.get("/cart")
+@router.get("/cart", response_model=CartResponse, summary="Get user's shopping cart")
 async def get_user_cart(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -118,130 +119,87 @@ async def get_user_cart(
     """
     🛒 **Mi carrito**
     
-    Obtiene el carrito de compras del usuario actual.
+    Obtiene el carrito de compras del usuario actual con todos los detalles y totales.
     """
-    cart_items = db.query(CartItem).filter(CartItem.user_id == current_user.id).all()
-    
-    total = sum(item.quantity * item.product.price for item in cart_items if item.product)
-    
-    return {
-        "items": [
-            {
-                "id": item.id,
-                "product_id": item.product_id,
-                "product_name": item.product.name if item.product else "Producto no encontrado",
-                "quantity": item.quantity,
-                "price": item.product.price if item.product else 0,
-                "subtotal": item.quantity * (item.product.price if item.product else 0)
-            } for item in cart_items
-        ],
-        "total": total,
-        "item_count": len(cart_items)
-    }
+    cart_service = CartService(db)
+    return cart_service.get_user_cart(current_user.id)
 
-@router.post("/cart/add")
+@router.post("/cart/add", summary="Add item to cart", response_model=CartResponse)
 async def add_to_cart(
-    product_id: str,
-    quantity: int = 1,
+    item: CartItemCreate,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> CartResponse:
     """
-    ➕ **Agregar al carrito**
-    
-    Agrega un producto al carrito del usuario.
+    Adds a product to the user's shopping cart. If the item already exists,
+    the quantity is updated. Otherwise, a new item is created.
     """
-    # Verificar si el item ya existe en el carrito
-    existing_item = db.query(CartItem).filter(
-        CartItem.user_id == current_user.id,
-        CartItem.product_id == product_id
-    ).first()
+    cart_service = CartService(db)
+    cart_service.add_item(
+        user_id=current_user.id,
+        product_id=item.product_id,
+        quantity=item.quantity,
+        selected_presentation=item.selected_presentation
+    )
     
-    if existing_item:
-        # Actualizar cantidad
-        existing_item.quantity += quantity
-    else:
-        # Crear nuevo item
-        new_item = CartItem(
-            user_id=current_user.id,
-            product_id=product_id,
-            quantity=quantity
-        )
-        db.add(new_item)
-    
-    db.commit()
-    
-    return {"message": "Producto agregado al carrito"}
+    updated_cart = cart_service.get_user_cart(current_user.id)
+    if not updated_cart:
+        raise HTTPException(status_code=404, detail="Cart not found after update.")
+        
+    return updated_cart
 
-@router.put("/cart/item/{item_id}")
+@router.put("/cart/item/{item_id}", summary="Update cart item quantity", response_model=CartResponse)
 async def update_cart_item(
     item_id: str,
-    quantity: int,
+    item_update: CartItemUpdate,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> CartResponse:
     """
-    ✏️ **Actualizar item del carrito**
-    
-    Actualiza la cantidad de un item en el carrito.
+    Updates the quantity of a specific item in the user's cart.
     """
-    cart_item = db.query(CartItem).filter(
-        CartItem.id == item_id,
-        CartItem.user_id == current_user.id
-    ).first()
+    cart_service = CartService(db)
+    cart_service.update_item_quantity(
+        user_id=current_user.id,
+        item_id=item_id,
+        new_quantity=item_update.quantity
+    )
     
-    if not cart_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item no encontrado en el carrito"
-        )
-    
-    cart_item.quantity = quantity
-    db.commit()
-    
-    return {"message": "Item actualizado"}
+    updated_cart = cart_service.get_user_cart(current_user.id)
+    if not updated_cart:
+        raise HTTPException(status_code=404, detail="Cart not found after update.")
+        
+    return updated_cart
 
-@router.delete("/cart/item/{item_id}")
+@router.delete("/cart/item/{item_id}", summary="Remove item from cart", response_model=CartResponse)
 async def remove_from_cart(
     item_id: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> CartResponse:
     """
-    ❌ **Eliminar del carrito**
-    
-    Elimina un item específico del carrito.
+    Removes a specific item from the user's shopping cart.
     """
-    cart_item = db.query(CartItem).filter(
-        CartItem.id == item_id,
-        CartItem.user_id == current_user.id
-    ).first()
+    cart_service = CartService(db)
+    cart_service.remove_item(user_id=current_user.id, item_id=item_id)
     
-    if not cart_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item no encontrado en el carrito"
-        )
-    
-    db.delete(cart_item)
-    db.commit()
-    
-    return {"message": "Item eliminado del carrito"}
+    updated_cart = cart_service.get_user_cart(current_user.id)
+    return updated_cart
 
-@router.delete("/cart/clear")
+@router.delete("/cart/clear", summary="Clear entire cart", response_model=CartResponse)
 async def clear_cart(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> CartResponse:
     """
-    🧹 **Limpiar carrito**
-    
-    Elimina todos los items del carrito.
+    Removes all items from the user's shopping cart.
     """
-    db.query(CartItem).filter(CartItem.user_id == current_user.id).delete()
-    db.commit()
+    cart_service = CartService(db)
+    cart_service.clear_cart(user_id=current_user.id)
     
-    return {"message": "Carrito limpiado"}
+    cleared_cart = cart_service.get_user_cart(current_user.id)
+    # After clearing, the cart should be empty.
+    return cleared_cart
 
 # =============================================================================
 # ÓRDENES Y COMPRAS
@@ -269,7 +227,7 @@ async def create_order(
         )
     
     # Calcular total
-    total = sum(item.quantity * (item.product.price if item.product else 0) for item in cart_items)
+    total = sum(item.quantity * (item.product.price_ves if item.product else 0) for item in cart_items)
     
     # Crear orden
     import uuid
@@ -406,7 +364,7 @@ async def calculate_checkout(
             detail="No hay items en el carrito"
         )
     
-    subtotal = sum(item.quantity * (item.product.price if item.product else 0) for item in cart_items)
+    subtotal = sum(item.quantity * (item.product.price_ves if item.product else 0) for item in cart_items)
     
     # Calcular envío basado en zona
     shipping_rates = {
@@ -449,7 +407,7 @@ async def process_checkout(
         )
     
     # Calcular totales
-    subtotal = sum(item.quantity * (item.product.price if item.product else 0) for item in cart_items)
+    subtotal = sum(item.quantity * (item.product.price_ves if item.product else 0) for item in cart_items)
     shipping_rates = {"caracas": 5.00, "miranda": 7.50, "vargas": 10.00, "nacional": 15.00}
     shipping_cost = shipping_rates.get(shipping_zone, 15.00)
     total = subtotal + shipping_cost
@@ -478,4 +436,4 @@ async def process_checkout(
         "payment_method": payment_method,
         "status": "confirmed",
         "total": total
-    } 
+    }

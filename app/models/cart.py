@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 class CartItem(Base):
     __tablename__ = "cart_items"
@@ -19,8 +19,8 @@ class CartItem(Base):
     selected_presentation = Column(String, nullable=True)  # If product has multiple presentations
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="cart_items")
