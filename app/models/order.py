@@ -37,6 +37,7 @@ class Order(Base):
     payment_status = Column(String, default='pending')
     # Payment status: pending, processing, completed, failed, refunded
     payment_reference = Column(String, nullable=True)
+    payment_capture_url = Column(String, nullable=True)  # URL to the payment receipt image/capture
     payment_details = Column(Text, nullable=True)  # JSON string with additional payment info
     
     # Shipping information

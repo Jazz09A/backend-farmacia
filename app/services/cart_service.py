@@ -108,7 +108,7 @@ class CartService:
             total_ves += subtotal_ves
             total_ref += subtotal_ref
             
-            product_summary = ProductSummary.from_orm(product)
+            product_summary = ProductSummary.model_validate(product)
             
             response_items.append(CartItemResponse(
                 id=item.id,
