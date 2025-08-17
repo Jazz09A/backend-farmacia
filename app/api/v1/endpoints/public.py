@@ -259,21 +259,6 @@ async def search_public_products(
 # INFORMACIÓN GENERAL - PÚBLICO
 # =============================================================================
 
-@router.get("/shipping-zones")
-async def get_shipping_zones():
-    """
-    🚚 **Zonas de envío disponibles**
-    
-    Obtiene las zonas de envío configuradas en el sistema.
-    """
-    # Datos estáticos por ahora, puedes mover esto a base de datos
-    zones = [
-        {"id": "caracas", "name": "Caracas", "price": 5.00, "delivery_days": "1-2"},
-        {"id": "miranda", "name": "Miranda", "price": 7.50, "delivery_days": "2-3"},
-        {"id": "vargas", "name": "Vargas", "price": 10.00, "delivery_days": "3-4"},
-        {"id": "nacional", "name": "Nacional", "price": 15.00, "delivery_days": "5-7"}
-    ]
-    return {"shipping_zones": zones}
 
 @router.get("/payment-methods")
 async def get_payment_methods():

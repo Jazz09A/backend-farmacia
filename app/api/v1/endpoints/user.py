@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
+from app.models.address import Address
 from app.schemas.user import UserResponse, UserUpdate
+from app.schemas.address import AddressResponse, AddressCreate, AddressUpdate
 from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
 from app.schemas.order import OrderResponse, OrderCreate, OrderSummary
 from app.services.cart_service import CartService
@@ -146,3 +148,101 @@ async def get_order_detail(
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return order
+
+# =============================================================================
+# DIRECCIONES DE ENVÍO
+# =============================================================================
+
+@router.post("/addresses", response_model=AddressResponse, status_code=status.HTTP_201_CREATED)
+def create_address(
+    address_data: AddressCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    **Crear nueva dirección**: Añade una nueva dirección de envío para el usuario.
+    """
+    if address_data.is_default:
+        # Si esta se marca como predeterminada, quitar la marca de las otras
+        db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+    
+    new_address = Address(**address_data.dict(), user_id=current_user.id)
+    db.add(new_address)
+    db.commit()
+    db.refresh(new_address)
+    return new_address
+
+@router.get("/addresses", response_model=List[AddressResponse])
+def get_addresses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    **Mis direcciones**: Obtiene todas las direcciones de envío del usuario.
+    """
+    return db.query(Address).filter(Address.user_id == current_user.id).all()
+
+@router.put("/addresses/{address_id}", response_model=AddressResponse)
+def update_address(
+    address_id: str,
+    address_data: AddressUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    **Actualizar dirección**: Modifica una dirección de envío existente.
+    """
+    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    if not address:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+
+    if address_data.is_default:
+        # Si esta se marca como predeterminada, quitar la marca de las otras
+        db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+
+    update_data = address_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(address, key, value)
+    
+    db.commit()
+    db.refresh(address)
+    return address
+
+@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_address(
+    address_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    **Eliminar dirección**: Elimina una dirección de envío.
+    """
+    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    if not address:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+    
+    db.delete(address)
+    db.commit()
+    return
+
+@router.post("/addresses/{address_id}/set-default", response_model=AddressResponse)
+def set_default_address(
+    address_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    **Marcar como predeterminada**: Establece una dirección como la de envío por defecto.
+    """
+    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    if not address:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+
+    # Quitar la marca de predeterminada de cualquier otra dirección
+    db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+    
+    # Marcar la nueva como predeterminada
+    address.is_default = True
+    db.commit()
+    db.refresh(address)
+    return address

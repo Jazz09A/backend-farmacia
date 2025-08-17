@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping
 
 api_router = APIRouter()
 
@@ -64,4 +64,10 @@ api_router.include_router(
     brands.router,
     prefix="/brands",
     tags=["🏷️ Marcas"],
+)
+
+# Zonas de Envío
+api_router.include_router(
+    shipping.router,
+    tags=["🚚 Zonas de Envío"],
 ) 

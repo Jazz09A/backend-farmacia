@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from app.models.cart import CartItem
 from app.models.order import Order, OrderItem, OrderAddress
 from app.models.address import Address
+from app.models.shipping import ShippingZone
 from app.schemas.order import OrderCreate, OrderResponse
 from app.services.cart_service import CartService
 
@@ -18,17 +19,21 @@ class OrderService:
         Creates a new order from the user's current cart.
         This process is a single transaction: if any part fails, all changes are rolled back.
         """
+        print(f"🔍 Creating order from cart for user: {user_id}")
+        print(f"🔍 Shipping zone ID: {order_data.shipping_address_id}")
         # 1. Retrieve all items from the user's cart
         cart_items = self.db.query(CartItem).filter(CartItem.user_id == user_id).all()
         if not cart_items:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Your cart is empty.")
 
-        # 2. Get the chosen shipping address
+        # 2. Get the chosen shipping address from the user's address book
         shipping_address = self.db.query(Address).filter(
             Address.id == order_data.shipping_address_id,
+            Address.user_id == user_id
         ).first()
         if not shipping_address:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipping address not found.")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipping address not found for this user.")
+
 
         # Transaction starts here
         try:
@@ -67,9 +72,11 @@ class OrderService:
                 if product.stock == 0:
                     product.in_stock = False
 
-            # 5. Define shipping, taxes, and total
-            # (This is a simplified calculation. You can implement more complex logic here)
-            shipping_cost = 5.0  # Example fixed shipping cost
+            # 5. Define shipping, taxes, and total based on the address's city
+            shipping_zone_id = shipping_address.city.lower().replace(" ", "-")
+            shipping_zone = self.db.query(ShippingZone).filter(ShippingZone.id == shipping_zone_id).first()
+            
+            shipping_cost = shipping_zone.price if shipping_zone else 0.0 # Default to 0 if no zone found
             taxes = subtotal * 0.16  # Example 16% VAT
             total = subtotal + shipping_cost + taxes
 
@@ -111,6 +118,11 @@ class OrderService:
             # 9. Add to session and commit
             self.db.add(new_order)
             self.db.commit()
+
+            # 10. Clear the user's cart
+            cart_service = CartService(self.db)
+            cart_service.clear_cart(user_id)
+
             self.db.refresh(new_order)
             
             return new_order
