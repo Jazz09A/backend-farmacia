@@ -17,43 +17,35 @@ from app.services.auth_service import AuthService
 from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
 
-router = APIRouter()
+router = APIRouter( tags=["Authentication"])
 
-@router.post("/register/juridico", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_juridico_user(
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
+    try:
+        new_user = await AuthService(db).register_user(user_data)
+        return new_user
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.get("/verify-email/{token}", response_model=AuthResponse)
+async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
     """
-    Registrar un nuevo usuario jurídico (empresa/farmacia).
-    
-    - **email**: Email de la empresa (debe ser único)
-    - **company_name**: Nombre de la empresa
-    - **rif**: RIF de la empresa
-    - **registro_mercantil**: Número de registro mercantil
-    - **representante_legal_cedula**: Cédula del representante legal
-    - **representante_legal_nombre**: Nombre del representante legal
-    - **referencia_comercial_proveedor**: Referencia comercial
-    - **referencia_bancaria**: Referencia bancaria
-    - **direccion_establecimiento**: Dirección del establecimiento
-    - **password**: Contraseña (mínimo 8 caracteres)
-    - **phone**: Teléfono principal
-    - **preferred_currency**: Moneda preferida (VES o USD)
-    - Y campos opcionales adicionales...
+    **Verificar correo electrónico**: Confirma la dirección de correo del usuario a través de un token.
     """
     try:
-        print("📥 Received user data:", user_data)
-        result = await AuthService.register_juridico_user(db, user_data)
-        print("✅ Registration successful for:", user_data.email)
-        return result
-    except Exception as e:
-        print("❌ Registration failed:", str(e))
-        print("❌ Exception type:", type(e).__name__)
-        import traceback
-        print("❌ Full traceback:")
-        traceback.print_exc()
-        raise HTTPException(status_code=400, detail=str(e))
+        success = await AuthService(db).verify_email(token)
+        if success:
+            return AuthResponse(message="Email verified successfully. You can now log in.")
+    except HTTPException as e:
+        raise e
     
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token.")
+
 
 @router.post("/login", response_model=Token)
 async def login(

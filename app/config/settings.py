@@ -26,11 +26,13 @@ class Settings(BaseSettings):
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:3001"]
     
-    # Email
+    # Email Settings
     SMTP_HOST: Optional[str] = "smtp.gmail.com"
     SMTP_PORT: Optional[int] = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USER: Optional[str] = "your-email@example.com"
+    SMTP_PASSWORD: Optional[str] = "your-email-password"
+    SMTP_FROM: Optional[str] = "noreply@farmaplus.com"
+    SMTP_FROM_NAME: Optional[str] = "Grupo Drozainka"
     
     # Currency API
     CURRENCY_API_KEY: Optional[str] = None

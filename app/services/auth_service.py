@@ -22,8 +22,12 @@ from app.core.exceptions import (
 )
 from app.schemas.role import UserRole
 from app.config.settings import settings
+from app.services.email_service import email_service # Import the service instance
 
 class AuthService:
+    def __init__(self, db: Session):
+        self.db = db
+
     @staticmethod
     def _convert_user_to_response_dict(db_user: User) -> dict:
         """Convert User model to dict compatible with UserResponse schema."""
@@ -62,101 +66,47 @@ class AuthService:
             'last_login': db_user.last_login
         }
 
-    @staticmethod
-    async def register_juridico_user(db: Session, user_data: RegisterRequest) -> UserResponse:
-        """Register a new juridico user."""
+    async def register_user(self, user_data: RegisterRequest) -> UserResponse:
+        """Register a new user and send a verification email."""
         try:
-            print("🔍 AuthService: Starting registration for", user_data.email)
-            # Check if user already exists
-            print("🔍 AuthService: Checking for existing user...")
-            existing_user = db.query(User).filter(User.email == user_data.email).first()
+            existing_user = self.db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
-                print("❌ AuthService: User already exists")
                 raise UserAlreadyExistsException("El email ya está registrado")
             
-            # Create new juridico user
-            print("🔍 AuthService: Hashing password...")
             hashed_password = get_password_hash(user_data.password)
-            
-            # Convert string dates to date objects
-            def parse_date(date_str):
-                if date_str:
-                    try:
-                        from datetime import datetime
-                        return datetime.strptime(date_str, '%Y-%m-%d').date()
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Warning: Invalid date format: {date_str}")
-                        return None
-                return None
-            
-            print("🔍 AuthService: Parsing dates...")
-            dueno_cumpleanos_date = parse_date(user_data.dueno_cumpleanos)
-            encargado_compra_cumpleanos_date = parse_date(user_data.encargado_compra_cumpleanos)
-            encargado_cobranza_cumpleanos_date = parse_date(user_data.encargado_cobranza_cumpleanos)
-            
-            print("🔍 AuthService: Creating user object...")
+            verification_token = generate_verification_token()
+
             db_user = User(
-                email=user_data.email,
-                company_name=user_data.company_name,
-                rif=user_data.rif,
-                registro_mercantil=user_data.registro_mercantil,
-                representante_legal_cedula=user_data.representante_legal_cedula,
-                representante_legal_nombre=user_data.representante_legal_nombre,
-                representantes_adicionales=user_data.representantes_adicionales,
-                referencia_comercial_proveedor=user_data.referencia_comercial_proveedor,
-                referencia_bancaria=user_data.referencia_bancaria,
-                dueno_telefono=user_data.dueno_telefono,
-                dueno_email=user_data.dueno_email,
-                dueno_cumpleanos=dueno_cumpleanos_date,
-                encargado_compra_telefono=user_data.encargado_compra_telefono,
-                encargado_compra_email=user_data.encargado_compra_email,
-                encargado_compra_cumpleanos=encargado_compra_cumpleanos_date,
-                encargado_cobranza_telefono=user_data.encargado_cobranza_telefono,
-                encargado_cobranza_email=user_data.encargado_cobranza_email,
-                encargado_cobranza_cumpleanos=encargado_cobranza_cumpleanos_date,
-                redes_sociales=user_data.redes_sociales,
-                pagina_web=user_data.pagina_web,
-                codigo_sicm=user_data.codigo_sicm,
-                fotos_establecimiento=user_data.fotos_establecimiento,
-                direccion_establecimiento=user_data.direccion_establecimiento,
+                **user_data.model_dump(exclude={'password'}),
                 hashed_password=hashed_password,
-                user_type="juridico",
-                phone=user_data.phone,
-                preferred_currency=user_data.preferred_currency,
-                role=UserRole.USER,
-                verification_token=generate_verification_token(),
-                is_verified=False
+                verification_token=verification_token,
+                is_verified=False,
+                role=UserRole.USER
             )
             
-            print("🔍 AuthService: Saving user to database...")
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
-            print("✅ AuthService: User saved successfully with ID:", db_user.id)
+            self.db.add(db_user)
+            self.db.commit()
             
-            # Create user preferences
-            print("🔍 AuthService: Creating user preferences...")
-            user_preferences = UserPreferences(
-                user_id=db_user.id,
-                preferred_currency=user_data.preferred_currency
+            # Send verification email
+            verification_link = f"http://localhost:8000/api/v1/auth/verify-email/{verification_token}" # Adjust the base URL as needed
+            await email_service.send_email(
+                to_email=db_user.email,
+                subject="Verifica tu cuenta en Grupo Drozainka",
+                template_name="verify_email.html",
+                context={
+                    "verification_link": verification_link,
+                    "year": datetime.now().year
+                }
             )
-            db.add(user_preferences)
-            db.commit()
-            print("✅ AuthService: User preferences saved successfully")
-            
-            # TODO: Send verification email
-            # await EmailService.send_verification_email(db_user.email, db_user.verification_token)
-            
-            print("🔍 AuthService: Converting user to response format...")
+
+            self.db.refresh(db_user)
             user_dict = AuthService._convert_user_to_response_dict(db_user)
-            
-            print("✅ AuthService: Registration completed successfully!")
             return UserResponse.model_validate(user_dict)
             
         except IntegrityError:
-            db.rollback()
+            self.db.rollback()
             raise UserAlreadyExistsException("Error al crear el usuario")
-    
+
     @staticmethod
     async def authenticate_user(db: Session, login_data: LoginRequest) -> Token:
         """Authenticate user and return tokens."""
@@ -168,6 +118,8 @@ class AuthService:
         if not user.is_active:
             raise InvalidCredentialsException("Cuenta desactivada")
         
+        
+        # TODO: Verify email if not verified
         # Update last login
         user.last_login = datetime.now(timezone.utc)
         db.commit()
