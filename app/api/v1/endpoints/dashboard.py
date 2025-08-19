@@ -90,3 +90,7 @@ def get_all_orders_endpoint(
         orders_with_user.append(OrderDashboardResponse(**order_data))
     
     return orders_with_user
+
+@router.get("/customers")
+def get_all_customers():
+    ...

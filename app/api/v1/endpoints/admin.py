@@ -20,6 +20,10 @@ from app.schemas.dashboard import DashboardData, DashboardStats, OrderStatusSumm
 from app.schemas.product import (
     ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
 )
+from app.schemas.user import (
+    CustomerDetailedStats, CustomerStats, ProductPurchaseStats,
+    OrderStatusDistribution, MonthlyPurchaseStats, UserResponse
+)
 from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
 from app.services.imges_service import ImageService
@@ -588,6 +592,227 @@ async def delete_user(
     return {"message": f"Usuario {email} ha sido eliminado permanentemente"}
 
 # =============================================================================
+# ESTADÍSTICAS DETALLADAS DE CLIENTES
+# =============================================================================
+
+@router.get("/customers/{customer_id}/stats", response_model=CustomerDetailedStats)
+async def get_customer_statistics(
+    customer_id: str,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 **Obtener estadísticas detalladas de un cliente**
+    
+    Obtiene información completa y estadísticas de compra de un cliente específico.
+    Incluye:
+    - Información general del cliente
+    - Estadísticas de compras
+    - Productos más comprados
+    - Distribución de estados de pedidos
+    - Tendencias mensuales
+    - Categorías favoritas
+    """
+    # Verificar que el cliente existe
+    customer = db.query(User).filter(User.id == customer_id).first()
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado"
+        )
+    
+    # Obtener todas las órdenes del cliente
+    from app.models.order import OrderItem
+    orders = db.query(Order).filter(Order.user_id == customer_id).all()
+    
+    if not orders:
+        # Si no hay órdenes, devolver estadísticas vacías
+        return CustomerDetailedStats(
+            user_info=UserResponse.model_validate(customer),
+            general_stats=CustomerStats(
+                total_orders=0,
+                total_spent=0.0,
+                average_order_value=0.0,
+                first_order_date=None,
+                last_order_date=None,
+                days_as_customer=0,
+                order_frequency_days=None,
+                preferred_payment_method=None,
+                most_used_shipping_zone=None
+            ),
+            top_purchased_products=[],
+            order_status_distribution=[],
+            monthly_stats=[],
+            favorite_categories=[],
+            purchase_trends={}
+        )
+    
+    # Calcular estadísticas generales
+    total_orders = len(orders)
+    total_spent = sum(order.total for order in orders)
+    average_order_value = total_spent / total_orders if total_orders > 0 else 0
+    
+    # Fechas de primera y última compra
+    sorted_orders = sorted(orders, key=lambda x: x.created_at)
+    first_order_date = sorted_orders[0].created_at
+    last_order_date = sorted_orders[-1].created_at
+    
+    # Días como cliente
+    # Usar datetime.utcnow() para mantener consistencia con los timestamps de la DB
+    days_as_customer = (datetime.utcnow() - customer.created_at).days
+    
+    # Frecuencia de pedidos (promedio de días entre pedidos)
+    order_frequency_days = None
+    if total_orders > 1:
+        days_between_orders = (last_order_date - first_order_date).days
+        order_frequency_days = days_between_orders / (total_orders - 1) if total_orders > 1 else None
+    
+    # Método de pago preferido
+    payment_methods = {}
+    for order in orders:
+        payment_methods[order.payment_method] = payment_methods.get(order.payment_method, 0) + 1
+    preferred_payment_method = max(payment_methods, key=payment_methods.get) if payment_methods else None
+    
+    # Zona de envío más usada (si tienes shipping_zone en las órdenes)
+    # Por ahora lo dejamos como None
+    most_used_shipping_zone = None
+    
+    general_stats = CustomerStats(
+        total_orders=total_orders,
+        total_spent=total_spent,
+        average_order_value=average_order_value,
+        first_order_date=first_order_date,
+        last_order_date=last_order_date,
+        days_as_customer=days_as_customer,
+        order_frequency_days=order_frequency_days,
+        preferred_payment_method=preferred_payment_method,
+        most_used_shipping_zone=most_used_shipping_zone
+    )
+    
+    # Productos más comprados
+    product_stats = {}
+    for order in orders:
+        for item in order.items:
+            product_id = item.product_id
+            if product_id not in product_stats:
+                product_stats[product_id] = {
+                    'product_id': product_id,
+                    'product_name': item.product_name,
+                    'product_brand': item.product_brand,
+                    'total_quantity': 0,
+                    'times_purchased': 0,
+                    'total_spent': 0,
+                    'last_purchase_date': None,
+                    'purchase_dates': []
+                }
+            
+            product_stats[product_id]['total_quantity'] += item.quantity
+            product_stats[product_id]['times_purchased'] += 1
+            product_stats[product_id]['total_spent'] += item.total_price
+            product_stats[product_id]['purchase_dates'].append(order.created_at)
+    
+    # Calcular estadísticas de productos
+    top_purchased_products = []
+    for product_id, stats in product_stats.items():
+        stats['last_purchase_date'] = max(stats['purchase_dates'])
+        stats['average_quantity_per_order'] = stats['total_quantity'] / stats['times_purchased']
+        
+        top_purchased_products.append(ProductPurchaseStats(
+            product_id=stats['product_id'],
+            product_name=stats['product_name'],
+            product_brand=stats['product_brand'],
+            total_quantity=stats['total_quantity'],
+            times_purchased=stats['times_purchased'],
+            total_spent=stats['total_spent'],
+            last_purchase_date=stats['last_purchase_date'],
+            average_quantity_per_order=stats['average_quantity_per_order']
+        ))
+    
+    # Ordenar por cantidad total comprada
+    top_purchased_products.sort(key=lambda x: x.total_quantity, reverse=True)
+    top_purchased_products = top_purchased_products[:10]  # Top 10 productos
+    
+    # Distribución de estados de pedidos
+    status_distribution = {}
+    for order in orders:
+        status_distribution[order.status] = status_distribution.get(order.status, 0) + 1
+    
+    order_status_distribution = []
+    for status, count in status_distribution.items():
+        percentage = (count / total_orders) * 100 if total_orders > 0 else 0
+        order_status_distribution.append(OrderStatusDistribution(
+            status=status,
+            count=count,
+            percentage=percentage
+        ))
+    
+    # Estadísticas mensuales
+    monthly_stats_dict = {}
+    for order in orders:
+        month_key = order.created_at.strftime('%Y-%m')
+        
+        if month_key not in monthly_stats_dict:
+            monthly_stats_dict[month_key] = {
+                'month': month_key,
+                'order_count': 0,
+                'total_spent': 0,
+                'total_items': 0
+            }
+        
+        monthly_stats_dict[month_key]['order_count'] += 1
+        monthly_stats_dict[month_key]['total_spent'] += order.total
+        monthly_stats_dict[month_key]['total_items'] += sum(item.quantity for item in order.items)
+    
+    monthly_stats = [
+        MonthlyPurchaseStats(**stats) 
+        for stats in sorted(monthly_stats_dict.values(), key=lambda x: x['month'], reverse=True)
+    ][:12]  # Últimos 12 meses
+    
+    # Categorías favoritas (basado en productos comprados)
+    from app.models.product import Product
+    category_stats = {}
+    for product_id, stats in product_stats.items():
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if product and product.category:
+            if product.category not in category_stats:
+                category_stats[product.category] = {
+                    'category': product.category,
+                    'total_items': 0,
+                    'total_spent': 0,
+                    'product_count': 0
+                }
+            
+            category_stats[product.category]['total_items'] += stats['total_quantity']
+            category_stats[product.category]['total_spent'] += stats['total_spent']
+            category_stats[product.category]['product_count'] += 1
+    
+    favorite_categories = sorted(
+        category_stats.values(), 
+        key=lambda x: x['total_spent'], 
+        reverse=True
+    )[:5]  # Top 5 categorías
+    
+    # Tendencias de compra
+    purchase_trends = {
+        'most_active_month': max(monthly_stats_dict.keys(), key=lambda k: monthly_stats_dict[k]['order_count']) if monthly_stats_dict else None,
+        'average_monthly_orders': sum(m['order_count'] for m in monthly_stats_dict.values()) / len(monthly_stats_dict) if monthly_stats_dict else 0,
+        'average_monthly_spend': sum(m['total_spent'] for m in monthly_stats_dict.values()) / len(monthly_stats_dict) if monthly_stats_dict else 0,
+        'is_recurring_customer': total_orders > 3,
+        'customer_type': 'Frecuente' if total_orders > 10 else 'Regular' if total_orders > 3 else 'Ocasional'
+    }
+    
+    # Construir respuesta
+    return CustomerDetailedStats(
+        user_info=UserResponse.model_validate(customer),
+        general_stats=general_stats,
+        top_purchased_products=top_purchased_products,
+        order_status_distribution=order_status_distribution,
+        monthly_stats=monthly_stats,
+        favorite_categories=favorite_categories,
+        purchase_trends=purchase_trends
+    )
+
+# =============================================================================
 # ESTADÍSTICAS Y REPORTES
 # =============================================================================
 
@@ -635,7 +860,7 @@ async def get_admin_dashboard(
     admin_users = db.query(User).filter(User.role.in_(["admin", "super_admin"])).count()
     
     # Usuarios recientes (últimos 7 días)
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    week_ago = datetime.utcnow() - timedelta(days=7)
     recent_users = db.query(User).filter(User.created_at >= week_ago).count()
     
     return {

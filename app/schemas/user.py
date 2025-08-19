@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, field_validator, Field
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 from datetime import datetime, date
 
 from app.schemas.order import OrderResponse
@@ -38,15 +38,15 @@ class UserJuridicoBase(UserCommonBase):
     # Contactos especializados
     dueno_telefono: Optional[str] = Field(None, description="Teléfono del dueño")
     dueno_email: Optional[str] = Field(None, description="Email del dueño")
-    dueno_cumpleanos: Optional[str] = Field(None, description="Fecha de cumpleaños del dueño")
+    dueno_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del dueño")
     
     encargado_compra_telefono: Optional[str] = Field(None, description="Teléfono del encargado de compras")
     encargado_compra_email: Optional[str] = Field(None, description="Email del encargado de compras")
-    encargado_compra_cumpleanos: Optional[str] = Field(None, description="Fecha de cumpleaños del encargado de compras")
+    encargado_compra_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del encargado de compras")
     
     encargado_cobranza_telefono: Optional[str] = Field(None, description="Teléfono del encargado de cobranzas")
     encargado_cobranza_email: Optional[str] = Field(None, description="Email del encargado de cobranzas")
-    encargado_cobranza_cumpleanos: Optional[str] = Field(None, description="Fecha de cumpleaños del encargado de cobranzas")
+    encargado_cobranza_cumpleanos: Optional[date] = Field(None, description="Fecha de cumpleaños del encargado de cobranzas")
     
     # Información adicional
     redes_sociales: Optional[str] = Field(None, description="Enlaces a redes sociales")
@@ -67,13 +67,13 @@ class UserUpdate(BaseModel):
     referencia_bancaria: Optional[str] = None
     dueno_telefono: Optional[str] = None
     dueno_email: Optional[EmailStr] = None
-    dueno_cumpleanos: Optional[str] = None
+    dueno_cumpleanos: Optional[date] = None
     encargado_compra_telefono: Optional[str] = None
     encargado_compra_email: Optional[EmailStr] = None
-    encargado_compra_cumpleanos: Optional[str] = None
+    encargado_compra_cumpleanos: Optional[date] = None
     encargado_cobranza_telefono: Optional[str] = None
     encargado_cobranza_email: Optional[EmailStr] = None
-    encargado_cobranza_cumpleanos: Optional[str] = None
+    encargado_cobranza_cumpleanos: Optional[date] = None
     redes_sociales: Optional[str] = None
     pagina_web: Optional[str] = None
     codigo_sicm: Optional[str] = None
@@ -115,15 +115,15 @@ class UserResponse(BaseModel):
     
     dueno_telefono: Optional[str] = None
     dueno_email: Optional[str] = None
-    dueno_cumpleanos: Optional[str] = None
+    dueno_cumpleanos: Optional[date] = None
     
     encargado_compra_telefono: Optional[str] = None
     encargado_compra_email: Optional[str] = None
-    encargado_compra_cumpleanos: Optional[str] = None
+    encargado_compra_cumpleanos: Optional[date] = None
     
     encargado_cobranza_telefono: Optional[str] = None
     encargado_cobranza_email: Optional[str] = None
-    encargado_cobranza_cumpleanos: Optional[str] = None
+    encargado_cobranza_cumpleanos: Optional[date] = None
     
     redes_sociales: Optional[str] = None
     pagina_web: Optional[str] = None
@@ -191,3 +191,56 @@ class UserDashboard(UserResponse):
 # Alias para compatibilidad hacia atrás
 UserResponse = UserResponse
 UserUpdate = UserUpdate 
+
+# =============================================================================
+# ESQUEMAS PARA ESTADÍSTICAS DE CLIENTES
+# =============================================================================
+
+class ProductPurchaseStats(BaseModel):
+    """Estadísticas de compra de un producto específico"""
+    product_id: str
+    product_name: str
+    product_brand: str
+    total_quantity: int
+    times_purchased: int
+    total_spent: float
+    last_purchase_date: Optional[datetime] = None
+    average_quantity_per_order: float
+
+class CustomerStats(BaseModel):
+    """Estadísticas generales del cliente"""
+    total_orders: int
+    total_spent: float
+    average_order_value: float
+    first_order_date: Optional[datetime] = None
+    last_order_date: Optional[datetime] = None
+    days_as_customer: int
+    order_frequency_days: Optional[float] = None  # Promedio de días entre pedidos
+    preferred_payment_method: Optional[str] = None
+    most_used_shipping_zone: Optional[str] = None
+
+class OrderStatusDistribution(BaseModel):
+    """Distribución de estados de pedidos"""
+    status: str
+    count: int
+    percentage: float
+
+class MonthlyPurchaseStats(BaseModel):
+    """Estadísticas de compras mensuales"""
+    month: str  # YYYY-MM
+    order_count: int
+    total_spent: float
+    total_items: int
+
+class CustomerDetailedStats(BaseModel):
+    """Respuesta completa con estadísticas detalladas del cliente"""
+    user_info: UserResponse
+    general_stats: CustomerStats
+    top_purchased_products: List[ProductPurchaseStats]
+    order_status_distribution: List[OrderStatusDistribution]
+    monthly_stats: List[MonthlyPurchaseStats]
+    favorite_categories: List[Dict[str, Any]]
+    purchase_trends: Dict[str, Any]
+    
+    class Config:
+        from_attributes = True
