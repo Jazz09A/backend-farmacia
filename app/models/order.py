@@ -6,10 +6,12 @@ from datetime import datetime, timezone
 from enum import Enum
 
 class OrderStatus(Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    SHIPPED = "shipped"
-    DELIVERED = "delivered"
+    PENDING = "Recibido"
+    CONFIRMED = "Confirmado"
+    PROCESSING = "Preparando"
+    SHIPPED = "Enviado"
+    DELIVERED = "Entregado"
+    CANCELLED = "Cancelado"
 
 class Order(Base):
     __tablename__ = "orders"
@@ -22,7 +24,7 @@ class Order(Base):
     
     # Order information
     order_number = Column(String, unique=True, nullable=False, index=True)
-    status = Column(String, nullable=False, default='received', index=True)
+    status = Column(String, nullable=False, default=OrderStatus.PENDING.value, index=True)
     # Status options: received, confirmed, preparing, shipping, delivered, cancelled
     
     # Pricing
@@ -34,7 +36,7 @@ class Order(Base):
     
     # Payment information
     payment_method = Column(String, nullable=False)
-    payment_status = Column(String, default='pending')
+    payment_status = Column(String, default=OrderStatus.PENDING.value)
     # Payment status: pending, processing, completed, failed, refunded
     payment_reference = Column(String, nullable=True)
     payment_capture_url = Column(String, nullable=True)  # URL to the payment receipt image/capture

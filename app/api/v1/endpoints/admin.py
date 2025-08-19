@@ -619,7 +619,7 @@ async def get_users_stats_by_role(
         "unverified_users": total_users - verified_users
     }
 
-@router.get("/dashboard")
+@router.get("/stats/dashboard")
 async def get_admin_dashboard(
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)

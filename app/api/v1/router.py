@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard
 
 api_router = APIRouter()
 
@@ -46,6 +46,13 @@ api_router.include_router(
 api_router.include_router(
     admin.router,
     tags=["👑 Administrador"],
+)
+
+# Panel de dashboard
+api_router.include_router(
+    dashboard.router,
+    prefix="/admin",
+    tags=["📊 Dashboard"],
 )
 
 # =============================================================================

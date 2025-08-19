@@ -5,6 +5,7 @@ from enum import Enum
 
 class OrderStatus(str, Enum):
     PENDING = "pending"
+    CONFIRMED = "confirmed"
     PROCESSING = "processing"
     SHIPPED = "shipped"
     DELIVERED = "delivered"
@@ -74,6 +75,7 @@ class OrderResponse(BaseModel):
     items: List[OrderItemResponse]
     shipping_address: OrderAddressSchema
     item_count: int
+    payment_capture_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -91,3 +93,5 @@ class OrderSummary(BaseModel):
     class Config:
         from_attributes = True
 
+class OrderStatusUpdate(BaseModel):
+    status: str

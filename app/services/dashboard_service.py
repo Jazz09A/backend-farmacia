@@ -1,9 +1,12 @@
 import datetime
+from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.user import User
 from app.models.order import Order
 from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData
+from app.schemas.order import OrderStatus  # Import from schema, not model
+from fastapi import HTTPException
 
 def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     """
@@ -50,7 +53,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     recent_orders = [
         RecentOrder(
             id=str(order.id),
-            customer_name=order.user.name, # Using the model property
+            customer_name=order.user.full_name, # Using the model property
             date=order.created_at.strftime("%Y-%m-%d"),
             total=order.total,
             status=order.status,
@@ -62,3 +65,43 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         order_status_summary=order_status_summary,
         recent_orders=recent_orders,
     ) 
+    
+def get_order_by_id(db: Session, id: str) -> Order:
+    return db.query(Order).filter(Order.id == id).first()
+
+
+def update_order_status(db: Session, id: str, status: str) -> Order:
+    order = db.query(Order).filter(Order.id == id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Validate status against the schema enum (English values)
+    valid_statuses = [status.value for status in OrderStatus]
+    if status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status. Valid statuses are: {valid_statuses}"
+        )
+    
+    order.status = status
+    db.commit()
+    db.refresh(order)
+    return order
+
+def get_orders_by_status(db: Session, status: str) -> List[Order]:
+    orders = db.query(Order).filter(Order.status == status).all()
+    if not orders:
+        raise HTTPException(status_code=404, detail="No orders found")
+    return orders
+
+def get_orders_by_user(db: Session, user_id: str) -> List[Order]:
+    orders = db.query(Order).filter(Order.user_id == user_id).all()
+    if not orders:
+        raise HTTPException(status_code=404, detail="No orders found")
+    return orders
+
+def get_orders_by_date(db: Session, date: str) -> List[Order]:
+    orders = db.query(Order).filter(Order.created_at == date).all()
+    if not orders:
+        raise HTTPException(status_code=404, detail="No orders found")
+    return orders
