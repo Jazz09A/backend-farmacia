@@ -107,3 +107,13 @@ def get_orders_by_date(db: Session, date: str) -> List[Order]:
     if not orders:
         raise HTTPException(status_code=404, detail="No orders found")
     return orders
+
+def get_all_orders(db: Session) -> List[Order]:
+    # Use eager loading to avoid N+1 queries when accessing user, items, and shipping address data
+    from sqlalchemy.orm import joinedload
+    orders = db.query(Order).options(
+        joinedload(Order.user),
+        joinedload(Order.items),
+        joinedload(Order.shipping_address)
+    ).all()
+    return orders

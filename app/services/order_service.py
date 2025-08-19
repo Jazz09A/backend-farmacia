@@ -7,7 +7,7 @@ from app.models.cart import CartItem
 from app.models.order import Order, OrderItem, OrderAddress
 from app.models.address import Address
 from app.models.shipping import ShippingZone
-from app.schemas.order import OrderCreate, OrderResponse
+from app.schemas.order import OrderCreate
 from app.services.cart_service import CartService
 
 class OrderService:
@@ -150,3 +150,5 @@ class OrderService:
         timestamp = datetime.now().strftime("%Y%m%d")
         random_suffix = ''.join(random.choices('0123456789', k=4))
         return f"FP-{timestamp}-{random_suffix}"
+
+    

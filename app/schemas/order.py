@@ -56,6 +56,7 @@ class OrderCreate(BaseModel):
 class OrderResponse(BaseModel):
     """Detailed schema for representing a single order in API responses."""
     id: str
+    user_id: str
     order_number: str
     status: OrderStatus
     subtotal: float
@@ -95,3 +96,6 @@ class OrderSummary(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+    
+class OrderDashboardResponse(OrderResponse):
+    user: str

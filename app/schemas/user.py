@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr, field_validator, Field
 from typing import Optional, List, Literal
 from datetime import datetime, date
 
+from app.schemas.order import OrderResponse
+
 # Base común para ambos tipos de usuarios
 class UserCommonBase(BaseModel):
     email: EmailStr
@@ -182,6 +184,9 @@ class UserPreferencesResponse(UserPreferencesBase):
     
     class Config:
         from_attributes = True
+class UserDashboard(UserResponse):
+    orders: List[OrderResponse]
+    
 
 # Alias para compatibilidad hacia atrás
 UserResponse = UserResponse
