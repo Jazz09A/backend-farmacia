@@ -9,9 +9,11 @@ class DashboardStats(BaseModel):
     
 class OrderStatusSummary(BaseModel):
     pending: int
+    confirmed: int
     processing: int
     shipped: int
     delivered: int
+    cancelled: int
     
 class RecentOrder(BaseModel):
     id: str

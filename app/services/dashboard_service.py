@@ -42,9 +42,11 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
 
     order_status_summary = OrderStatusSummary(
         pending=status_map.get('pending', 0),
+        confirmed=status_map.get('confirmed', 0),
         processing=status_map.get('processing', 0),
         shipped=status_map.get('shipped', 0),
         delivered=status_map.get('delivered', 0),
+        cancelled=status_map.get('cancelled', 0),
     )
 
     # 4. Recent Orders
