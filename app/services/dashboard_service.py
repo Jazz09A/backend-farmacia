@@ -117,3 +117,13 @@ def get_all_orders(db: Session) -> List[Order]:
         joinedload(Order.shipping_address)
     ).all()
     return orders
+
+def get_all_customers(db: Session) -> List[User]:
+    customers_without_admin_users = []
+    customers = db.query(User).all()
+    for customer in customers:
+        if customer.role != 'admin' and customer.role != 'super_admin':
+            customers_without_admin_users.append(customer)
+    if not customers_without_admin_users:
+        raise HTTPException(status_code=404, detail="No customers found")
+    return customers_without_admin_users

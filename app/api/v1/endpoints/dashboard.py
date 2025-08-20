@@ -2,9 +2,10 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.schemas.dashboard import DashboardData
-from app.services.dashboard_service import get_dashboard_data, get_order_by_id, update_order_status
+from app.services.dashboard_service import get_dashboard_data, get_order_by_id, update_order_status, get_all_customers
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
+from app.schemas.user import UserResponse
 from app.schemas.order import OrderResponse, OrderStatusUpdate, OrderDashboardResponse
 from app.services.dashboard_service import get_all_orders as get_all_orders_service
 
@@ -91,6 +92,7 @@ def get_all_orders_endpoint(
     
     return orders_with_user
 
-@router.get("/customers")
-def get_all_customers():
-    ...
+@router.get("/customers", response_model=List[UserResponse])
+def get_all_customers_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    customers = get_all_customers(db)
+    return list(customers)
