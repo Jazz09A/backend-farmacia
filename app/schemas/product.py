@@ -185,4 +185,78 @@ class ProductStats(BaseModel):
     featured_products: int
     offer_products: int
     categories_count: int
-    avg_rating: float 
+    avg_rating: float
+
+# Schemas for bulk product upload
+class ProductBulkUploadItem(BaseModel):
+    """Schema for individual product in bulk upload"""
+    # Required fields
+    name: str = Field(..., min_length=1, max_length=200)
+    price_ves: float = Field(..., gt=0, description="Precio en bolívares")
+    price_ref: float = Field(..., gt=0, description="Precio de referencia en USD")
+    description: str = Field(..., min_length=10)
+    
+    # Optional fields with defaults
+    brand: Optional[str] = Field(None, max_length=100)
+    category: Optional[str] = Field(None, max_length=100)
+    subcategory: Optional[str] = Field(None, max_length=100)
+    patology: Optional[str] = Field(None, max_length=100)
+    image: Optional[str] = Field(None, min_length=1, description="URL de imagen principal")
+    images: Optional[List[str]] = []
+    ingredients: Optional[List[str]] = []
+    in_stock: Optional[bool] = True
+    stock: Optional[int] = Field(default=0, ge=0)
+    prescription: Optional[bool] = False
+    dosage: Optional[str] = Field(None, max_length=100)
+    presentation: Optional[str] = Field(None, max_length=100)
+    laboratorio: Optional[str] = Field(None, max_length=100)
+    registro_sanitario: Optional[str] = Field(None, max_length=100)
+    contraindicaciones: Optional[str] = None
+    efectos_secundarios: Optional[str] = None
+    sku: Optional[str] = Field(None, max_length=50)
+    featured: Optional[bool] = False
+    is_offer: Optional[bool] = False
+    original_price: Optional[float] = Field(None, gt=0)
+    
+    # Row reference for error reporting
+    row_number: Optional[int] = None
+    
+    @validator('price_ves', 'price_ref')
+    def validate_prices(cls, v):
+        if v and v <= 0:
+            raise ValueError('El precio debe ser mayor que 0')
+        return v
+    
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('El nombre del producto es obligatorio')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if not v or len(v.strip()) < 10:
+            raise ValueError('La descripción debe tener al menos 10 caracteres')
+        return v.strip()
+
+class ProductValidationError(BaseModel):
+    """Schema for validation errors in bulk upload"""
+    row_number: int
+    field: str
+    value: str
+    error_message: str
+
+class ProductBulkUploadResult(BaseModel):
+    """Schema for bulk upload results"""
+    total_rows: int
+    valid_products: List[ProductBulkUploadItem]
+    validation_errors: List[ProductValidationError]
+    processed_count: int
+    error_count: int
+    warnings: List[str] = []
+    
+    @property
+    def success_rate(self) -> float:
+        if self.total_rows == 0:
+            return 0.0
+        return round((self.processed_count / self.total_rows) * 100, 2) 

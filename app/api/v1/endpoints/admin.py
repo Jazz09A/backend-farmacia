@@ -1,6 +1,7 @@
 """
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
@@ -18,7 +19,8 @@ from app.schemas.role import (
 )
 from app.schemas.dashboard import DashboardData, DashboardStats, OrderStatusSummary, RecentOrder
 from app.schemas.product import (
-    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
+    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse,
+    ProductBulkUploadResult, ProductBulkUploadItem
 )
 from app.schemas.user import (
     CustomerDetailedStats, CustomerStats, ProductPurchaseStats,
@@ -27,9 +29,11 @@ from app.schemas.user import (
 from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
 from app.services.imges_service import ImageService
+from app.services.product_bulk_service import ProductBulkService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 image_service = ImageService()
+logger = logging.getLogger(__name__)
 # =============================================================================
 # INDEX ADMIN PAGE
 # =============================================================================
@@ -193,6 +197,242 @@ async def create_product(
     }
     
     return ProductResponse.model_validate(product_dict)
+
+@router.post("/products/bulk-upload", response_model=ProductBulkUploadResult)
+async def bulk_upload_products(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    📁 **Carga masiva de productos desde CSV/Excel**
+    
+    Permite cargar múltiples productos desde un archivo CSV o Excel.
+    
+    **Formatos soportados:**
+    - CSV (UTF-8, Latin-1, ISO-8859-1)
+    - Excel (.xlsx, .xls)
+    
+    **Columnas requeridas:**
+    - name/nombre: Nombre del producto
+    - price_ves/precio_ves: Precio en bolívares
+    - price_ref/precio_ref: Precio de referencia en USD
+    - description/descripcion: Descripción del producto
+    
+    **Columnas opcionales:**
+    - brand/marca: Marca del producto
+    - category/categoria: Categoría
+    - subcategory/subcategoria: Subcategoría
+    - patology/patologia: Patología/indicación
+    - image/imagen: URL de imagen principal
+    - images/imagenes: URLs de imágenes adicionales (separadas por comas)
+    - ingredients/ingredientes: Ingredientes (separados por comas)
+    - in_stock/en_stock: Disponibilidad (true/false)
+    - stock: Cantidad en inventario
+    - prescription/receta: Requiere receta (true/false)
+    - dosage/dosis: Dosificación
+    - presentation/presentacion: Presentación
+    - laboratorio: Laboratorio
+    - registro_sanitario: Registro sanitario
+    - contraindicaciones: Contraindicaciones
+    - efectos_secundarios: Efectos secundarios
+    - sku: Código SKU
+    - featured/destacado: Producto destacado (true/false)
+    - is_offer/oferta: Es oferta (true/false)
+    - original_price/precio_original: Precio original (para ofertas)
+    
+    **Retorna:**
+    - Lista de productos válidos procesados
+    - Lista de errores de validación por fila
+    - Estadísticas de procesamiento
+    - Advertencias si las hay
+    
+    **Nota:** Este endpoint solo valida y retorna los productos procesados.
+    Para crear los productos en la base de datos, use el endpoint de creación individual
+    o implemente la lógica de creación masiva según los productos válidos retornados.
+    """
+    # Validar tipo de archivo
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe proporcionar un archivo"
+        )
+    
+    allowed_extensions = ['csv', 'xlsx', 'xls']
+    file_extension = file.filename.lower().split('.')[-1]
+    
+    if file_extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Formato de archivo no soportado. Use: {', '.join(allowed_extensions)}"
+        )
+    
+    # Validar tamaño de archivo (máximo 10MB)
+    max_file_size = 10 * 1024 * 1024  # 10MB
+    file_size = 0
+    content = await file.read()
+    file_size = len(content)
+    
+    if file_size > max_file_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo es demasiado grande. Máximo 10MB."
+        )
+    
+    # Resetear el puntero del archivo
+    file.file.seek(0)
+    
+    try:
+        # Procesar el archivo
+        result = ProductBulkService.process_bulk_upload(file, db, max_rows=1000)
+        
+        # Log de la operación
+        logger.info(
+            f"Bulk upload processed by user {current_user.email}: "
+            f"{result.processed_count}/{result.total_rows} products valid, "
+            f"{result.error_count} errors"
+        )
+        
+
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk upload: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al procesar el archivo"
+        )
+
+@router.post("/products/bulk-create")
+async def bulk_create_products(
+    products: List[ProductBulkUploadItem],
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🔄 **Crear productos masivamente**
+    
+    Crea múltiples productos en la base de datos a partir de una lista de productos validados.
+    Típicamente se usa después del endpoint de bulk-upload para crear los productos válidos.
+    
+    **Características:**
+    - Transacción atómica: si falla uno, no se crea ninguno
+    - Validación de duplicados por slug
+    - Generación automática de slugs únicos
+    - Manejo de errores detallado
+    
+    **Retorna:**
+    - Lista de productos creados exitosamente
+    - Lista de errores si los hay
+    - Estadísticas de creación
+    """
+    if not products:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La lista de productos no puede estar vacía"
+        )
+    
+    if len(products) > 1000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pueden crear más de 1000 productos a la vez"
+        )
+    
+    created_products = []
+    errors = []
+    
+    try:
+        # Obtener slugs existentes
+        existing_slugs = set(
+            slug[0] for slug in db.query(Product.slug).filter(Product.slug.isnot(None)).all()
+        )
+        
+        # Procesar cada producto
+        for product_item in products:
+            try:
+                # Convertir a ProductCreate
+                product_data = product_item.model_dump(exclude={'row_number'})
+                
+                # Generar slug único si no existe o ya está en uso
+                if not product_data.get('slug') or product_data['slug'] in existing_slugs:
+                    import re
+                    base_slug = re.sub(r'[^a-zA-Z0-9\s-]', '', product_data['name'].lower())
+                    base_slug = re.sub(r'\s+', '-', base_slug.strip())
+                    
+                    slug = base_slug
+                    counter = 1
+                    while slug in existing_slugs:
+                        slug = f"{base_slug}-{counter}"
+                        counter += 1
+                    
+                    product_data['slug'] = slug
+                    existing_slugs.add(slug)
+                
+                # Crear producto
+                db_product = Product(**product_data)
+                db.add(db_product)
+                db.flush()  # Flush para obtener el ID sin hacer commit
+                
+                # Convertir a respuesta
+                product_dict = {
+                    **db_product.__dict__,
+                    'current_price': db_product.current_price,
+                    'discount_percentage': db_product.discount_percentage,
+                    'is_available': db_product.is_available
+                }
+                
+                created_products.append(ProductResponse.model_validate(product_dict))
+                
+            except Exception as e:
+                error_msg = f"Error creando producto '{product_item.name}': {str(e)}"
+                errors.append({
+                    "product_name": product_item.name,
+                    "row_number": getattr(product_item, 'row_number', None),
+                    "error": error_msg
+                })
+                logger.error(error_msg)
+        
+        # Si hay errores, hacer rollback
+        if errors:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Algunos productos no pudieron ser creados",
+                    "errors": errors,
+                    "created_count": 0,
+                    "error_count": len(errors)
+                }
+            )
+        
+        # Commit si todo está bien
+        db.commit()
+        
+        logger.info(
+            f"Bulk creation completed by user {current_user.email}: "
+            f"{len(created_products)} products created successfully"
+        )
+        
+        return {
+            "status": "success",
+            "message": "Productos creados exitosamente",
+            "created_products": created_products,
+            "created_count": len(created_products),
+            "error_count": 0,
+            "errors": []
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in bulk creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al crear productos"
+        )
 
 @router.get("/products/{product_id}", response_model=ProductResponse)
 async def get_admin_product(
