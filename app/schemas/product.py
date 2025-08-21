@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
 
@@ -24,10 +24,50 @@ class ProductBase(BaseModel):
     contraindicaciones: Optional[str] = None
     efectos_secundarios: Optional[str] = None
 
-    @validator('price_ves', 'price_ref')
+    @field_validator('price_ves', 'price_ref')
     def validate_prices(cls, v):
         if v <= 0:
             raise ValueError('El precio debe ser mayor que 0')
+        return v
+
+class ProductCreateInput(BaseModel):
+    """Schema for creating products with USD price input."""
+    name: str = Field(..., min_length=1, max_length=200)
+    brand: str = Field(..., min_length=1, max_length=100)
+    category: str = Field(..., min_length=1, max_length=100)
+    subcategory: Optional[str] = Field(None, max_length=100)
+    patology: Optional[str] = Field(None, max_length=100)
+    price_usd: float = Field(..., gt=0, description="Precio en USD (se convertirá automáticamente a VES)")
+    price_ves: float = Field(..., gt=0, description="Precio en bolívares")
+    description: str = Field(..., min_length=10)
+    ingredients: Optional[List[str]] = []
+    image: str = Field(..., min_length=1, description="URL de imagen principal")
+    images: Optional[List[str]] = []
+    in_stock: bool = True
+    stock: Optional[int] = Field(default=0, ge=0)
+    prescription: bool = False
+    dosage: Optional[str] = Field(None, max_length=100)
+    presentation: Optional[str] = Field(None, max_length=100)
+    laboratorio: Optional[str] = Field(None, max_length=100)
+    registro_sanitario: Optional[str] = Field(None, max_length=100)
+    contraindicaciones: Optional[str] = None
+    efectos_secundarios: Optional[str] = None
+    slug: Optional[str] = Field(None, max_length=200)
+    featured: bool = False
+    is_offer: bool = False
+    original_price_usd: Optional[float] = Field(None, gt=0, description="Precio original en USD para ofertas")
+    offer_end_time: Optional[datetime] = None
+
+    @field_validator('price_usd', 'original_price_usd')
+    def validate_usd_prices(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('El precio debe ser mayor que 0')
+        return v
+
+    @field_validator('slug') 
+    def validate_slug(cls, v):
+        if v and not v.replace('-', '').replace('_', '').isalnum():
+            raise ValueError('El slug solo puede contener letras, números, guiones y guiones bajos')
         return v
 
 class ProductCreate(ProductBase):
@@ -37,7 +77,7 @@ class ProductCreate(ProductBase):
     original_price: Optional[float] = Field(None, gt=0)
     offer_end_time: Optional[datetime] = None
 
-    @validator('slug')
+    @field_validator('slug')
     def validate_slug(cls, v):
         if v and not v.replace('-', '').replace('_', '').isalnum():
             raise ValueError('El slug solo puede contener letras, números, guiones y guiones bajos')
@@ -119,20 +159,20 @@ class ProductSearchFilters(BaseModel):
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=100)
 
-    @validator('sort_by')
+    @field_validator('sort_by')
     def validate_sort_by(cls, v):
         allowed_fields = ['name', 'price', 'rating', 'created_at', 'popularity']
         if v not in allowed_fields:
             raise ValueError(f'sort_by debe ser uno de: {", ".join(allowed_fields)}')
         return v
 
-    @validator('sort_order')
+    @field_validator('sort_order')
     def validate_sort_order(cls, v):
         if v not in ['asc', 'desc']:
             raise ValueError('sort_order debe ser "asc" o "desc"')
         return v
 
-    @validator('max_price')
+    @field_validator('max_price')
     def validate_price_range(cls, v, values):
         if v is not None and 'min_price' in values and values['min_price'] is not None:
             if v < values['min_price']:
@@ -221,19 +261,19 @@ class ProductBulkUploadItem(BaseModel):
     # Row reference for error reporting
     row_number: Optional[int] = None
     
-    @validator('price_ves', 'price_ref')
+    @field_validator('price_ves', 'price_ref')
     def validate_prices(cls, v):
         if v and v <= 0:
             raise ValueError('El precio debe ser mayor que 0')
         return v
     
-    @validator('name')
+    @field_validator('name')
     def validate_name(cls, v):
         if not v or not v.strip():
             raise ValueError('El nombre del producto es obligatorio')
         return v.strip()
     
-    @validator('description')
+    @field_validator('description')
     def validate_description(cls, v):
         if not v or len(v.strip()) < 10:
             raise ValueError('La descripción debe tener al menos 10 caracteres')

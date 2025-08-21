@@ -19,9 +19,10 @@ from app.schemas.role import (
 )
 from app.schemas.dashboard import DashboardData, DashboardStats, OrderStatusSummary, RecentOrder
 from app.schemas.product import (
-    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse,
+    ProductResponse, ProductCreate, ProductCreateInput, ProductUpdate, ProductListResponse,
     ProductBulkUploadResult, ProductBulkUploadItem
 )
+from app.services.exchange_service import exchange_service
 from app.schemas.user import (
     CustomerDetailedStats, CustomerStats, ProductPurchaseStats,
     OrderStatusDistribution, MonthlyPurchaseStats, UserResponse
@@ -159,44 +160,69 @@ async def get_admin_products(
 
 @router.post("/products", response_model=ProductResponse)
 async def create_product(
-    product_data: ProductCreate,
+    product_data: ProductCreateInput,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
     ➕ **Crear producto**
     
-    Crea un nuevo producto en el sistema.
+    Crea un nuevo producto en el sistema con precio en USD.
+    El precio en VES se calcula automáticamente usando el tipo de cambio actual.
     """
+    # Get current exchange rate
+    current_rate = await exchange_service.get_current_rate_for_product_creation()
+    if not current_rate:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo obtener el tipo de cambio actual. Intente nuevamente."
+        )
+    
+    # Calculate VES prices
+    price_ves = exchange_service.calculate_ves_price(product_data.price_usd, current_rate)
+    original_price_ves = None
+    if product_data.original_price_usd:
+        original_price_ves = exchange_service.calculate_ves_price(product_data.original_price_usd, current_rate)
+    
     # Generate slug if not provided
-    if not product_data.slug:
+    slug = product_data.slug
+    if not slug:
         import re
         slug_base = re.sub(r'[^a-zA-Z0-9\s-]', '', product_data.name.lower())
         slug_base = re.sub(r'\s+', '-', slug_base.strip())
-        product_data.slug = slug_base
+        slug = slug_base
     
     # Check if slug already exists
-    if db.query(Product).filter(Product.slug == product_data.slug).first():
+    if db.query(Product).filter(Product.slug == slug).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ya existe un producto con este slug"
         )
     
+    # Prepare product data for database
+    product_dict = product_data.model_dump(exclude={'price_usd', 'original_price_usd', 'slug'})
+    product_dict.update({
+        'price_ves': price_ves,
+        'price_ref': product_data.price_usd,  # Store USD as reference price
+        'original_price': original_price_ves,
+        'slug': slug
+    })
+    
     # Create product
-    db_product = Product(**product_data.model_dump())
+    db_product = Product(**product_dict)
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
     
     # Convert to response model
-    product_dict = {
+    response_dict = {
         **db_product.__dict__,
         'current_price': db_product.current_price,
         'discount_percentage': db_product.discount_percentage,
         'is_available': db_product.is_available
     }
     
-    return ProductResponse.model_validate(product_dict)
+    return ProductResponse.model_validate(response_dict)
 
 @router.post("/products/bulk-upload", response_model=ProductBulkUploadResult)
 async def bulk_upload_products(
@@ -1118,6 +1144,108 @@ async def get_admin_dashboard(
         }
     } 
     
+# =============================================================================
+# GESTIÓN DE TIPO DE CAMBIO
+# =============================================================================
+
+@router.get("/exchange-rate")
+async def get_current_exchange_rate(
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    💱 **Obtener tipo de cambio actual**
+    
+    Obtiene el tipo de cambio USD/VES actual desde la API del BCV.
+    """
+    rate_data = await exchange_service.get_exchange_rate(force_refresh=False)
+    
+    if not rate_data:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo obtener el tipo de cambio actual"
+        )
+    
+    return {
+        "success": True,
+        "data": rate_data,
+        "message": "Tipo de cambio obtenido exitosamente"
+    }
+
+@router.post("/exchange-rate/refresh")
+async def refresh_exchange_rate(
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🔄 **Actualizar tipo de cambio**
+    
+    Fuerza la actualización del tipo de cambio desde la API del BCV.
+    """
+    rate_data = await exchange_service.get_exchange_rate(force_refresh=True)
+    
+    if not rate_data:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo actualizar el tipo de cambio"
+        )
+    
+    return {
+        "success": True,
+        "data": rate_data,
+        "message": "Tipo de cambio actualizado exitosamente"
+    }
+
+@router.post("/products/update-prices")
+async def update_all_product_prices(
+    force_refresh: bool = Query(False, description="Forzar actualización del tipo de cambio"),
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    💰 **Actualizar precios de todos los productos**
+    
+    Actualiza los precios en VES de todos los productos basándose en:
+    - Sus precios de referencia en USD (price_ref)
+    - El tipo de cambio actual del BCV
+    
+    **Parámetros:**
+    - `force_refresh`: Si es True, fuerza la actualización del tipo de cambio antes de calcular
+    
+    **Proceso:**
+    1. Obtiene el tipo de cambio actual (con opción de forzar actualización)
+    2. Recalcula price_ves = price_ref * tipo_cambio para cada producto
+    3. Actualiza solo los productos cuyos precios cambien
+    4. Retorna estadísticas de la actualización
+    """
+    try:
+        result = await exchange_service.update_all_product_prices(
+            db=db, 
+            force_refresh=force_refresh
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=result["message"]
+            )
+        
+        return {
+            "success": True,
+            "message": result["message"],
+            "data": {
+                "updated_count": result["updated_count"],
+                "exchange_rate": result["exchange_rate"],
+                "rate_timestamp": result.get("rate_timestamp"),
+                "rate_source": result.get("rate_source")
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating product prices: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al actualizar los precios"
+        )
+
 # =============================================================================
 # GESTIÓN DE IMÁGENES
 # =============================================================================
