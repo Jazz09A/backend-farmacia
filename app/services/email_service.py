@@ -56,6 +56,44 @@ class EmailService:
         except Exception as e:
             print(f"Failed to send email to {to_email}: {e}")
             # Depending on the use case, you might want to re-raise the exception or handle it.
-            
+
+    async def send_order_tracking_email(self, to_email: str, order_data: Dict[str, Any]):
+        """
+        Sends an order tracking email when a customer completes their order successfully.
+        
+        Args:
+            to_email: Customer's email address
+            order_data: Dictionary containing order information with keys:
+                - order_number: Order ID/number
+                - order_date: Date when order was placed
+                - order_total: Total amount of the order
+                - order_status: Current status of the order
+                - payment_method: Payment method used
+                - estimated_delivery: Estimated delivery date (optional)
+                - tracking_link: URL to the order tracking page
+        """
+        from datetime import datetime
+        
+        # Prepare context for the template
+        context = {
+            "order_number": order_data.get("order_number", "N/A"),
+            "order_date": order_data.get("order_date", datetime.now().strftime("%d/%m/%Y %H:%M")),
+            "order_total": order_data.get("order_total", "N/A"),
+            "order_status": order_data.get("order_status", "Confirmada"),
+            "payment_method": order_data.get("payment_method", "N/A"),
+            "estimated_delivery": order_data.get("estimated_delivery"),
+            "tracking_link": order_data.get("tracking_link", "#"),
+            "year": datetime.now().year
+        }
+        
+        subject = f"Tu orden #{order_data.get('order_number', 'N/A')} ha sido confirmada - Tracking disponible"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="order_tracking.html",
+            context=context
+        )
+
 # Singleton instance
 email_service = EmailService()

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu Orden ha sido Confirmada - Tracking Disponible</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .header {
+            background-color: #009FE3; /* Azul del logo */
+            padding: 30px;
+            text-align: center;
+        }
+        .header img {
+            max-width: 200px;
+            height: auto;
+        }
+        .success-icon {
+            background-color: #28a745;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+        }
+        .content {
+            padding: 40px;
+            line-height: 1.6;
+            text-align: center;
+        }
+        .content h1 {
+            color: #005A87; /* Azul oscuro del logo */
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .content h2 {
+            color: #28a745;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .content p {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .order-details {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .order-details h3 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 18px;
+        }
+        .order-details p {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .tracking-button {
+            display: inline-block;
+            background-color: #009FE3;
+            color: #ffffff;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            margin-top: 20px;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .tracking-button:hover {
+            background-color: #007bb5;
+        }
+        .info-box {
+            background-color: #e7f3ff;
+            border-left: 4px solid #009FE3;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info-box h4 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 16px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .footer {
+            background-color: #EBF0F2;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+        }
+        .footer a {
+            color: #009FE3;
+            text-decoration: none;
+        }
+        .contact-info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="Grupo Drozainka Logo">
+        </div>
+        <div class="content">
+            <div class="success-icon">✓</div>
+            <h1>¡Tu orden ha sido confirmada!</h1>
+            <h2>Orden #{{ order_number }}</h2>
+            
+            <p>¡Felicitaciones! Tu pedido ha sido procesado exitosamente y está siendo preparado para el envío.</p>
+            
+            <div class="order-details">
+                <h3>📋 Detalles de tu orden:</h3>
+                <p><strong>Fecha de orden:</strong> {{ order_date }}</p>
+                <p><strong>Total:</strong> {{ order_total }}</p>
+                <p><strong>Estado:</strong> <span style="color: #28a745; font-weight: bold;">{{ order_status }}</span></p>
+                <p><strong>Método de pago:</strong> {{ payment_method }}</p>
+                {% if estimated_delivery %}
+                <p><strong>Entrega estimada:</strong> {{ estimated_delivery }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="info-box">
+                <h4>🚚 Seguimiento de tu pedido:</h4>
+                <p>Puedes hacer seguimiento en tiempo real del estado de tu orden haciendo clic en el botón de abajo.</p>
+                <p>Te notificaremos por email cada vez que haya una actualización importante en tu pedido.</p>
+            </div>
+            
+            <a href="{{ tracking_link }}" class="tracking-button">Ver Seguimiento de mi Orden</a>
+            
+            <p style="font-size: 12px; color: #888; margin-top: 30px;">
+                Si no puedes hacer clic en el botón, copia y pega el siguiente enlace en tu navegador:<br>
+                <a href="{{ tracking_link }}" style="color: #009FE3; word-break: break-all;">{{ tracking_link }}</a>
+            </p>
+            
+            <div class="contact-info">
+                <p><strong>¿Tienes alguna pregunta sobre tu orden?</strong></p>
+                <p>Nuestro equipo de atención al cliente está disponible para ayudarte:</p>
+                <p>📧 Email: <a href="mailto:soporte@grupodrozainka.com">soporte@grupodrozainka.com</a></p>
+                <p>📞 Teléfono: <a href="tel:+584141234567">+58 414 123 4567</a></p>
+                <p>💬 WhatsApp: <a href="https://wa.me/584141234567">+58 414 123 4567</a></p>
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; {{ year }} Grupo Drozainka. Todos los derechos reservados.</p>
+            <p>Gracias por confiar en nosotros para tus necesidades farmacéuticas.</p>
+        </div>
+    </div>
+</body>
+</html>

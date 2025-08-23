@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 from enum import Enum
 
 class OrderStatus(Enum):
-    PENDING = "Recibido"
-    CONFIRMED = "Confirmado"
-    PROCESSING = "Preparando"
-    SHIPPED = "Enviado"
-    DELIVERED = "Entregado"
-    CANCELLED = "Cancelado"
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
 
 class Order(Base):
     __tablename__ = "orders"

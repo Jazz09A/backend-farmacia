@@ -141,7 +141,8 @@ async def api_info():
             "cart": "/api/v1/cart",
             "orders": "/api/v1/orders",
             "users": "/api/v1/users",
-            "reviews": "/api/v1/reviews"
+            "reviews": "/api/v1/reviews",
+            "tracking": "/api/v1/orders/{order_id}/tracking"
         },
         "features": [
             "Autenticación JWT",

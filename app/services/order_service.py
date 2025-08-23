@@ -1,14 +1,18 @@
+import os
 import uuid
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from app.models.cart import CartItem
-from app.models.order import Order, OrderItem, OrderAddress
+from app.models.order import Order, OrderItem, OrderAddress, OrderStatus
 from app.models.address import Address
 from app.models.shipping import ShippingZone
 from app.schemas.order import OrderCreate
 from app.services.cart_service import CartService
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class OrderService:
     def __init__(self, db: Session):
@@ -85,7 +89,7 @@ class OrderService:
                 id=str(uuid.uuid4()),
                 order_number=self._generate_order_number(),
                 user_id=user_id,
-                status="processing",
+                status=OrderStatus.PENDING,
                 subtotal=subtotal,
                 shipping_cost=shipping_cost,
                 taxes=taxes,
@@ -124,6 +128,47 @@ class OrderService:
             cart_service.clear_cart(user_id)
 
             self.db.refresh(new_order)
+            
+            # 11. Send order tracking email to customer
+            try:
+                from app.services.email_service import email_service
+                from app.models.user import User
+                
+                # Get user information for the email
+                user = self.db.query(User).filter(User.id == user_id).first()
+                if user and user.email:
+                    # Prepare order data for the email
+                    order_data = {
+                        "order_number": new_order.order_number,
+                        "order_date": new_order.created_at.strftime("%d/%m/%Y %H:%M"),
+                        "order_total": f"{new_order.total:.2f} {new_order.currency}",
+                        "order_status": new_order.status.title(),
+                        "payment_method": new_order.payment_method.title() if new_order.payment_method else "N/A",
+                        "tracking_link": os.getenv("FRONTEND_URL", "http://localhost:5173") + f"/tracking/{new_order.id}"
+                    }
+                    
+                    # Send tracking email asynchronously
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # If we're already in an async context, create a task
+                            asyncio.create_task(
+                                email_service.send_order_tracking_email(user.email, order_data)
+                            )
+                        else:
+                            # If we're in a sync context, run the async function
+                            loop.run_until_complete(
+                                email_service.send_order_tracking_email(user.email, order_data)
+                            )
+                    except RuntimeError:
+                        # If no event loop is available, we'll skip the email
+                        print("No event loop available, skipping email sending")
+                        pass
+                        
+            except Exception as email_error:
+                # Don't fail the order creation if email fails
+                print(f"Failed to send tracking email: {email_error}")
             
             return new_order
 
