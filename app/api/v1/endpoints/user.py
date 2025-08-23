@@ -8,12 +8,13 @@ from app.config.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
 from app.models.address import Address
-from app.schemas.user import UserResponse, UserUpdate
+from app.schemas.user import UserResponse, UserStats, UserUpdate
 from app.schemas.address import AddressResponse, AddressCreate, AddressUpdate
 from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
 from app.schemas.order import OrderResponse, OrderCreate, OrderSummary
 from app.services.cart_service import CartService
 from app.services.order_service import OrderService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/user", tags=["User Protected"])
 
@@ -246,3 +247,14 @@ def set_default_address(
     db.commit()
     db.refresh(address)
     return address
+
+@router.get("/stats", response_model=UserStats, summary="Obtiene estadísticas del usuario")
+async def get_user_stats(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    **Estadísticas del usuario**: Obtiene estadísticas del usuario.
+    """
+    user_service = UserService(db)
+    return user_service.get_user_stats_by_id(current_user.id)

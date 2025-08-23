@@ -245,3 +245,8 @@ class CustomerDetailedStats(BaseModel):
     
     class Config:
         from_attributes = True
+
+class UserStats(BaseModel):
+    total_orders: int
+    total_spent: float
+    total_products_purchased: int

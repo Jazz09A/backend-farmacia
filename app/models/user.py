@@ -153,3 +153,13 @@ class User(Base):
         elif self.role == "admin":
             return target_role in ["user", "manager"]
         return False
+    
+    def get_total_orders(self) -> int:
+        return len(self.orders)
+    
+    def get_total_spent(self) -> float:
+        return sum(order.total for order in self.orders)
+    
+    def get_total_products_purchased(self) -> int:
+        return sum(order.item_count for order in self.orders)
+    
