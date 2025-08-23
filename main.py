@@ -11,16 +11,28 @@ from contextlib import asynccontextmanager
 
 from app.config.settings import settings
 from app.core.exceptions import FarmaException
+from app.core.middleware import LoggingMiddleware, SecurityMiddleware
+from app.config.logging_config import get_logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print(f"🚀 Starting {settings.PROJECT_NAME} v{settings.VERSION}")
-    print(f"📊 Debug mode: {settings.DEBUG}")
-    print(f"🌐 CORS origins: {settings.ALLOWED_ORIGINS}")
+    app_logger = get_logger("app")
+    app_logger.info(
+        f"Starting {settings.PROJECT_NAME} v{settings.VERSION}",
+        extra={
+            'project_name': settings.PROJECT_NAME,
+            'version': settings.VERSION,
+            'debug_mode': settings.DEBUG,
+            'event': 'application_startup'
+        }
+    )
     yield
     # Shutdown
-    print(f"🛑 Shutting down {settings.PROJECT_NAME}")
+    app_logger.info(
+        f"Shutting down {settings.PROJECT_NAME}",
+        extra={'project_name': settings.PROJECT_NAME, 'event': 'application_shutdown'}
+    )
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,6 +44,10 @@ app = FastAPI(
     redoc_url="/api/v1/redoc",
     lifespan=lifespan
 )
+
+# Add logging middleware
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(SecurityMiddleware)
 
 # CORS Middleware - temporarily disabled
 # app.add_middleware(

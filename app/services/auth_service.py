@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
 
 from app.models.user import User
+from app.config.logging_config import get_logger, log_error
 from app.models.address import UserPreferences
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.schemas.user import UserResponse
@@ -28,12 +29,33 @@ from app.services.email_service import email_service # Import the service instan
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
+        self.auth_logger = get_logger("auth")
+        self.error_logger = get_logger("errors")
 
     async def register_user(self, user_data: RegisterRequest) -> UserResponse:
         """Register a new user and send a verification email."""
+        self.auth_logger.info(
+            f"Attempting user registration for email: {user_data.email}",
+            extra={
+                'email': user_data.email, 
+                'user_email': user_data.email,
+                'user_type': user_data.user_type,
+                'event': 'registration_attempt'
+            }
+        )
+        
         try:
             existing_user = self.db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
+                self.auth_logger.warning(
+                    f"Registration failed - email already exists: {user_data.email}",
+                    extra={
+                        'email': user_data.email, 
+                        'user_email': user_data.email,
+                        'reason': 'email_exists',
+                        'event': 'registration_failed'
+                    }
+                )
                 raise UserAlreadyExistsException("El email ya está registrado")
 
             hashed_password = get_password_hash(user_data.password)
@@ -51,6 +73,17 @@ class AuthService:
 
             self.db.add(db_user)
             self.db.commit()
+            
+            self.auth_logger.info(
+                f"User successfully registered: {db_user.email}",
+                extra={
+                    'user_id': db_user.id,
+                    'email': db_user.email,
+                    'user_email': db_user.email,
+                    'user_type': db_user.user_type,
+                    'event': 'user_registered'
+                }
+            )
 
             # Send verification email
             verification_link = f"http://localhost:8000/api/v1/auth/verify-email/{verification_token}" # Adjust the base URL as needed
@@ -67,32 +100,97 @@ class AuthService:
             self.db.refresh(db_user)
             return UserResponse.model_validate(db_user)
 
-        except IntegrityError:
+        except IntegrityError as e:
             self.db.rollback()
+            log_error(
+                self.error_logger,
+                e,
+                context={'email': user_data.email, 'operation': 'user_registration'},
+                user_email=user_data.email
+            )
             raise UserAlreadyExistsException("Error al crear el usuario")
+        except Exception as e:
+            self.db.rollback()
+            log_error(
+                self.error_logger,
+                e,
+                context={'email': user_data.email, 'operation': 'user_registration'},
+                user_email=user_data.email
+            )
+            raise
 
     @staticmethod
     async def authenticate_user(db: Session, login_data: LoginRequest) -> Token:
         """Authenticate user and return tokens."""
+        auth_logger = get_logger("auth")
+        error_logger = get_logger("errors")
+        
+        auth_logger.info(
+            f"Authentication attempt for email: {login_data.email}",
+            extra={
+                'email': login_data.email, 
+                'user_email': login_data.email, 
+                'event': 'login_attempt'
+            }
+        )
+        
         try:
             user = db.query(User).filter(User.email == login_data.email).first()
             
             if not user:
-                print(f"Usuario no encontrado para email: {login_data.email}")
+                auth_logger.warning(
+                    f"Login failed - user not found: {login_data.email}",
+                    extra={
+                        'email': login_data.email, 
+                        'user_email': login_data.email, 
+                        'reason': 'user_not_found', 
+                        'event': 'login_failed'
+                    }
+                )
                 raise InvalidCredentialsException()
             
             if not verify_password(login_data.password, user.hashed_password):
-                print(f"Contraseña incorrecta para usuario: {login_data.email}")
+                auth_logger.warning(
+                    f"Login failed - invalid password: {login_data.email}",
+                    extra={
+                        'email': login_data.email, 
+                        'user_email': login_data.email, 
+                        'user_id': user.id, 
+                        'reason': 'invalid_password', 
+                        'event': 'login_failed'
+                    }
+                )
                 raise InvalidCredentialsException()
             
             if not user.is_active:
-                print(f"Cuenta desactivada para usuario: {login_data.email}")
+                auth_logger.warning(
+                    f"Login failed - account disabled: {login_data.email}",
+                    extra={
+                        'email': login_data.email, 
+                        'user_email': login_data.email, 
+                        'user_id': user.id, 
+                        'reason': 'account_disabled', 
+                        'event': 'login_failed'
+                    }
+                )
                 raise InvalidCredentialsException("Cuenta desactivada")
             
             # TODO: Verify email if not verified
             # Update last login
             user.last_login = datetime.now(timezone.utc)
             db.commit()
+            
+            auth_logger.info(
+                f"User successfully authenticated: {user.email}",
+                extra={
+                    'user_id': user.id,
+                    'email': user.email,
+                    'user_email': user.email,
+                    'role': user.role,
+                    'event': 'login_success',
+                    'last_login': user.last_login.isoformat()
+                }
+            )
             
             # Create tokens
             access_token = create_access_token(data={"sub": user.email})
@@ -110,9 +208,12 @@ class AuthService:
             # Re-raise InvalidCredentialsException as is
             raise
         except Exception as e:
-            print(f"Error en authenticate_user: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            log_error(
+                error_logger,
+                e,
+                context={'email': login_data.email, 'operation': 'user_authentication'},
+                user_email=login_data.email
+            )
             raise InvalidCredentialsException()
     
     @staticmethod

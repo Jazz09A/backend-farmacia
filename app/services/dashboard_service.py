@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.user import User
 from app.models.order import Order
+from app.config.logging_config import get_logger
 from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData
 from app.schemas.order import OrderStatus  # Import from schema, not model
 from fastapi import HTTPException
@@ -12,6 +13,18 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     """
     Retrieves and computes all data required for the admin dashboard.
     """
+    perf_logger = get_logger("performance")
+    error_logger = get_logger("errors")
+    
+    perf_logger.info(
+        f"Dashboard data calculation started",
+        extra={
+            'days_filter': days_filter, 
+            'event': 'dashboard_calculation_started',
+            'user_email': 'admin@farmaplus.com'  # Dashboard es accedido por admin
+        }
+    )
+    
     # 1. Calculate date range for filtering
     end_date = datetime.datetime.now(datetime.timezone.utc)
     start_date = end_date - datetime.timedelta(days=days_filter)
@@ -20,7 +33,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     total_revenue_query = db.query(func.sum(Order.total)).filter(
     Order.created_at >= start_date,
     Order.status.in_(['pending', 'confirmed', 'processing', 'shipped', 'delivered'])
-).scalar() or 0.0
+    ).scalar() or 0.0
     
     total_orders = db.query(Order).filter(Order.created_at >= start_date).count()
     new_customers = db.query(User).filter(User.created_at >= start_date).count()
@@ -62,7 +75,20 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         ) for order in recent_orders_query
     ]
 
-    print(stats)
+    perf_logger.info(
+        f"Dashboard data calculated successfully",
+        extra={
+            'days_filter': days_filter,
+            'total_revenue': total_revenue_query,
+            'total_orders': total_orders,
+            'new_customers': new_customers,
+            'conversion_rate': conversion_rate,
+            'status_counts': len(status_counts),
+            'recent_orders_count': len(recent_orders),
+            'event': 'dashboard_calculation_completed',
+            'user_email': 'admin@farmaplus.com'  # Dashboard es accedido por admin
+        }
+    )
 
     return DashboardData(
         stats=stats,

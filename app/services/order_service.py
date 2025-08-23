@@ -10,6 +10,7 @@ from app.models.address import Address
 from app.models.shipping import ShippingZone
 from app.schemas.order import OrderCreate
 from app.services.cart_service import CartService
+from app.config.logging_config import get_logger, log_error
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,18 +18,55 @@ load_dotenv()
 class OrderService:
     def __init__(self, db: Session):
         self.db = db
+        self.orders_logger = get_logger("orders")
+        self.error_logger = get_logger("errors")
 
     def create_order_from_cart(self, user_id: str, order_data: OrderCreate) -> Order:
         """
         Creates a new order from the user's current cart.
         This process is a single transaction: if any part fails, all changes are rolled back.
         """
-        print(f"🔍 Creating order from cart for user: {user_id}")
-        print(f"🔍 Shipping zone ID: {order_data.shipping_address_id}")
+        # Obtener email del usuario para logging
+        user_email = None
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user:
+                user_email = user.email
+        except Exception:
+            pass
+        
+        self.orders_logger.info(
+            f"Starting order creation from cart",
+            extra={
+                'user_id': user_id,
+                'user_email': user_email,
+                'shipping_address_id': order_data.shipping_address_id,
+                'payment_method': order_data.payment_method,
+                'event': 'order_creation_started'
+            }
+        )
         # 1. Retrieve all items from the user's cart
         cart_items = self.db.query(CartItem).filter(CartItem.user_id == user_id).all()
         if not cart_items:
+            self.orders_logger.warning(
+                f"Order creation failed - empty cart",
+                extra={
+                    'user_id': user_id, 
+                    'user_email': user_email,
+                    'reason': 'empty_cart', 
+                    'event': 'order_creation_failed'
+                }
+            )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Your cart is empty.")
+        
+        self.orders_logger.info(
+            f"Found {len(cart_items)} items in cart",
+            extra={
+                'user_id': user_id, 
+                'user_email': user_email,
+                'cart_items_count': len(cart_items)
+            }
+        )
 
         # 2. Get the chosen shipping address from the user's address book
         shipping_address = self.db.query(Address).filter(
@@ -36,6 +74,16 @@ class OrderService:
             Address.user_id == user_id
         ).first()
         if not shipping_address:
+            self.orders_logger.warning(
+                f"Order creation failed - shipping address not found",
+                extra={
+                    'user_id': user_id,
+                    'user_email': user_email,
+                    'shipping_address_id': order_data.shipping_address_id,
+                    'reason': 'shipping_address_not_found',
+                    'event': 'order_creation_failed'
+                }
+            )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shipping address not found for this user.")
 
 
@@ -122,6 +170,21 @@ class OrderService:
             # 9. Add to session and commit
             self.db.add(new_order)
             self.db.commit()
+            
+            self.orders_logger.info(
+                f"Order successfully created",
+                extra={
+                    'user_id': user_id,
+                    'user_email': user_email,
+                    'order_id': new_order.id,
+                    'order_number': new_order.order_number,
+                    'total_amount': new_order.total,
+                    'currency': new_order.currency,
+                    'items_count': len(new_order.items),
+                    'payment_method': new_order.payment_method,
+                    'event': 'order_created_successfully'
+                }
+            )
 
             # 10. Clear the user's cart
             cart_service = CartService(self.db)
@@ -174,7 +237,26 @@ class OrderService:
 
         except Exception as e:
             self.db.rollback()
-            # Log the error e
+            log_error(
+                self.error_logger,
+                e,
+                context={
+                    'user_id': user_id,
+                    'operation': 'order_creation',
+                    'shipping_address_id': order_data.shipping_address_id,
+                    'payment_method': order_data.payment_method
+                },
+                user_email=user_email
+            )
+            self.orders_logger.error(
+                f"Order creation failed for user {user_id}",
+                extra={
+                    'user_id': user_id,
+                    'user_email': user_email,
+                    'error': str(e),
+                    'event': 'order_creation_failed'
+                }
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"An unexpected error occurred while creating the order: {e}"

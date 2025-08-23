@@ -5,6 +5,7 @@ from email.header import Header
 from email.utils import formataddr
 from typing import List, Dict, Any
 from app.config.settings import settings
+from app.config.logging_config import get_logger, log_error
 import os
 from jinja2 import Environment, FileSystemLoader
 
@@ -16,6 +17,8 @@ class EmailService:
         self.smtp_password = settings.SMTP_PASSWORD
         self.from_email = settings.SMTP_FROM
         self.from_name = settings.SMTP_FROM_NAME
+        self.email_logger = get_logger("email")
+        self.error_logger = get_logger("errors")
 
         # Setup Jinja2 for HTML templates
         self.template_env = Environment(
@@ -31,9 +34,28 @@ class EmailService:
         """
         Sends an email using an HTML template.
         """
+        self.email_logger.info(
+            f"Attempting to send email",
+            extra={
+                'to_email': to_email,
+                'user_email': to_email,  # El destinatario es el usuario
+                'subject': subject,
+                'template': template_name,
+                'event': 'email_send_attempt'
+            }
+        )
+        
         if not all([self.smtp_server, self.smtp_port, self.smtp_user, self.smtp_password, self.from_email]):
-            print("Email service is not configured. Skipping email sending.")
-            # In a real app, you might want to log this as a warning or error.
+            self.email_logger.error(
+                "Email service not configured - missing SMTP settings",
+                extra={
+                    'to_email': to_email,
+                    'user_email': to_email,
+                    'template': template_name,
+                    'reason': 'smtp_not_configured',
+                    'event': 'email_send_failed'
+                }
+            )
             return
 
         message = MIMEMultipart("alternative")
@@ -52,10 +74,40 @@ class EmailService:
                 server.starttls()  # Secure the connection
                 server.login(self.smtp_user, self.smtp_password)
                 server.sendmail(self.from_email, to_email, message.as_string())
-                print(f"Email sent successfully to {to_email}")
+                
+                self.email_logger.info(
+                    f"Email sent successfully",
+                    extra={
+                        'to_email': to_email,
+                        'user_email': to_email,
+                        'subject': subject,
+                        'template': template_name,
+                        'event': 'email_sent_successfully'
+                    }
+                )
         except Exception as e:
-            print(f"Failed to send email to {to_email}: {e}")
-            # Depending on the use case, you might want to re-raise the exception or handle it.
+            log_error(
+                self.error_logger,
+                e,
+                context={
+                    'to_email': to_email,
+                    'subject': subject,
+                    'template': template_name,
+                    'operation': 'email_sending'
+                },
+                user_email=to_email
+            )
+            self.email_logger.error(
+                f"Failed to send email",
+                extra={
+                    'to_email': to_email,
+                    'user_email': to_email,
+                    'subject': subject,
+                    'template': template_name,
+                    'error': str(e),
+                    'event': 'email_send_failed'
+                }
+            )
 
     async def send_order_tracking_email(self, to_email: str, order_data: Dict[str, Any]):
         """
