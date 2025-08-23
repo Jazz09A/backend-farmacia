@@ -29,9 +29,9 @@ class Settings(BaseSettings):
     # Email Settings
     SMTP_HOST: Optional[str] = "smtp.gmail.com"
     SMTP_PORT: Optional[int] = 587
-    SMTP_USER: Optional[str] = "your-email@example.com"
-    SMTP_PASSWORD: Optional[str] = "your-email-password"
-    SMTP_FROM: Optional[str] = "noreply@farmaplus.com"
+    SMTP_USER: Optional[str] = "programatevzla@gmail.com"
+    SMTP_PASSWORD: Optional[str] = "crpg cagx zyyg hgys"
+    SMTP_FROM: Optional[str] = "programatevzla@gmail.com"
     SMTP_FROM_NAME: Optional[str] = "Grupo Drozainka"
     
     # Currency API

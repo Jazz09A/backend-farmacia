@@ -25,25 +25,25 @@ class RegisterRequest(UserCreate):
     direccion_establecimiento: str
     
     # Contactos especializados
-    dueno_telefono: Optional[str]
-    dueno_email: Optional[str]
-    dueno_cumpleanos: Optional[str]
+    dueno_telefono: Optional[str] = None
+    dueno_email: Optional[str] = None
+    dueno_cumpleanos: Optional[str] = None
     
-    encargado_compra_telefono: Optional[str]
-    encargado_compra_email: Optional[str]
-    encargado_compra_cumpleanos: Optional[str]
+    encargado_compra_telefono: Optional[str] = None
+    encargado_compra_email: Optional[str] = None
+    encargado_compra_cumpleanos: Optional[str] = None
     
-    encargado_cobranza_telefono: Optional[str]
-    encargado_cobranza_email: Optional[str]
-    encargado_cobranza_cumpleanos: Optional[str]
+    encargado_cobranza_telefono: Optional[str] = None
+    encargado_cobranza_email: Optional[str] = None
+    encargado_cobranza_cumpleanos: Optional[str] = None
     
     # Información adicional
-    redes_sociales: Optional[str]
-    pagina_web: Optional[str]
-    codigo_sicm: Optional[str]
+    redes_sociales: Optional[str] = None
+    pagina_web: Optional[str] = None
+    codigo_sicm: Optional[str] = None
     
     # Fotos del establecimiento
-    fotos_establecimiento: Optional[List[str]]
+    fotos_establecimiento: Optional[List[str]] = None   
 
 class Token(BaseModel):
     access_token: str

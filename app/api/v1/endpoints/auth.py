@@ -28,8 +28,10 @@ async def register_user(
         new_user = await AuthService(db).register_user(user_data)
         return new_user
     except HTTPException as e:
-        raise e
+        print(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.get("/verify-email/{token}", response_model=AuthResponse)
@@ -38,11 +40,11 @@ async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
     **Verificar correo electrónico**: Confirma la dirección de correo del usuario a través de un token.
     """
     try:
-        success = await AuthService(db).verify_email(token)
+        success = await AuthService(db).verify_email(db, token)
         if success:
             return AuthResponse(message="Email verified successfully. You can now log in.")
     except HTTPException as e:
-        raise e
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token.")
 
@@ -81,15 +83,15 @@ async def get_current_user_info(
     """
     return AuthService.get_user_info(current_user)
 
-@router.post("/verify-email", response_model=AuthResponse)
-async def verify_email(
-    verify_data: VerifyEmailRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Verificar email del usuario con token.
-    """
-    return await AuthService.verify_email(db, verify_data.token)
+# @router.post("/verify-email", response_model=AuthResponse)
+# async def verify_email(
+#     verify_data: VerifyEmailRequest,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Verificar email del usuario con token.
+#     """
+#     return await AuthService.verify_email(db, verify_data.token)
 
 @router.post("/resend-verification", response_model=AuthResponse)
 async def resend_verification_email(

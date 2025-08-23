@@ -28,65 +28,29 @@ class AuthService:
     def __init__(self, db: Session):
         self.db = db
 
-    @staticmethod
-    def _convert_user_to_response_dict(db_user: User) -> dict:
-        """Convert User model to dict compatible with UserResponse schema."""
-        return {
-            'id': db_user.id,
-            'email': db_user.email,
-            'phone': db_user.phone,
-            'preferred_currency': db_user.preferred_currency,
-            'user_type': db_user.user_type,
-            'company_name': db_user.company_name,
-            'rif': db_user.rif,
-            'registro_mercantil': db_user.registro_mercantil,
-            'representante_legal_cedula': db_user.representante_legal_cedula,
-            'representante_legal_nombre': db_user.representante_legal_nombre,
-            'representantes_adicionales': db_user.representantes_adicionales or [],
-            'referencia_comercial_proveedor': db_user.referencia_comercial_proveedor,
-            'referencia_bancaria': db_user.referencia_bancaria,
-            'direccion_establecimiento': db_user.direccion_establecimiento,
-            'dueno_telefono': db_user.dueno_telefono,
-            'dueno_email': db_user.dueno_email,
-            'dueno_cumpleanos': db_user.dueno_cumpleanos.strftime('%Y-%m-%d') if db_user.dueno_cumpleanos else None,
-            'encargado_compra_telefono': db_user.encargado_compra_telefono,
-            'encargado_compra_email': db_user.encargado_compra_email,
-            'encargado_compra_cumpleanos': db_user.encargado_compra_cumpleanos.strftime('%Y-%m-%d') if db_user.encargado_compra_cumpleanos else None,
-            'encargado_cobranza_telefono': db_user.encargado_cobranza_telefono,
-            'encargado_cobranza_email': db_user.encargado_cobranza_email,
-            'encargado_cobranza_cumpleanos': db_user.encargado_cobranza_cumpleanos.strftime('%Y-%m-%d') if db_user.encargado_cobranza_cumpleanos else None,
-            'redes_sociales': db_user.redes_sociales,
-            'pagina_web': db_user.pagina_web,
-            'codigo_sicm': db_user.codigo_sicm,
-            'fotos_establecimiento': db_user.fotos_establecimiento or [],
-            'is_active': db_user.is_active,
-            'is_verified': db_user.is_verified,
-            'role': db_user.role,
-            'created_at': db_user.created_at,
-            'last_login': db_user.last_login
-        }
-
     async def register_user(self, user_data: RegisterRequest) -> UserResponse:
         """Register a new user and send a verification email."""
         try:
             existing_user = self.db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
                 raise UserAlreadyExistsException("El email ya está registrado")
-            
+
             hashed_password = get_password_hash(user_data.password)
             verification_token = generate_verification_token()
 
+            user_dict = user_data.model_dump(exclude={'password'})
+
             db_user = User(
-                **user_data.model_dump(exclude={'password'}),
+                **user_dict,
                 hashed_password=hashed_password,
-                verification_token=verification_token,
                 is_verified=False,
-                role=UserRole.USER
+                role=UserRole.USER,
+                verification_token=verification_token
             )
-            
+
             self.db.add(db_user)
             self.db.commit()
-            
+
             # Send verification email
             verification_link = f"http://localhost:8000/api/v1/auth/verify-email/{verification_token}" # Adjust the base URL as needed
             await email_service.send_email(
@@ -100,9 +64,8 @@ class AuthService:
             )
 
             self.db.refresh(db_user)
-            user_dict = AuthService._convert_user_to_response_dict(db_user)
-            return UserResponse.model_validate(user_dict)
-            
+            return UserResponse.model_validate(db_user)
+
         except IntegrityError:
             self.db.rollback()
             raise UserAlreadyExistsException("Error al crear el usuario")
@@ -110,31 +73,46 @@ class AuthService:
     @staticmethod
     async def authenticate_user(db: Session, login_data: LoginRequest) -> Token:
         """Authenticate user and return tokens."""
-        user = db.query(User).filter(User.email == login_data.email).first()
-        
-        if not user or not verify_password(login_data.password, user.hashed_password):
+        try:
+            user = db.query(User).filter(User.email == login_data.email).first()
+            
+            if not user:
+                print(f"Usuario no encontrado para email: {login_data.email}")
+                raise InvalidCredentialsException()
+            
+            if not verify_password(login_data.password, user.hashed_password):
+                print(f"Contraseña incorrecta para usuario: {login_data.email}")
+                raise InvalidCredentialsException()
+            
+            if not user.is_active:
+                print(f"Cuenta desactivada para usuario: {login_data.email}")
+                raise InvalidCredentialsException("Cuenta desactivada")
+            
+            # TODO: Verify email if not verified
+            # Update last login
+            user.last_login = datetime.now(timezone.utc)
+            db.commit()
+            
+            # Create tokens
+            access_token = create_access_token(data={"sub": user.email})
+            refresh_token = create_refresh_token(data={"sub": user.email})
+            
+            return Token(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_type="bearer",
+                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                role=user.role
+            )
+            
+        except InvalidCredentialsException:
+            # Re-raise InvalidCredentialsException as is
+            raise
+        except Exception as e:
+            print(f"Error en authenticate_user: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise InvalidCredentialsException()
-        
-        if not user.is_active:
-            raise InvalidCredentialsException("Cuenta desactivada")
-        
-        
-        # TODO: Verify email if not verified
-        # Update last login
-        user.last_login = datetime.now(timezone.utc)
-        db.commit()
-        
-        # Create tokens
-        access_token = create_access_token(data={"sub": user.email})
-        refresh_token = create_refresh_token(data={"sub": user.email})
-        
-        return Token(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            role=user.role
-        )
     
     @staticmethod
     async def refresh_access_token(db: Session, refresh_token: str) -> Token:
@@ -232,7 +210,15 @@ class AuthService:
         db.commit()
         
         # TODO: Send verification email
-        # await EmailService.send_verification_email(user.email, user.verification_token)
+        await email_service.send_email(
+            to_email=user.email,
+            subject="Verifica tu cuenta en Grupo Drozainka",
+            template_name="verify_email.html",
+            context={
+                "verification_link": f"http://localhost:8000/api/v1/auth/verify-email/{user.verification_token}",
+                "year": datetime.now().year
+            }
+        )
         
         return {"message": "Email de verificación enviado", "success": True}
     
@@ -255,5 +241,4 @@ class AuthService:
     @staticmethod
     def get_user_info(db_user: User) -> UserResponse:
         """Get user information as UserResponse."""
-        user_dict = AuthService._convert_user_to_response_dict(db_user)
-        return UserResponse.model_validate(user_dict)
+        return UserResponse.model_validate(db_user)

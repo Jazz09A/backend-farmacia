@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers
 
 api_router = APIRouter()
 
@@ -77,4 +77,15 @@ api_router.include_router(
 api_router.include_router(
     shipping.router,
     tags=["🚚 Zonas de Envío"],
+)
+
+# =============================================================================
+# ⚡ RUTAS DE PROMOCIONES
+# =============================================================================
+
+# Flash Offers
+api_router.include_router(
+    flash_offers.router,
+    prefix="/admin",
+    tags=["⚡ Flash Offers"],
 ) 

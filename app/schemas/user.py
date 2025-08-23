@@ -56,6 +56,7 @@ class UserJuridicoBase(UserCommonBase):
     # Fotos del establecimiento
     fotos_establecimiento: Optional[List[str]] = Field(None, description="URLs de las fotos del establecimiento")
 
+
 class UserCreate(UserJuridicoBase):
     password: str = Field(..., min_length=8, max_length=100)
 
