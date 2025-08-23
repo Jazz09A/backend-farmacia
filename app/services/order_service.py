@@ -137,7 +137,7 @@ class OrderService:
                 id=str(uuid.uuid4()),
                 order_number=self._generate_order_number(),
                 user_id=user_id,
-                status=OrderStatus.PENDING,
+                status=OrderStatus.PENDING.value,
                 subtotal=subtotal,
                 shipping_cost=shipping_cost,
                 taxes=taxes,
