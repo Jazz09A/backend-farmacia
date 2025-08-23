@@ -83,15 +83,6 @@ async def get_current_user_info(
     """
     return AuthService.get_user_info(current_user)
 
-# @router.post("/verify-email", response_model=AuthResponse)
-# async def verify_email(
-#     verify_data: VerifyEmailRequest,
-#     db: Session = Depends(get_db)
-# ):
-#     """
-#     Verificar email del usuario con token.
-#     """
-#     return await AuthService.verify_email(db, verify_data.token)
 
 @router.post("/resend-verification", response_model=AuthResponse)
 async def resend_verification_email(
@@ -102,6 +93,17 @@ async def resend_verification_email(
     Reenviar email de verificación.
     """
     return await AuthService.resend_verification_email(db, resend_data.email)
+
+@router.get("/get-email-verification/{email}", response_model=AuthResponse)
+async def get_email_verification(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener email de verificación.
+    """
+    print(f"EMAIL RECIBIDO: {email}")
+    return await AuthService.get_email_verification(db, email) 
 
 @router.post("/forgot-password", response_model=AuthResponse)
 async def forgot_password(

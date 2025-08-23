@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
@@ -242,3 +243,12 @@ class AuthService:
     def get_user_info(db_user: User) -> UserResponse:
         """Get user information as UserResponse."""
         return UserResponse.model_validate(db_user)
+
+    @staticmethod   
+    async def get_email_verification(db: Session, email: str) -> dict:
+        """Get email verification."""
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            raise HTTPException(status_code=400, detail="Email encontrado")
+        return {"message": "Email no encontrado", "success": True}
+    
