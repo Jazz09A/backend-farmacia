@@ -18,10 +18,10 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
 
     # 2. Basic Stats
     total_revenue_query = db.query(func.sum(Order.total)).filter(
-        Order.created_at >= start_date,
-        Order.status == 'delivered' # Assuming revenue is counted on delivered orders
-    ).scalar() or 0.0
-
+    Order.created_at >= start_date,
+    Order.status.in_(['pending', 'confirmed', 'processing', 'shipped', 'delivered'])
+).scalar() or 0.0
+    
     total_orders = db.query(Order).filter(Order.created_at >= start_date).count()
     new_customers = db.query(User).filter(User.created_at >= start_date).count()
     
@@ -61,6 +61,8 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             status=order.status,
         ) for order in recent_orders_query
     ]
+
+    print(stats)
 
     return DashboardData(
         stats=stats,

@@ -1101,7 +1101,7 @@ async def get_users_stats_by_role(
     active_users = db.query(User).filter(User.is_active == True).count()
     verified_users = db.query(User).filter(User.is_verified == True).count()
     
-    return {
+    stats = {
         "users_by_role": stats,
         "total_users": total_users,
         "active_users": active_users,
@@ -1109,6 +1109,8 @@ async def get_users_stats_by_role(
         "inactive_users": total_users - active_users,
         "unverified_users": total_users - verified_users
     }
+    
+    return stats
 
 @router.get("/stats/dashboard")
 async def get_admin_dashboard(
