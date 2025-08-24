@@ -11,7 +11,7 @@ class OrderStatus(str, Enum):
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
 
-class PaymentStatus(str, Enum):
+class PaymentStatusEnum(str, Enum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -72,7 +72,7 @@ class OrderResponse(BaseModel):
     currency: str
     exchange_rate: Optional[float] = None  # Tipo de cambio usado
     payment_method: str
-    payment_status: PaymentStatus
+    payment_status: PaymentStatusEnum
     payment_reference: Optional[str] = None
     tracking_number: Optional[str] = None
     estimated_delivery: Optional[datetime] = None
@@ -109,5 +109,6 @@ class OrderStatusUpdate(BaseModel):
 class OrderDashboardResponse(OrderResponse):
     user: str
     
-class PaymentStatus(BaseModel):
-    status: str
+class UpdatePaymentStatus(BaseModel):
+    order_id: str
+    status: PaymentStatusEnum 

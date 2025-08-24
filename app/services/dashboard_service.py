@@ -8,7 +8,8 @@ from app.config.logging_config import get_logger
 from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData
 from app.schemas.order import OrderStatus  # Import from schema, not model
 from fastapi import HTTPException
-
+from app.schemas.order import PaymentStatusEnum
+from app.schemas.order import UpdatePaymentStatus
 def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     """
     Retrieves and computes all data required for the admin dashboard.
@@ -156,11 +157,22 @@ def get_all_customers(db: Session) -> List[User]:
         raise HTTPException(status_code=404, detail="No customers found")
     return customers_without_admin_users
 
-def update_payment_status(db: Session, id: str, status: str) -> Order:
-    order = db.query(Order).filter(Order.id == id).first()
+def update_payment_status(db: Session, order_id: str, status: PaymentStatusEnum) -> Order:
+    print("STATUS", status)
+    print("ORDER_ID", order_id)
+    order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    order.payment_status = status
+    
+    # Validar que el status sea válido para pagos
+    valid_payment_statuses = [status.value for status in PaymentStatusEnum]
+    if status not in valid_payment_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Status de pago inválido. Valores válidos: {valid_payment_statuses}"
+        )
+    
+    order.payment_status = status.value
     db.commit()
     db.refresh(order)
     return order

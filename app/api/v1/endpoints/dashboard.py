@@ -69,10 +69,15 @@ def get_all_orders_endpoint(
             'order_number': order.order_number,
             'status': order.status,
             'subtotal': order.subtotal,
+            'subtotal_ref': order.subtotal_ref,
             'shipping_cost': order.shipping_cost,
+            'shipping_cost_ref': order.shipping_cost_ref,
             'taxes': order.taxes,
+            'taxes_ref': order.taxes_ref,
             'total': order.total,
+            'total_ref': order.total_ref,
             'currency': order.currency,
+            'exchange_rate': order.exchange_rate,
             'payment_method': order.payment_method,
             'payment_status': order.payment_status,
             'payment_reference': order.payment_reference,
@@ -95,4 +100,4 @@ def get_all_orders_endpoint(
 @router.get("/customers", response_model=List[UserResponse])
 def get_all_customers_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     customers = get_all_customers(db)
-    return list(customers)
+    return list(customers)  

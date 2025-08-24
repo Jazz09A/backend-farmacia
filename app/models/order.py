@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
+from app.schemas.order import PaymentStatusEnum
+
 class OrderStatus(Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
@@ -41,7 +43,7 @@ class Order(Base):
     
     # Payment information
     payment_method = Column(String, nullable=False)
-    payment_status = Column(String, default=OrderStatus.PENDING.value)
+    payment_status = Column(String, default=PaymentStatusEnum.PENDING.value)
     # Payment status: pending, processing, completed, failed, refunded
     payment_reference = Column(String, nullable=True)
     payment_capture_url = Column(String, nullable=True)  # URL to the payment receipt image/capture

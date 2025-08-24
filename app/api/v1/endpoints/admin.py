@@ -12,6 +12,7 @@ from app.core.auth import get_admin_user, get_super_admin_user
 from app.models.order import Order, OrderStatus
 from app.models.user import User
 from app.models.product import Product
+from app.schemas.order import PaymentStatusEnum, UpdatePaymentStatus
 from app.services.role_service import RoleService
 from app.schemas.role import (
     UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse,
@@ -1277,13 +1278,39 @@ async def delete_product_images(
     """
     return image_service.delete_image_from_product(product_id, image_url)
 
-@router.get("/payments/status")
-async def get_payment_status(
-    status: str,
+@router.put("/payments/status")
+async def update_payment_status(
+    status: UpdatePaymentStatus,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
-    💰 **Obtener estado de pago**
+    💰 **Actualizar estado de pago de una orden**
+    
+    Recibe:
+    - order_id: ID de la orden
+    - status: Nuevo estado del pago (pending, completed, failed, refunded)
     """
-    return dashboard_service.get_payment_status(db, status)
+    print("STATUS", status)
+    try:
+        # Actualizar el estado del pago
+        updated_order = dashboard_service.update_payment_status(db, status.order_id, status.status)
+        
+        return {
+            "success": True,
+            "message": f"Estado de pago actualizado a '{status.status}'",
+            "data": {
+                "order_id": status.order_id,
+                "payment_status": status.status,
+                "order_number": updated_order.order_number
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating payment status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Error interno al actualizar el estado del pago"
+        )
