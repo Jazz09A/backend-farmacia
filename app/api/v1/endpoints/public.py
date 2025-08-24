@@ -78,7 +78,9 @@ async def get_public_products(
         search_filter = or_(
             Product.name.ilike(f"%{search}%"),
             Product.description.ilike(f"%{search}%"),
-            Product.brand.ilike(f"%{search}%")
+            Product.brand.ilike(f"%{search}%"),
+            Product.sku.ilike(f"%{search}%"),  # ← Agregar búsqueda por SKU
+            Product.ingredients.ilike(f"%{search}%")  # ← Agregar búsqueda por ingredientes
         )
         query = query.filter(search_filter)
         applied_filters["search"] = search
@@ -197,6 +199,7 @@ async def search_public_products(
         Product.name.ilike(f"%{q}%"),
         Product.description.ilike(f"%{q}%"),
         Product.brand.ilike(f"%{q}%"),
+        Product.sku.ilike(f"%{q}%"),  # ← Agregar búsqueda por SKU
         Product.ingredients.ilike(f"%{q}%") if hasattr(Product, 'ingredients') else False
     )
     
