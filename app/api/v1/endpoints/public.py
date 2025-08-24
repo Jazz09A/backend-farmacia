@@ -79,8 +79,8 @@ async def get_public_products(
             Product.name.ilike(f"%{search}%"),
             Product.description.ilike(f"%{search}%"),
             Product.brand.ilike(f"%{search}%"),
-            Product.sku.ilike(f"%{search}%"),  # ← Agregar búsqueda por SKU
-            Product.ingredients.ilike(f"%{search}%")  # ← Agregar búsqueda por ingredientes
+            Product.sku.ilike(f"%{search}%"),  
+            Product.ingredients.ilike(f"%{search}%")  
         )
         query = query.filter(search_filter)
         applied_filters["search"] = search

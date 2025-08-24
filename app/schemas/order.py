@@ -37,7 +37,9 @@ class OrderItemResponse(BaseModel):
     product_id: str
     quantity: int
     unit_price: float
+    unit_price_ref: float  # Precio unitario en USD/REF
     total_price: float
+    total_price_ref: float  # Precio total en USD/REF
     selected_presentation: Optional[str] = None
     product_name: str
     product_brand: str
@@ -60,10 +62,15 @@ class OrderResponse(BaseModel):
     order_number: str
     status: OrderStatus
     subtotal: float
+    subtotal_ref: float  # Precio en USD/REF
     shipping_cost: float
+    shipping_cost_ref: float  # Precio en USD/REF
     taxes: float
+    taxes_ref: float  # Precio en USD/REF
     total: float
+    total_ref: float  # Precio en USD/REF
     currency: str
+    exchange_rate: Optional[float] = None  # Tipo de cambio usado
     payment_method: str
     payment_status: PaymentStatus
     payment_reference: Optional[str] = None
@@ -87,7 +94,9 @@ class OrderSummary(BaseModel):
     order_number: str
     status: OrderStatus
     total: float
+    total_ref: float  # Precio en USD/REF
     currency: str
+    exchange_rate: Optional[float] = None  # Tipo de cambio usado
     item_count: int
     created_at: datetime
 
@@ -99,3 +108,6 @@ class OrderStatusUpdate(BaseModel):
     
 class OrderDashboardResponse(OrderResponse):
     user: str
+    
+class PaymentStatus(BaseModel):
+    status: str

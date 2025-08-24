@@ -155,3 +155,12 @@ def get_all_customers(db: Session) -> List[User]:
     if not customers_without_admin_users:
         raise HTTPException(status_code=404, detail="No customers found")
     return customers_without_admin_users
+
+def update_payment_status(db: Session, id: str, status: str) -> Order:
+    order = db.query(Order).filter(Order.id == id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.payment_status = status
+    db.commit()
+    db.refresh(order)
+    return order

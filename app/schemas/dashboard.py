@@ -26,3 +26,7 @@ class DashboardData(BaseModel):
     stats: DashboardStats
     order_status_summary: OrderStatusSummary
     recent_orders: List[RecentOrder] 
+    
+
+
+    

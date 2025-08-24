@@ -45,6 +45,24 @@ class OrderService:
                 'event': 'order_creation_started'
             }
         )
+        
+        # Obtener tipo de cambio actual para la orden
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Si estamos en un contexto async, crear una tarea
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self._get_exchange_rate())
+                    exchange_rate = future.result()
+            else:
+                # Si estamos en un contexto sync, ejecutar directamente
+                exchange_rate = loop.run_until_complete(self._get_exchange_rate())
+        except Exception as e:
+            self.orders_logger.warning(f"Could not get exchange rate: {e}, using default")
+            exchange_rate = 35.0  # Valor por defecto si falla la API
+        
         # 1. Retrieve all items from the user's cart
         cart_items = self.db.query(CartItem).filter(CartItem.user_id == user_id).all()
         if not cart_items:
@@ -91,6 +109,7 @@ class OrderService:
         try:
             # 3. Initialize order totals
             subtotal = 0.0
+            subtotal_ref = 0.0
             order_items = []
 
             # 4. Create OrderItems and calculate subtotal
@@ -102,15 +121,23 @@ class OrderService:
                         detail=f"Product '{product.name}' is out of stock or unavailable."
                     )
                 
-                total_price = product.price_ves * item.quantity
-                subtotal += total_price
+                # Calcular precios en ambas monedas
+                unit_price_ves = product.price_ves
+                unit_price_ref = product.price_ref
+                total_price_ves = unit_price_ves * item.quantity
+                total_price_ref = unit_price_ref * item.quantity
+                
+                subtotal += total_price_ves
+                subtotal_ref += total_price_ref
 
                 order_item = OrderItem(
                     id=str(uuid.uuid4()),
                     product_id=product.id,
                     quantity=item.quantity,
-                    unit_price=product.price_ves,
-                    total_price=total_price,
+                    unit_price=unit_price_ves,
+                    unit_price_ref=unit_price_ref,
+                    total_price=total_price_ves,
+                    total_price_ref=total_price_ref,
                     selected_presentation=item.selected_presentation,
                     # Snapshot product details at time of purchase
                     product_name=product.name,
@@ -129,8 +156,13 @@ class OrderService:
             shipping_zone = self.db.query(ShippingZone).filter(ShippingZone.id == shipping_zone_id).first()
             
             shipping_cost = shipping_zone.price if shipping_zone else 0.0 # Default to 0 if no zone found
+            shipping_cost_ref = shipping_cost / exchange_rate if exchange_rate else 0.0
+            
             taxes = subtotal * 0.16  # Example 16% VAT
+            taxes_ref = subtotal_ref * 0.16  # Taxes in REF
+            
             total = subtotal + shipping_cost + taxes
+            total_ref = subtotal_ref + shipping_cost_ref + taxes_ref
 
             # 6. Create the main Order record
             new_order = Order(
@@ -139,10 +171,15 @@ class OrderService:
                 user_id=user_id,
                 status=OrderStatus.PENDING.value, 
                 subtotal=subtotal,
+                subtotal_ref=subtotal_ref,
                 shipping_cost=shipping_cost,
+                shipping_cost_ref=shipping_cost_ref,
                 taxes=taxes,
+                taxes_ref=taxes_ref,
                 total=total,
+                total_ref=total_ref,
                 currency="VES",
+                exchange_rate=exchange_rate,
                 payment_method=order_data.payment_method,
                 payment_capture_url=order_data.payment_capture_url,
                 payment_status="pending",
@@ -277,5 +314,18 @@ class OrderService:
         timestamp = datetime.now().strftime("%Y%m%d")
         random_suffix = ''.join(random.choices('0123456789', k=4))
         return f"FP-{timestamp}-{random_suffix}"
+
+    async def _get_exchange_rate(self) -> float:
+        """Get current exchange rate from the exchange service."""
+        try:
+            from app.services.exchange_service import exchange_service
+            rate_data = await exchange_service.get_exchange_rate(force_refresh=False)
+            if rate_data and "price" in rate_data:
+                return rate_data["price"]
+            else:
+                return 35.0  # Default fallback
+        except Exception as e:
+            self.orders_logger.warning(f"Failed to get exchange rate: {e}")
+            return 35.0  # Default fallback
 
     

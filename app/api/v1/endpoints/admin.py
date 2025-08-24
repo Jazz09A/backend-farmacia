@@ -1276,3 +1276,14 @@ async def delete_product_images(
     🖼️ **Obtener imágenes de producto**
     """
     return image_service.delete_image_from_product(product_id, image_url)
+
+@router.get("/payments/status")
+async def get_payment_status(
+    status: str,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    💰 **Obtener estado de pago**
+    """
+    return dashboard_service.get_payment_status(db, status)

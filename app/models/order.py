@@ -29,10 +29,15 @@ class Order(Base):
     
     # Pricing
     subtotal = Column(Float, nullable=False)
+    subtotal_ref = Column(Float, nullable=False)  # Precio en USD/REF
     shipping_cost = Column(Float, nullable=False)
+    shipping_cost_ref = Column(Float, nullable=False)  # Precio en USD/REF
     taxes = Column(Float, nullable=False)
+    taxes_ref = Column(Float, nullable=False)  # Precio en USD/REF
     total = Column(Float, nullable=False)
+    total_ref = Column(Float, nullable=False)  # Precio en USD/REF
     currency = Column(String, nullable=False, default='VES')
+    exchange_rate = Column(Float, nullable=True)  # Tipo de cambio usado al crear la orden
     
     # Payment information
     payment_method = Column(String, nullable=False)
@@ -94,7 +99,9 @@ class OrderItem(Base):
     # Item details
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
+    unit_price_ref = Column(Float, nullable=False)  # Precio unitario en USD/REF
     total_price = Column(Float, nullable=False)
+    total_price_ref = Column(Float, nullable=False)  # Precio total en USD/REF
     selected_presentation = Column(String, nullable=True)
     
     # Product snapshot (in case product changes)
