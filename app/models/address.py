@@ -33,8 +33,9 @@ class Address(Base):
     is_active = Column(Boolean, default=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    shipping_zone_id = Column(String, ForeignKey("shipping_zones.id"), nullable=False)
     
     # Relationships
     user = relationship("User", back_populates="addresses")

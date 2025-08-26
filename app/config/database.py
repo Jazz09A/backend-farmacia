@@ -34,6 +34,6 @@ def create_tables():
         Order, OrderItem, OrderAddress, Review, Category, Brand,
         FlashOffer, PromotionalCode, PromotionUsage, SupportTicket,
         SupportResponse, UserNotification, BlogCategory, BlogPost,
-        ShippingZone, BlogCategory, BlogPost
+        ShippingZone
     )
     Base.metadata.create_all(bind=engine) 
