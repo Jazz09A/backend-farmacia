@@ -49,10 +49,26 @@ app = FastAPI(
 # antes que cualquier otro middleware.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://farmacia-frontend-ten.vercel.app/"],
+    allow_origins=[
+        "https://farmacia-frontend-ten.vercel.app",  # Tu frontend específico
+        "http://localhost:3000",  # Para desarrollo
+        "http://localhost:5173",  # Para Vite
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Mx-ReqToken",
+        "Keep-Alive",
+        "X-Requested-With",
+        "If-Modified-Since",
+    ],
 )
 
 print("DOMINIOS AUTORIZADOS: " + settings.ALLOWED_ORIGINS)
@@ -77,6 +93,7 @@ async def log_options_requests(request: Request, call_next):
         print(f"Headers: {dict(request.headers)}")
     response = await call_next(request)
     return response
+
 # Global exception handlers
 @app.exception_handler(FarmaException)
 async def farma_exception_handler(request: Request, exc: FarmaException):
