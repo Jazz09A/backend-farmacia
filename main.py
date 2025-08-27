@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, status
-# from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -50,13 +50,13 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityMiddleware)
 
 # CORS Middleware - temporarily disabled
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.ALLOWED_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Request timing middleware - temporarily disabled
 # @app.middleware("http")
