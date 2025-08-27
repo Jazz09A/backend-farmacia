@@ -124,7 +124,7 @@ class AuthService:
         """Authenticate user and return tokens."""
         auth_logger = get_logger("auth")
         error_logger = get_logger("errors")
-        
+        print("LOGIN DATA: " + str(login_data))
         auth_logger.info(
             f"Authentication attempt for email: {login_data.email}",
             extra={
@@ -136,7 +136,7 @@ class AuthService:
         
         try:
             user = db.query(User).filter(User.email == login_data.email).first()
-            
+            print("USER: " + str(user))
             if not user:
                 auth_logger.warning(
                     f"Login failed - user not found: {login_data.email}",
@@ -176,7 +176,6 @@ class AuthService:
                 raise InvalidCredentialsException("Cuenta desactivada")
             
             # TODO: Verify email if not verified
-            # Update last login
             user.last_login = datetime.now(timezone.utc)
             db.commit()
             

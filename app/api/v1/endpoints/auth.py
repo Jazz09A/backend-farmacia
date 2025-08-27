@@ -60,6 +60,7 @@ async def login(
     Funciona para ambos tipos de usuario (natural y jurídico).
     Retorna tokens de acceso y actualización.
     """
+    print("LOGIN DATA: " + str(login_data))
     return await AuthService.authenticate_user(db, login_data)
 
 @router.post("/refresh", response_model=Token)
