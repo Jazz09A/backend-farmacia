@@ -45,33 +45,21 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware debe ir primero para manejar las peticiones OPTIONS (preflight)
-# antes que cualquier otro middleware.
+origins = [
+    "https://farmacia-frontend-ten.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://farmacia-frontend-ten.vercel.app",  # Tu frontend específico
-        "http://localhost:3000",  # Para desarrollo
-        "http://localhost:5173",  # Para Vite
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "Accept",
-        "Origin",
-        "User-Agent",
-        "DNT",
-        "Cache-Control",
-        "X-Mx-ReqToken",
-        "Keep-Alive",
-        "X-Requested-With",
-        "If-Modified-Since",
-    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-print("DOMINIOS AUTORIZADOS: " + settings.ALLOWED_ORIGINS)
+
 # Add other middlewares
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityMiddleware)
