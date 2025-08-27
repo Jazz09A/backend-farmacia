@@ -45,18 +45,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add logging middleware
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(SecurityMiddleware)
-
-# CORS Middleware - temporarily disabled
+# CORS Middleware debe ir primero para manejar las peticiones OPTIONS (preflight)
+# antes que cualquier otro middleware.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.ALLOWED_ORIGINS],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+# Add other middlewares
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(SecurityMiddleware)
 
 # Request timing middleware - temporarily disabled
 # @app.middleware("http")
