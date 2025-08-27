@@ -337,6 +337,8 @@ class ProductBulkService:
                 valid_products.append(product_item)
                 
             except Exception as e:
+                # TODO BORRAR
+                print("ERROR IN PROCESS BULK UPLOAD: " + str(e))
                 error_msg = str(e)
                 field = "general"
                 

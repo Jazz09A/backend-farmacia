@@ -312,7 +312,8 @@ async def bulk_upload_products(
     try:
         # Procesar el archivo
         result = ProductBulkService.process_bulk_upload(file, db, max_rows=1000)
-        
+        # TODO BORRAR
+        print("RESULT: " + str(result))
         # Log de la operación
         logger.info(
             f"Bulk upload processed by user {current_user.email}: "
@@ -326,6 +327,8 @@ async def bulk_upload_products(
     except HTTPException:
         raise
     except Exception as e:
+        # TODO BORRAR
+        print("ERROR IN BULK UPLOAD: " + str(e))
         logger.error(f"Error in bulk upload: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
