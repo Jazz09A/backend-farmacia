@@ -154,7 +154,7 @@ def get_all_customers(db: Session) -> List[User]:
         if customer.role != 'admin' and customer.role != 'super_admin':
             customers_without_admin_users.append(customer)
     if not customers_without_admin_users:
-        raise HTTPException(status_code=404, detail="No customers found")
+        raise HTTPException(status_code=200, detail="No customers found")
     return customers_without_admin_users
 
 def update_payment_status(db: Session, order_id: str, status: PaymentStatusEnum) -> Order:

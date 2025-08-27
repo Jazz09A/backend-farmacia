@@ -423,6 +423,8 @@ async def bulk_create_products(
         
         # Si hay errores, hacer rollback
         if errors:
+            # TODO BORRAR
+            print("ERRORS: " + str(errors))
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -452,9 +454,14 @@ async def bulk_create_products(
         }
         
     except HTTPException:
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Error al crear productos"
+        )
     except Exception as e:
         db.rollback()
+        # TODO BORRAR
+        print("ERROR IN BULK CREATION: " + str(e))
         logger.error(f"Error in bulk creation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
