@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     MIN_PAGE_SIZE: int = os.getenv("MIN_PAGE_SIZE", 1)
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = os.getenv("ALLOWED_ORIGINS", ["http://localhost:3000", "http://localhost:5173", "http://localhost:3001"])
+    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
     
     # Email Settings
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST", "smtp.gmail.com")
