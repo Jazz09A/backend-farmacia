@@ -328,7 +328,7 @@ def log_response_info(logger: logging.Logger, request, response, duration_ms: fl
     level = logging.WARNING if response.status_code >= 400 else logging.INFO
     logger.log(
         level,
-        f"Response: {request.method} {request.url.path} - {response.status_code} ({duration_ms:.2f}ms)",
+        f"Response: {request.method} {request.url.path} - {response.status_code} ({duration_ms:.2f}ms) resp: {response.body}",
         extra=extra
     )
 
