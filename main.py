@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from app.config.settings import settings
 from app.core.exceptions import FarmaException
-from app.core.middleware import LoggingMiddleware, SecurityMiddleware
+# from app.core.middleware import LoggingMiddleware, SecurityMiddleware
 from app.config.logging_config import get_logger
 
 @asynccontextmanager
@@ -61,8 +61,8 @@ app.add_middleware(
 
 
 # Add other middlewares
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(SecurityMiddleware)
+# app.add_middleware(LoggingMiddleware)
+# app.add_middleware(SecurityMiddleware)
 
 # Request timing middleware - temporarily disabled
 # @app.middleware("http")
