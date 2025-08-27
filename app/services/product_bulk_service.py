@@ -13,6 +13,8 @@ import logging
 from app.schemas.product import ProductBulkUploadItem, ProductValidationError, ProductBulkUploadResult
 from app.models.product import Product
 
+from app.config.logging_config import app_logger
+
 logger = logging.getLogger(__name__)
 
 class ProductBulkService:
@@ -332,13 +334,24 @@ class ProductBulkService:
                 # Agrega número de fila para referencia
                 product_data['row_number'] = row_number
                 
+                # DEBUG: Loggear los datos antes de validar
+                import json
+                app_logger.debug(
+                    f"Validating Row {row_number}: %s", 
+                    json.dumps(product_data, indent=2, default=str)
+                )
+                
                 # Valida usando el schema
                 product_item = ProductBulkUploadItem(**product_data)
                 valid_products.append(product_item)
                 
             except Exception as e:
-                # TODO BORRAR
-                print("ERROR IN PROCESS BULK UPLOAD: " + str(e))
+                # DEBUG: Loggear el error de validación
+                app_logger.error(
+                    f"Validation ERROR in Row {row_number}",
+                    exc_info=True  # Esto adjunta el traceback completo
+                )
+
                 error_msg = str(e)
                 field = "general"
                 
