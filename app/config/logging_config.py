@@ -322,7 +322,8 @@ def log_response_info(logger: logging.Logger, request, response, duration_ms: fl
         'duration': duration_ms,
         'user_id': user_id,
         'user_email': user_email,
-        'request_id': request_id
+        'request_id': request_id,
+        'response': response.body if response.body else None
     }
     
     level = logging.WARNING if response.status_code >= 400 else logging.INFO

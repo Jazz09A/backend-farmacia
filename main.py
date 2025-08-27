@@ -65,22 +65,22 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityMiddleware)
 
 # Request timing middleware - temporarily disabled
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    print("TIEMPO DE PROCESO: " + str(process_time))
-    return response
+# @app.middleware("http")
+# async def add_process_time_header(request: Request, call_next):
+#     start_time = time.time()
+#     response = await call_next(request)
+#     process_time = time.time() - start_time
+#     response.headers["X-Process-Time"] = str(process_time)
+#     print("TIEMPO DE PROCESO: " + str(process_time))
+#     return response
 
-@app.middleware("http")
-async def log_options_requests(request: Request, call_next):
-    if request.method == "OPTIONS":
-        print(f"OPTIONS request to: {request.url}")
-        print(f"Headers: {dict(request.headers)}")
-    response = await call_next(request)
-    return response
+# @app.middleware("http")
+# async def log_options_requests(request: Request, call_next):
+#     if request.method == "OPTIONS":
+#         print(f"OPTIONS request to: {request.url}")
+#         print(f"Headers: {dict(request.headers)}")
+#     response = await call_next(request)
+#     return response
 
 # Global exception handlers
 @app.exception_handler(FarmaException)
