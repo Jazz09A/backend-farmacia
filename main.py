@@ -55,6 +55,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+print("DOMINIOS AUTORIZADOS: " + settings.ALLOWED_ORIGINS)
 # Add other middlewares
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityMiddleware)
