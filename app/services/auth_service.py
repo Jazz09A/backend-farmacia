@@ -86,7 +86,7 @@ class AuthService:
             )
 
             # Send verification email
-            verification_link = f"http://localhost:8000/api/v1/auth/verify-email/{verification_token}" # Adjust the base URL as needed
+            verification_link = f"{settings.FRONTEND_URL}/verify-email/{verification_token}" # Adjust the base URL as needed
             await email_service.send_email(
                 to_email=db_user.email,
                 subject="Verifica tu cuenta en Grupo Drozainka",
@@ -242,8 +242,9 @@ class AuthService:
     @staticmethod
     async def verify_email(db: Session, token: str) -> dict:
         """Verify user email with token."""
+        print("TOKEN: " + str(token))
         user = db.query(User).filter(User.verification_token == token).first()
-        
+        print("USER: " + str(user))
         if not user:
             raise UserNotFoundException("Token de verificación inválido")
         
