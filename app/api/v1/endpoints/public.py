@@ -370,3 +370,6 @@ async def get_public_features():
         "supported_languages": ["es"],
         "api_version": "v1"
     } 
+
+# @router.get("/"):
+#     ...

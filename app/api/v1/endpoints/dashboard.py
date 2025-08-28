@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.schemas.dashboard import DashboardData
 from app.services.dashboard_service import get_dashboard_data, get_order_by_id, update_order_status, get_all_customers
@@ -54,13 +54,25 @@ def update_order_status_endpoint(
 def get_all_orders_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+    days_filter: int = 7,
+    status: str = Query(None, description="Filtrar por estado del pedido"),
+    sort_by: str = Query("created_at", description="Campo para ordenar: created_at, total, status"),
+    sort_order: str = Query("desc", description="Orden: asc o desc"),
+    ):
     """
     Obtener todos los pedidos con información del usuario.
     """
     orders = get_all_orders_service(db)
     orders_with_user = []
-    
+    if status:
+        orders = [order for order in orders if order.status == status]
+    if sort_by:
+        if sort_by == "created_at":
+            orders = sorted(orders, key=lambda x: x.created_at, reverse=(sort_order == "desc"))
+        elif sort_by == "total":
+            orders = sorted(orders, key=lambda x: x.total, reverse=(sort_order == "desc"))
+        elif sort_by == "status":
+            orders = sorted(orders, key=lambda x: x.status, reverse=(sort_order == "desc"))
     for order in orders:
         # Create OrderDashboardResponse manually to ensure all fields are properly mapped
         order_data = {
