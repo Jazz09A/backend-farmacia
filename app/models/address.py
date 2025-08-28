@@ -35,7 +35,7 @@ class Address(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    shipping_zone_id = Column(String, ForeignKey("shipping_zones.id"), nullable=False)
+    shipping_zone_id = Column(String, ForeignKey("shipping_zones.id"), nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="addresses")

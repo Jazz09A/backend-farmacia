@@ -161,7 +161,7 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
-    sa.Column('shipping_zone_id', sa.String(), nullable=False),
+    sa.Column('shipping_zone_id', sa.String(), nullable=True),
     sa.ForeignKeyConstraint(['shipping_zone_id'], ['shipping_zones.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
