@@ -231,13 +231,6 @@ async def bulk_upload_products(
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
-    print("--- DEBUG: Entering bulk_upload_products endpoint ---")
-    print("--- DEBUG: BULK UPLOAD ENDPOINT REACHED ---")
-    print("--- DEBUG: File: " + str(file.filename))
-    print("--- DEBUG: Current user: " + str(current_user))
-    print("--- DEBUG: Database: " + str(db))
-    print("--- DEBUG: File size: " + str(file.size))
-    print("--- DEBUG: File content type: " + str(file.content_type))
     
     """
     📁 **Carga masiva de productos desde CSV/Excel**
@@ -455,7 +448,7 @@ async def bulk_create_products(
             f"{len(created_products)} products created successfully"
         )
         
-        return {
+        response = {
             "status": "success",
             "message": "Productos creados exitosamente",
             "created_products": created_products,
@@ -463,6 +456,7 @@ async def bulk_create_products(
             "error_count": 0,
             "errors": []
         }
+        return response
         
     except HTTPException:
         raise HTTPException(
