@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     BANESCO_API_KEY: Optional[str] = None
     MERCANTIL_API_KEY: Optional[str] = None
     
+    # Frontend URL
+    FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

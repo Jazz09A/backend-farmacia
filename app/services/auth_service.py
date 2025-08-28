@@ -316,7 +316,7 @@ class AuthService:
             subject="Verifica tu cuenta en Grupo Drozainka",
             template_name="verify_email.html",
             context={
-                "verification_link": f"http://localhost:8000/api/v1/auth/verify-email/{user.verification_token}",
+                "verification_link": f"{settings.FRONTEND_URL}/verify-email/{user.verification_token}",
                 "year": datetime.now().year
             }
         )
