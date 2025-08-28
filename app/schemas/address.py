@@ -14,7 +14,7 @@ class AddressBase(BaseModel):
     address_type: Optional[str] = Field(None, description="Type of address (e.g., home, office).")
     delivery_instructions: Optional[str] = Field(None, description="Special instructions for delivery.")
     is_default: bool = Field(False, description="Is this the default address?")
-    shipping_zone_id: str = Field(..., description="Unique identifier for the shipping zone.")
+    shipping_zone_id: Optional[str] = Field(None, description="Unique identifier for the shipping zone.")
     
 class AddressCreate(AddressBase):
     pass
