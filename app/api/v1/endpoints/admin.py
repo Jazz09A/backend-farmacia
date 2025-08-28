@@ -231,6 +231,14 @@ async def bulk_upload_products(
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
+    print("--- DEBUG: Entering bulk_upload_products endpoint ---")
+    print("--- DEBUG: BULK UPLOAD ENDPOINT REACHED ---")
+    print("--- DEBUG: File: " + str(file.filename))
+    print("--- DEBUG: Current user: " + str(current_user))
+    print("--- DEBUG: Database: " + str(db))
+    print("--- DEBUG: File size: " + str(file.size))
+    print("--- DEBUG: File content type: " + str(file.content_type))
+    
     """
     📁 **Carga masiva de productos desde CSV/Excel**
     
