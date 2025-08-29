@@ -167,7 +167,7 @@ def create_address(
         # Si esta se marca como predeterminada, quitar la marca de las otras
         db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
     
-    new_address = Address(**address_data.dict(), user_id=current_user.id)
+    new_address = Address(**address_data.model_dump(), user_id=current_user.id)
     db.add(new_address)
     db.commit()
     db.refresh(new_address)
