@@ -122,7 +122,7 @@ class OrderItem(Base):
     product_name = Column(String, nullable=False)
     product_brand = Column(String, nullable=False)
     product_image = Column(String, nullable=True)
-    product_images = Column(JSON, nullable=True)  # Array de URLs de imágenes
+    images = Column(JSON, nullable=True)  # Array de URLs de imágenes
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.now(timezone.utc))

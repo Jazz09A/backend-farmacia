@@ -179,7 +179,7 @@ class OrderService:
                     product_name=product.name,
                     product_brand=product.brand,
                     product_image=product.image,
-                    product_images=product.images if product.images else [],  # Array de imágenes
+                    images=product.images if product.images else [],  # Array de imágenes
                 )
                 order_items.append(order_item)
 
