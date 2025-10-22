@@ -1,0 +1,14 @@
+FarmaPlus Logo URL (for email templates)
+============================================================
+
+URL: https://res.cloudinary.com/dxsrz7kgo/image/upload/v1761143187/farmaplus/branding/farmaplus_logo.png
+
+This logo is used in all email templates:
+  - order_tracking.html
+  - payment_approved.html
+  - payment_registered.html
+  - payment_rejected.html
+  - verify_email.html
+
+To update the logo in the future, run:
+  python scripts/update_email_templates_logo.py
