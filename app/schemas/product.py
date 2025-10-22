@@ -13,7 +13,7 @@ class ProductBase(BaseModel):
     description: str = Field(..., min_length=10)
     ingredients: Optional[List[str]] = []
     image: Optional[str] = Field(None, description="URL de imagen principal (deprecated, use images)")
-    images: List[str] = Field(default_factory=list, description="Lista de URLs de imágenes del producto")
+    images: Optional[List[str]] = Field(default_factory=list, description="Lista de URLs de imágenes del producto")
     in_stock: bool = True
     stock: Optional[int] = Field(default=0, ge=0)
     prescription: bool = False
@@ -23,6 +23,13 @@ class ProductBase(BaseModel):
     registro_sanitario: Optional[str] = Field(None, max_length=100)
     contraindicaciones: Optional[str] = None
     efectos_secundarios: Optional[str] = None
+
+    @field_validator('images', mode='before')
+    def validate_images(cls, v):
+        """Convert None to empty list for images field."""
+        if v is None:
+            return []
+        return v
 
     @field_validator('price')
     def validate_price(cls, v):
@@ -127,7 +134,7 @@ class ProductSummary(BaseModel):
     category: str
     price: Decimal  # USD únicamente
     image: Optional[str] = None  # Deprecated, use images
-    images: List[str] = Field(default_factory=list)
+    images: Optional[List[str]] = Field(default_factory=list)
     rating: Decimal
     review_count: int
     in_stock: bool
@@ -136,6 +143,13 @@ class ProductSummary(BaseModel):
     discount_percentage: Optional[Decimal] = Decimal('0.00')
     featured: bool
     slug: Optional[str] = None
+    
+    @field_validator('images', mode='before')
+    def validate_images(cls, v):
+        """Convert None to empty list for images field."""
+        if v is None:
+            return []
+        return v
     
     class Config:
         from_attributes = True
