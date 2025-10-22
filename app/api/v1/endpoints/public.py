@@ -104,7 +104,7 @@ async def get_public_products(
             Product.description.ilike(f"%{search}%"),
             Product.brand.ilike(f"%{search}%"),
             Product.sku.ilike(f"%{search}%"),  
-            Product.ingredients.ilike(f"%{search}%")  
+            func.array_to_string(Product.ingredients, ' ').ilike(f"%{search}%")
         )
         query = query.filter(search_filter)
         applied_filters["search"] = search
@@ -274,7 +274,7 @@ async def search_public_products(
         Product.description.ilike(f"%{q}%"),
         Product.brand.ilike(f"%{q}%"),
         Product.sku.ilike(f"%{q}%"),  # ← Agregar búsqueda por SKU
-        Product.ingredients.ilike(f"%{q}%") if hasattr(Product, 'ingredients') else False
+        func.array_to_string(Product.ingredients, ' ').ilike(f"%{q}%") if hasattr(Product, 'ingredients') else False
     )
     
     query = db.query(Product).filter(
