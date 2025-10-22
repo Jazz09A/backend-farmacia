@@ -1,0 +1,26 @@
+[
+  {
+    "id": "caracas",
+    "name": "Caracas",
+    "price": 5,
+    "delivery_days": "1-2"
+  },
+  {
+    "id": "miranda",
+    "name": "Miranda",
+    "price": 7.5,
+    "delivery_days": "2-3"
+  },
+  {
+    "id": "vargas",
+    "name": "La Guaira",
+    "price": 10,
+    "delivery_days": "3-4"
+  },
+  {
+    "id": "nacional",
+    "name": "Resto del País",
+    "price": 15,
+    "delivery_days": "5-7"
+  }
+]

@@ -1,8 +1,9 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, Date, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, Date, JSON, Float, Numeric
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 
 class User(Base):
     __tablename__ = "users"
@@ -76,9 +77,14 @@ class User(Base):
     reset_token = Column(String, nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
     
+    # Credit fields
+    available_credit = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)
+    credit_limit = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)
+    credit_status = Column(String, default="active", nullable=False)  # active, suspended
+    
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     last_login = Column(DateTime, nullable=True)
     
     # Relationships
@@ -91,6 +97,7 @@ class User(Base):
     notifications = relationship("UserNotification", back_populates="user", cascade="all, delete-orphan")
     blog_posts = relationship("BlogPost", back_populates="author", cascade="all, delete-orphan")
     favorites = relationship("UserFavorite", back_populates="user", cascade="all, delete-orphan")
+    credit_payments = relationship("CreditPayment", back_populates="user", lazy="dynamic")
     
     def __repr__(self):
         if self.user_type == 'natural':

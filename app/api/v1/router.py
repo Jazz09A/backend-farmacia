@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders
-
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts
+from app.api.v1.endpoints import exchange_rate
 api_router = APIRouter()
 
 # =============================================================================
@@ -43,6 +43,13 @@ api_router.include_router(
     orders.router,
     prefix="/orders",
     tags=["📦 Órdenes"],
+)
+
+# Sistema de crédito
+api_router.include_router(
+    credit.router,
+    prefix="/credit",
+    tags=["💳 Crédito"],
 )
 
 # =============================================================================
@@ -95,4 +102,18 @@ api_router.include_router(
     flash_offers.router,
     prefix="/admin",
     tags=["⚡ Flash Offers"],
-) 
+)
+
+# Quantity Discounts
+api_router.include_router(
+    quantity_discounts.router,
+    prefix="/admin",
+    tags=["💰 Descuentos por Cantidad"],
+)
+
+# Exchange Rate
+api_router.include_router(
+    exchange_rate.router,
+    prefix="/exchange_rate",
+    tags=["💰 Exchange Rate"],
+)

@@ -1,11 +1,13 @@
 from typing import List, Optional
+from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 
 from app.models.cart import CartItem
 from app.models.product import Product
-from app.schemas.cart import CartResponse, CartItemResponse
+from app.schemas.cart import CartResponse, CartItemResponse, CartDiscountsInfo
 from app.schemas.product import ProductSummary
+from app.services.discount_service import DiscountService
 
 class CartService:
     def __init__(self, db: Session):
@@ -88,45 +90,62 @@ class CartService:
     def get_user_cart(self, user_id: str) -> Optional[CartResponse]:
         """
         Retrieves the user's cart with detailed product information and calculated totals.
+        SISTEMA UNIFICADO USD: Todo calculado en USD únicamente.
         """
         cart_items = self.db.query(CartItem).options(
             joinedload(CartItem.product)
         ).filter(CartItem.user_id == user_id).all()
 
         if not cart_items:
-            return CartResponse(items=[], total_items=0, total_unique_items=0, total_ves=0, total_ref=0)
+            return CartResponse(
+                items=[],
+                total_items=0,
+                total_unique_items=0,
+                total=Decimal('0.00'),
+                discounts=CartDiscountsInfo()
+            )
 
         response_items = []
-        total_ves = 0.0
-        total_ref = 0.0
-        
+        total = Decimal('0.00')
+
         for item in cart_items:
             product = item.product
-            subtotal_ves = product.price_ves * item.quantity
-            subtotal_ref = product.price_ref * item.quantity
-            
-            total_ves += subtotal_ves
-            total_ref += subtotal_ref
-            
+            # Calcular subtotal EN USD (product.price ya es USD)
+            subtotal = (product.price * item.quantity).quantize(Decimal('0.01'))
+            total += subtotal
+
             product_summary = ProductSummary.model_validate(product)
-            
+
             response_items.append(CartItemResponse(
                 id=item.id,
                 quantity=item.quantity,
                 selected_presentation=item.selected_presentation,
                 product=product_summary,
-                subtotal_ves=subtotal_ves,
-                subtotal_ref=subtotal_ref,
+                subtotal=subtotal,  # USD únicamente
                 created_at=item.created_at,
                 updated_at=item.updated_at
             ))
+
+        # Calcular descuentos aplicables
+        discount_service = DiscountService(self.db)
+        discounts_info = discount_service.calculate_cart_discounts(cart_items)
+
+        # Crear objeto de descuentos para respuesta
+        discounts = CartDiscountsInfo(
+            quantity_discount=discounts_info["quantity_discount"],
+            quantity_discount_amount=discounts_info["quantity_discount_amount"],
+            flash_discounts=discounts_info["flash_discounts"],
+            flash_discount_total=discounts_info["flash_discount_total"],
+            total_discount=discounts_info["total_discount"],
+            subtotal_after_discounts=discounts_info["subtotal_after_discounts"]
+        )
 
         return CartResponse(
             items=response_items,
             total_items=sum(item.quantity for item in cart_items),
             total_unique_items=len(cart_items),
-            total_ves=total_ves,
-            total_ref=total_ref
+            total=total.quantize(Decimal('0.01')),  # USD únicamente
+            discounts=discounts
         )
 
     def _get_cart_item(self, user_id: str, item_id: str) -> CartItem:

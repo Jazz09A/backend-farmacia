@@ -1,0 +1,6 @@
+id,name,description,min_quantity,max_quantity,discount_type,discount_value,is_active,priority,created_at,updated_at
+687ed257-9ecf-419c-adac-fd7b7706133a,Descuento por 10+ productos,10% de descuento al comprar 10 o más productos,10,24,PERCENTAGE,10.0,True,1,2025-10-20 23:22:51.108718,2025-10-20 23:22:51.108718
+e579d6d0-8778-4b4b-9e0a-189c8daf4420,Descuento por 25+ productos,15% de descuento al comprar 25 o más productos,25,49,PERCENTAGE,15.0,True,2,2025-10-20 23:22:51.108718,2025-10-20 23:22:51.108718
+47b9cc94-b070-49f7-93fd-ea88e613d41e,Descuento por 50+ productos,20% de descuento al comprar 50 o más productos,50,99,PERCENTAGE,20.0,True,3,2025-10-20 23:22:51.108718,2025-10-20 23:22:51.108718
+8bf41ecc-df45-4ad6-81a9-8b1b31a7a33a,Descuento por 100+ productos,25% de descuento al comprar 100 o más productos,100,,PERCENTAGE,25.0,True,4,2025-10-20 23:22:51.108718,2025-10-20 23:22:51.108718
+228be42f-7ee7-4afc-9410-3170ee2e9c9b,Descuento fijo por 30+ productos,Descuento fijo de $50 USD al comprar 30 o más productos,30,49,FIXED,50.0,True,5,2025-10-20 23:22:51.108718,2025-10-20 23:22:51.108718

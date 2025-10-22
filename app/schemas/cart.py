@@ -1,9 +1,11 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel, Field
+from decimal import Decimal
 
 from app.schemas.product import ProductSummary
+from app.schemas.promotion import QuantityDiscountResponse
 
 
 class CartItemCreate(BaseModel):
@@ -19,13 +21,12 @@ class CartItemUpdate(BaseModel):
 
 
 class CartItemResponse(BaseModel):
-    """Schema for representing a single item within the cart in API responses."""
+    """Schema for representing a single item within the cart in API responses (sistema unificado USD)."""
     id: str = Field(..., description="Unique identifier for the cart item.")
     quantity: int = Field(..., description="Quantity of the product in the cart.")
     selected_presentation: Optional[str] = Field(None, description="The selected product presentation.")
     product: ProductSummary = Field(..., description="Detailed information about the product.")
-    subtotal_ves: float = Field(..., description="Calculated subtotal for the item in VED.")
-    subtotal_ref: float = Field(..., description="Calculated subtotal for the item in USD.")
+    subtotal: Decimal = Field(..., description="Calculated subtotal for the item in USD.")
     created_at: datetime = Field(..., description="Timestamp when the item was first added.")
     updated_at: datetime = Field(..., description="Timestamp of the last item update.")
 
@@ -33,13 +34,26 @@ class CartItemResponse(BaseModel):
         from_attributes = True
 
 
+class CartDiscountsInfo(BaseModel):
+    """Schema for discount information in cart responses."""
+    quantity_discount: Optional[QuantityDiscountResponse] = Field(None, description="Descuento por cantidad aplicado.")
+    quantity_discount_amount: Decimal = Field(Decimal('0.00'), description="Monto del descuento por cantidad en USD.")
+    flash_discounts: Dict[str, Decimal] = Field(default_factory=dict, description="Descuentos flash por producto en USD.")
+    flash_discount_total: Decimal = Field(Decimal('0.00'), description="Total de descuentos flash en USD.")
+    total_discount: Decimal = Field(Decimal('0.00'), description="Total de todos los descuentos en USD.")
+    subtotal_after_discounts: Decimal = Field(Decimal('0.00'), description="Subtotal después de aplicar descuentos en USD.")
+
+    class Config:
+        from_attributes = True
+
+
 class CartResponse(BaseModel):
-    """Schema for representing the user's entire shopping cart."""
+    """Schema for representing the user's entire shopping cart (sistema unificado USD)."""
     items: List[CartItemResponse] = Field(..., description="A list of all items in the cart.")
     total_items: int = Field(..., description="The total number of individual items in the cart.")
     total_unique_items: int = Field(..., description="The number of unique products in the cart.")
-    total_ves: float = Field(..., description="The grand total price for all items in VED.")
-    total_ref: float = Field(..., description="The grand total price for all items in USD.")
+    total: Decimal = Field(..., description="The grand total price for all items in USD.")
+    discounts: CartDiscountsInfo = Field(..., description="Información completa de descuentos aplicados.")
 
     class Config:
         from_attributes = True

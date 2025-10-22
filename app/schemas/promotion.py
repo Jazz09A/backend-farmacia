@@ -152,4 +152,54 @@ class PromotionalCodeListResponse(BaseModel):
     codes: List[PromotionalCodeResponse]
     total: int
     page: int
-    pages: int 
+    pages: int
+
+# Quantity Discount Schemas
+class QuantityDiscountBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    min_quantity: int = Field(..., gt=0)
+    max_quantity: Optional[int] = Field(None, gt=0)
+    discount_type: DiscountTypeEnum = DiscountTypeEnum.PERCENTAGE
+    discount_value: float = Field(..., gt=0)
+    priority: int = Field(0, ge=0)
+    is_active: bool = True
+
+    @validator('max_quantity')
+    def validate_max_quantity(cls, v, values):
+        if v is not None and 'min_quantity' in values and v < values['min_quantity']:
+            raise ValueError('La cantidad máxima debe ser mayor o igual a la cantidad mínima')
+        return v
+
+    @validator('discount_value')
+    def validate_discount_value(cls, v, values):
+        if values.get('discount_type') == DiscountTypeEnum.PERCENTAGE and v > 100:
+            raise ValueError('El descuento porcentual no puede ser mayor a 100%')
+        return v
+
+class QuantityDiscountCreate(QuantityDiscountBase):
+    pass
+
+class QuantityDiscountUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    min_quantity: Optional[int] = Field(None, gt=0)
+    max_quantity: Optional[int] = Field(None, gt=0)
+    discount_type: Optional[DiscountTypeEnum] = None
+    discount_value: Optional[float] = Field(None, gt=0)
+    priority: Optional[int] = Field(None, ge=0)
+    is_active: Optional[bool] = None
+
+class QuantityDiscountResponse(QuantityDiscountBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class QuantityDiscountListResponse(BaseModel):
+    discounts: List[QuantityDiscountResponse]
+    total: int
+    page: int
+    pages: int

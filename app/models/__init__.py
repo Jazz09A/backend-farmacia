@@ -6,6 +6,7 @@ from .product import Product
 from .cart import CartItem
 from .address import Address, UserPreferences
 from .order import Order, OrderItem, OrderAddress
+from .order_discount import OrderDiscount, DiscountType as OrderDiscountType
 from .review import Review
 from .support import SupportTicket, SupportResponse
 from .promotion import (
@@ -18,6 +19,7 @@ from .shipping import ShippingZone
 from .category import Category, Brand
 from .inventory import InventoryMovement, StockAlert, BatchTracking, MovementType
 from .favorites import UserFavorite
+from .credit_payment import CreditPayment
 
 __all__ = [
     "User",
@@ -28,6 +30,8 @@ __all__ = [
     "Order",
     "OrderItem", 
     "OrderAddress",
+    "OrderDiscount",
+    "OrderDiscountType",
     "Review",
     "SupportTicket",
     "SupportResponse",
@@ -46,5 +50,6 @@ __all__ = [
     "StockAlert", 
     "BatchTracking",
     "MovementType",
-    "UserFavorite"
+    "UserFavorite",
+    "CreditPayment"
 ] 

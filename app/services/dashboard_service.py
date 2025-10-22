@@ -1,15 +1,57 @@
-import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.user import User
 from app.models.order import Order
+from app.models.order_discount import OrderDiscount
 from app.config.logging_config import get_logger
-from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData
+from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData, DiscountBreakdown
 from app.schemas.order import OrderStatus  # Import from schema, not model
 from fastapi import HTTPException
 from app.schemas.order import PaymentStatusEnum
 from app.schemas.order import UpdatePaymentStatus
+from decimal import Decimal
+
+from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
+
+def _calculate_order_discount_info(order: Order) -> dict:
+    """
+    Calculates discount information for an order.
+    
+    Args:
+        order: Order with loaded discounts
+        
+    Returns:
+        dict with discount information
+    """
+    if not order.discounts:
+        return {
+            "total_discounts": 0,
+            "total_discount_amount": Decimal('0.00'),
+            "discount_breakdown": [],
+            "savings_percentage": 0.0,
+            "original_subtotal": order.subtotal,
+            "total_savings": Decimal('0.00')
+        }
+    
+    total_discount_amount = sum(discount.discount_amount for discount in order.discounts)
+    original_subtotal = order.subtotal + total_discount_amount
+    savings_percentage = (total_discount_amount / original_subtotal * 100) if original_subtotal > 0 else 0.0
+    
+    discount_breakdown = [
+        OrderDiscountResponse.model_validate(discount) for discount in order.discounts
+    ]
+    
+    return {
+        "total_discounts": len(order.discounts),
+        "total_discount_amount": total_discount_amount,
+        "discount_breakdown": discount_breakdown,
+        "savings_percentage": round(float(savings_percentage), 2),
+        "original_subtotal": original_subtotal,
+        "total_savings": total_discount_amount
+    }
+
 def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     """
     Retrieves and computes all data required for the admin dashboard.
@@ -27,26 +69,69 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     )
     
     # 1. Calculate date range for filtering
-    end_date = datetime.datetime.now(datetime.timezone.utc)
-    start_date = end_date - datetime.timedelta(days=days_filter)
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days_filter)
 
     # 2. Basic Stats
     total_revenue_query = db.query(func.sum(Order.total)).filter(
     Order.created_at >= start_date,
     Order.status.in_(['pending', 'confirmed', 'processing', 'shipped', 'delivered'])
-    ).scalar() or 0.0
+    ).scalar() or Decimal('0.00')
     
     total_orders = db.query(Order).filter(Order.created_at >= start_date).count()
     new_customers = db.query(User).filter(User.created_at >= start_date).count()
     
     # Placeholder for conversion rate logic
-    conversion_rate = 0.0 
+    conversion_rate = Decimal('0.00') 
+    
+    # 2.1. Calculate discount statistics
+    total_discounts_given = db.query(func.sum(OrderDiscount.discount_amount)).filter(
+        OrderDiscount.created_at >= start_date
+    ).scalar() or Decimal('0.00')
+    
+    orders_with_discounts = db.query(func.count(func.distinct(OrderDiscount.order_id))).filter(
+        OrderDiscount.created_at >= start_date
+    ).scalar() or 0
+    
+    discount_usage_percentage = (orders_with_discounts / total_orders * 100) if total_orders > 0 else 0.0
+    average_discount_per_order = (total_discounts_given / orders_with_discounts) if orders_with_discounts > 0 else Decimal('0.00')
+    
+    # Calculate discount breakdown by type
+    discount_type_counts = db.query(
+        OrderDiscount.discount_type, 
+        func.count(OrderDiscount.id),
+        func.sum(OrderDiscount.discount_amount)
+    ).filter(
+        OrderDiscount.created_at >= start_date
+    ).group_by(OrderDiscount.discount_type).all()
+    
+    discount_breakdown = DiscountBreakdown()
+    total_amount_by_type = {}
+    
+    for discount_type, count, total_amount in discount_type_counts:
+        type_name = discount_type.value
+        total_amount_by_type[type_name] = total_amount or Decimal('0.00')
+        
+        if type_name == 'quantity':
+            discount_breakdown.quantity_discounts = count
+        elif type_name == 'flash':
+            discount_breakdown.flash_discounts = count
+        elif type_name == 'coupon':
+            discount_breakdown.coupon_discounts = count
+        elif type_name == 'promotional':
+            discount_breakdown.promotional_discounts = count
+    
+    discount_breakdown.total_amount_by_type = total_amount_by_type
 
     stats = DashboardStats(
         total_revenue=total_revenue_query,
         total_orders=total_orders,
         new_customers=new_customers,
         conversion_rate=conversion_rate,
+        total_discounts_given=total_discounts_given,
+        orders_with_discounts=orders_with_discounts,
+        discount_usage_percentage=round(discount_usage_percentage, 2),
+        average_discount_per_order=average_discount_per_order,
     )
 
     # 3. Order Status Summary
@@ -95,6 +180,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         stats=stats,
         order_status_summary=order_status_summary,
         recent_orders=recent_orders,
+        discount_breakdown=discount_breakdown,
     ) 
     
 def get_order_by_id(db: Session, id: str) -> Order:
@@ -117,7 +203,33 @@ def update_order_status(db: Session, id: str, status: str) -> Order:
     order.status = status
     db.commit()
     db.refresh(order)
-    return order
+    
+    # Manually construct the response to match OrderResponse schema
+    discount_info = _calculate_order_discount_info(order)
+    
+    response_data = order.__dict__
+    response_data['items'] = order.items
+    response_data['shipping_address'] = order.shipping_address
+    response_data['item_count'] = len(order.items)
+    # Formatear exchange_rate a 2 decimales
+    if response_data.get('exchange_rate'):
+        response_data['exchange_rate'] = response_data['exchange_rate'].quantize(Decimal('0.01'))
+    
+    if discount_info and discount_info["total_discounts"] > 0:
+        response_data['discounts'] = OrderDiscountSummary(
+            total_discounts=discount_info["total_discounts"],
+            total_discount_amount=discount_info["total_discount_amount"],
+            discount_breakdown=discount_info["discount_breakdown"],
+            savings_percentage=discount_info["savings_percentage"]
+        )
+    else:
+        response_data['discounts'] = None
+        
+    response_data['original_subtotal'] = discount_info.get("original_subtotal", order.subtotal)
+    response_data['total_savings'] = discount_info.get("total_savings", Decimal('0.00'))
+    
+    from app.schemas.order import OrderResponse
+    return OrderResponse.model_validate(response_data)
 
 def get_orders_by_status(db: Session, status: str) -> List[Order]:
     orders = db.query(Order).filter(Order.status == status).all()
@@ -176,3 +288,137 @@ def update_payment_status(db: Session, order_id: str, status: PaymentStatusEnum)
     db.commit()
     db.refresh(order)
     return order
+
+# =============================================================================
+# FUNCIONES DE CRÉDITO PARA DASHBOARD
+# =============================================================================
+
+def get_credit_payments_dashboard(db: Session) -> dict:
+    """Dashboard de pagos de crédito para admin"""
+    from app.models.credit_payment import CreditPayment
+    from app.models.order import Order
+    from sqlalchemy import func
+    from datetime import datetime, timezone
+    
+    
+    # Pagos pendientes
+    pending_payments = db.query(CreditPayment).filter(
+        CreditPayment.status == "pending"
+    ).count()
+    
+    # Pagos aprobados hoy
+    today = datetime.now(timezone.utc).date()
+    approved_today = db.query(CreditPayment).filter(
+        CreditPayment.status == "approved",
+        func.date(CreditPayment.approved_at) == today
+    ).count()
+    
+    # Monto total pendiente
+    total_pending_amount = db.query(func.sum(CreditPayment.amount)).filter(
+        CreditPayment.status == "pending"
+    ).scalar() or 0
+    
+    # Órdenes con pagos pendientes
+    orders_with_pending = db.query(Order).filter(
+        Order.is_credit_order == True,
+        Order.credit_remaining > 0
+    ).count()
+    
+    return {
+        "pending_payments": pending_payments,
+        "approved_today": approved_today,
+        "total_pending_amount": total_pending_amount,
+        "orders_with_pending": orders_with_pending
+    }
+
+def get_user_credit_dashboard(user_id: str, db: Session) -> dict:
+    """Dashboard de crédito para usuario"""
+    from app.models.user import User
+    from app.models.order import Order
+    from app.models.credit_payment import CreditPayment
+    from sqlalchemy import func
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {}
+    
+    # Órdenes del usuario
+    orders = db.query(Order).filter(
+        Order.user_id == user_id,
+        Order.is_credit_order == True
+    ).all()
+    
+    # Pagos pendientes de aprobación
+    pending_payments = db.query(CreditPayment).filter(
+        CreditPayment.user_id == user_id,
+        CreditPayment.status == "pending"
+    ).all()
+    
+    # Pagos aprobados recientes
+    recent_approved = db.query(CreditPayment).filter(
+        CreditPayment.user_id == user_id,
+        CreditPayment.status == "approved"
+    ).order_by(CreditPayment.approved_at.desc()).limit(5).all()
+    
+    # Estadísticas
+    total_credit_used = sum(order.credit_amount for order in orders)
+    total_paid = sum(order.credit_paid_total for order in orders)
+    total_remaining = sum(order.credit_remaining for order in orders)
+    
+    # Convert ORM payments to serializable dicts
+    from app.schemas.credit import CreditPaymentResponse
+    recent_approved_serialized = [
+        CreditPaymentResponse.model_validate(p).model_dump()
+        for p in recent_approved
+    ]
+
+    return {
+        "user_credit": {
+            "available_credit": user.available_credit,
+            "credit_limit": user.credit_limit,
+            "credit_status": user.credit_status
+        },
+        "orders": {
+            "total_orders": len(orders),
+            "total_credit_used": total_credit_used,
+            "total_paid": total_paid,
+            "total_remaining": total_remaining
+        },
+        "payments": {
+            "pending_count": len(pending_payments),
+            "pending_amount": sum(p.amount for p in pending_payments),
+            "recent_approved": recent_approved_serialized
+        }
+    }
+
+def get_payment_details(payment_id: str, db: Session) -> dict:
+    """Detalles completos de un pago"""
+    from app.models.credit_payment import CreditPayment
+    from app.models.order import Order
+    from app.models.user import User
+    
+    payment = db.query(CreditPayment).filter(CreditPayment.id == payment_id).first()
+    if not payment:
+        return None
+    
+    order = payment.order
+    user = payment.user
+    
+    from app.schemas.credit import CreditPaymentResponse
+    payment_serialized = CreditPaymentResponse.model_validate(payment).model_dump()
+
+    return {
+        "payment": payment_serialized,
+        "order": {
+            "id": order.id,
+            "order_number": order.order_number,
+            "total": order.total,
+            "credit_remaining": order.credit_remaining,
+            "credit_paid_total": order.credit_paid_total
+        },
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "company_name": user.company_name
+        }
+    }

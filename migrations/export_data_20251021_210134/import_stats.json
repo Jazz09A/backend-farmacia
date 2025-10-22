@@ -1,0 +1,24 @@
+{
+  "tables_processed": 14,
+  "tables_success": 14,
+  "tables_error": 14,
+  "total_records_imported": 0,
+  "errors": [
+    "addresses: (psycopg2.errors.UndefinedTable) relation \"addresses\" does not exist\n\n[SQL: TRUNCATE TABLE addresses RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "brands: (psycopg2.errors.UndefinedTable) relation \"brands\" does not exist\n\n[SQL: TRUNCATE TABLE brands RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "cart_items: (psycopg2.errors.UndefinedTable) relation \"cart_items\" does not exist\n\n[SQL: TRUNCATE TABLE cart_items RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "categories: (psycopg2.errors.UndefinedTable) relation \"categories\" does not exist\n\n[SQL: TRUNCATE TABLE categories RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "credit_payments: (psycopg2.errors.UndefinedTable) relation \"credit_payments\" does not exist\n\n[SQL: TRUNCATE TABLE credit_payments RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "order_addresses: (psycopg2.errors.UndefinedTable) relation \"order_addresses\" does not exist\n\n[SQL: TRUNCATE TABLE order_addresses RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "order_discounts: (psycopg2.errors.UndefinedTable) relation \"order_discounts\" does not exist\n\n[SQL: TRUNCATE TABLE order_discounts RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "order_items: (psycopg2.errors.UndefinedTable) relation \"order_items\" does not exist\n\n[SQL: TRUNCATE TABLE order_items RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "orders: (psycopg2.errors.UndefinedTable) relation \"orders\" does not exist\n\n[SQL: TRUNCATE TABLE orders RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "products: (psycopg2.errors.UndefinedTable) relation \"products\" does not exist\n\n[SQL: TRUNCATE TABLE products RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "quantity_discounts: (psycopg2.errors.UndefinedTable) relation \"quantity_discounts\" does not exist\n\n[SQL: TRUNCATE TABLE quantity_discounts RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "shipping_zones: (psycopg2.errors.UndefinedTable) relation \"shipping_zones\" does not exist\n\n[SQL: TRUNCATE TABLE shipping_zones RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "user_preferences: (psycopg2.errors.UndefinedTable) relation \"user_preferences\" does not exist\n\n[SQL: TRUNCATE TABLE user_preferences RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "users: (psycopg2.errors.UndefinedTable) relation \"users\" does not exist\n\n[SQL: TRUNCATE TABLE users RESTART IDENTITY CASCADE]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+  ],
+  "import_completed": true,
+  "import_timestamp": "2025-10-21T21:02:28.358604"
+}

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, Table, Index
+from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, Table, Index, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.types import TypeDecorator, JSON
@@ -6,6 +6,7 @@ from app.config.database import Base
 import uuid
 from datetime import datetime
 import json
+from decimal import Decimal
 
 # Custom array type that works with both SQLite and PostgreSQL
 class ArrayType(TypeDecorator):
@@ -65,10 +66,9 @@ class Product(Base):
     subcategory = Column(String, nullable=True, index=True)
     patology = Column(String, nullable=True, index=True)
     
-    # Pricing
-    price_ves = Column(Float, nullable=False, index=True)  # Add index for price filtering
-    price_ref = Column(Float, nullable=False)
-    original_price = Column(Float, nullable=True)  # For offers
+    # Pricing (USD only - sistema unificado)
+    price = Column(Numeric(10, 2), nullable=False, index=True)  # Precio base en USD
+    original_price = Column(Numeric(10, 2), nullable=True)  # Precio original en USD para ofertas
     
     # Description and details
     description = Column(Text, nullable=False)
@@ -86,7 +86,7 @@ class Product(Base):
     prescription = Column(Boolean, default=False, index=True)
     
     # Rating and reviews
-    rating = Column(Float, default=0.0, index=True)  # Add index for rating sorting
+    rating = Column(Numeric(3, 2), default=Decimal('0.00'), index=True)  # Add index for rating sorting
     review_count = Column(Integer, default=0)
     
     # Offers and promotions
@@ -126,16 +126,16 @@ class Product(Base):
     
     @property
     def current_price(self):
-        """Return current price (offer price if available, otherwise regular price)."""
+        """Return current price in USD (offer price if available, otherwise regular price)."""
         if self.is_offer and self.original_price:
-            return self.price_ves
-        return self.price_ves
+            return self.price  # Precio de oferta en USD
+        return self.price  # Precio regular en USD
     
     @property
     def discount_percentage(self):
-        """Calculate discount percentage if product is on offer."""
+        """Calculate discount percentage if product is on offer (based on USD prices)."""
         if self.is_offer and self.original_price and self.original_price > 0:
-            return round(((self.original_price - self.price_ves) / self.original_price) * 100, 2)
+            return round(((self.original_price - self.price) / self.original_price) * 100, 2)
         return 0
     
     @property
@@ -157,7 +157,7 @@ class Product(Base):
         # Index for prescription filtering with stock
         Index('idx_product_prescription_stock', 'prescription', 'in_stock'),
         # Index for price range queries with stock
-        Index('idx_product_price_stock', 'price_ves', 'in_stock'),
+        Index('idx_product_price_stock', 'price', 'in_stock'),
         # Index for sorting by rating with stock
         Index('idx_product_rating_stock', 'rating', 'in_stock'),
         # Index for sorting by creation date

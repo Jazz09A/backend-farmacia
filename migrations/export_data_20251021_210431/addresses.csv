@@ -1,0 +1,3 @@
+id,user_id,street,city,state,postal_code,country,recipient_name,recipient_phone,address_type,delivery_instructions,is_default,is_active,created_at,updated_at,shipping_zone_id
+6b9f5dec-8df2-4728-963f-b31681048ab6,7b3d79df-14b7-40eb-b0a8-5e66c0430673,"Av. Principal de las Acacias, Res. A, Piso 1, Apto 1A",Caracas,Distrito Capital,1050,Venezuela,Nombre Apellido (Prueba),0412-1234567,home,Llamar antes de entregar.,True,True,2025-08-02 21:16:29.878997,2025-08-02 21:16:29.878997,caracas
+435f87c2-355f-45e2-940d-d11e911c0e0b,a66fcdab-73ac-498f-8c4d-ea4aba13a965,palo alto calle G,Caracas,Miranda,21342,Venezuela,dasfasdf,sdfafea,,,True,True,2025-08-23 15:58:52.230484,2025-08-23 15:58:52.230484,

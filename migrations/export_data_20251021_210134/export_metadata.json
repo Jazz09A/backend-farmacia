@@ -1,0 +1,2824 @@
+{
+  "export_timestamp": "20251021_210134",
+  "source_database": "SQLite",
+  "target_database": "PostgreSQL",
+  "tables_exported": 28,
+  "tables": {
+    "addresses": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "street",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "city",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "state",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "postal_code",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "country",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "recipient_name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "recipient_phone",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "address_type",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "delivery_instructions",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_default",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "shipping_zone_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 2,
+      "export_files": {
+        "json": "addresses.json",
+        "csv": "addresses.csv"
+      }
+    },
+    "alembic_version": {
+      "columns": [
+        {
+          "name": "version_num",
+          "type": "VARCHAR(32)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "alembic_version.json",
+        "csv": "alembic_version.csv"
+      }
+    },
+    "batch_tracking": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "batch_number",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "manufacture_date",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "expiry_date",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "initial_quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "current_quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reserved_quantity",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "unit_cost",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "selling_price",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "supplier_name",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "supplier_invoice",
+          "type": "VARCHAR(100)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quality_checked",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quality_status",
+          "type": "VARCHAR(50)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quality_notes",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "batch_tracking.json",
+        "csv": "batch_tracking.csv"
+      }
+    },
+    "blog_categories": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "blog_categories.json",
+        "csv": "blog_categories.csv"
+      }
+    },
+    "blog_posts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "content",
+          "type": "TEXT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "author_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "category_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "featured_image_url",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "published_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "blog_posts.json",
+        "csv": "blog_posts.csv"
+      }
+    },
+    "brands": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "logo_url",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_featured",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 6,
+      "export_files": {
+        "json": "brands.json",
+        "csv": "brands.csv"
+      }
+    },
+    "cart_items": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "selected_presentation",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 2,
+      "export_files": {
+        "json": "cart_items.json",
+        "csv": "cart_items.csv"
+      }
+    },
+    "categories": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR(100)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "icon",
+          "type": "VARCHAR(50)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "color",
+          "type": "VARCHAR(20)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "parent_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 16,
+      "export_files": {
+        "json": "categories.json",
+        "csv": "categories.csv"
+      }
+    },
+    "credit_payments": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "amount",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_currency",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "exchange_rate_used",
+          "type": "NUMERIC(10, 4)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_reference",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_capture_url",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "admin_notes",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "approved_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "approved_by",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 1,
+      "export_files": {
+        "json": "credit_payments.json",
+        "csv": "credit_payments.csv"
+      }
+    },
+    "flash_offers": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_type",
+          "type": "VARCHAR(10)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_value",
+          "type": "FLOAT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "start_time",
+          "type": "DATETIME",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "end_time",
+          "type": "DATETIME",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "max_quantity",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "used_quantity",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "flash_offers.json",
+        "csv": "flash_offers.csv"
+      }
+    },
+    "inventory_movements": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "movement_type",
+          "type": "VARCHAR(10)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reason",
+          "type": "VARCHAR(100)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reference_id",
+          "type": "VARCHAR(255)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "unit_cost",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "total_cost",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "stock_before",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "stock_after",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "inventory_movements.json",
+        "csv": "inventory_movements.csv"
+      }
+    },
+    "order_addresses": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "street",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "city",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "state",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "postal_code",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "country",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "recipient_name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "recipient_phone",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "address_type",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "delivery_instructions",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 22,
+      "export_files": {
+        "json": "order_addresses.json",
+        "csv": "order_addresses.csv"
+      }
+    },
+    "order_discounts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_type",
+          "type": "VARCHAR(11)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_value",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_amount",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "applied_to",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity_threshold",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 5,
+      "export_files": {
+        "json": "order_discounts.json",
+        "csv": "order_discounts.csv"
+      }
+    },
+    "order_items": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "unit_price",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "total_price",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "selected_presentation",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_brand",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_image",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 9,
+      "export_files": {
+        "json": "order_items.json",
+        "csv": "order_items.csv"
+      }
+    },
+    "orders": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "order_number",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "subtotal",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "shipping_cost",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "taxes",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "total",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_currency",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "exchange_rate",
+          "type": "NUMERIC(10, 4)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_method",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_status",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_reference",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_capture_url",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_details",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "tracking_number",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "estimated_delivery",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "delivered_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "customer_notes",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "admin_notes",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_credit_order",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_amount",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_remaining",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_paid_total",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "payment_due_date",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_paid",
+          "type": "BOOLEAN",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_payment_date",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity_discount_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "quantity_discount_amount",
+          "type": "DECIMAL(10,2)",
+          "not_null": false,
+          "default_value": "0.00",
+          "primary_key": false
+        }
+      ],
+      "record_count": 7,
+      "export_files": {
+        "json": "orders.json",
+        "csv": "orders.csv"
+      }
+    },
+    "products": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "sku",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "brand_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "category_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "brand",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "subcategory",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "patology",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "price",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "original_price",
+          "type": "NUMERIC(10, 2)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "ingredients",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "image",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "images",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "in_stock",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "stock",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "prescription",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "rating",
+          "type": "NUMERIC(3, 2)",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "review_count",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_offer",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "offer_end_time",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "featured",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "dosage",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "presentation",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "laboratorio",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "registro_sanitario",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "contraindicaciones",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "efectos_secundarios",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "meta_title",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "meta_description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 116,
+      "export_files": {
+        "json": "products.json",
+        "csv": "products.csv"
+      }
+    },
+    "promotion_usages": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "promotional_code_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "order_id",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_amount",
+          "type": "FLOAT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "order_amount",
+          "type": "FLOAT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "used_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "promotion_usages.json",
+        "csv": "promotion_usages.csv"
+      }
+    },
+    "promotional_codes": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(50)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_type",
+          "type": "VARCHAR(10)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_value",
+          "type": "FLOAT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "min_amount",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "max_discount",
+          "type": "FLOAT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "usage_limit",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "used_count",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_limit",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "valid_from",
+          "type": "DATETIME",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "valid_until",
+          "type": "DATETIME",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "applicable_categories",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "applicable_products",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "promotional_codes.json",
+        "csv": "promotional_codes.csv"
+      }
+    },
+    "quantity_discounts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "min_quantity",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "max_quantity",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_type",
+          "type": "VARCHAR(10)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "discount_value",
+          "type": "FLOAT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "priority",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 5,
+      "export_files": {
+        "json": "quantity_discounts.json",
+        "csv": "quantity_discounts.csv"
+      }
+    },
+    "reviews": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "rating",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "comment",
+          "type": "TEXT",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_verified_purchase",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_approved",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_featured",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "helpful_votes",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "total_votes",
+          "type": "INTEGER",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reviewer_name",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reviewer_age_group",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "reviews.json",
+        "csv": "reviews.csv"
+      }
+    },
+    "shipping_zones": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "price",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "delivery_days",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 4,
+      "export_files": {
+        "json": "shipping_zones.json",
+        "csv": "shipping_zones.csv"
+      }
+    },
+    "stock_alerts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "min_stock_threshold",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "max_stock_threshold",
+          "type": "INTEGER",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_low_stock",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_out_of_stock",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_overstocked",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "low_stock_notified",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "out_of_stock_notified",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "overstocked_notified",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "last_check",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "stock_alerts.json",
+        "csv": "stock_alerts.csv"
+      }
+    },
+    "support_responses": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "ticket_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "support_responses.json",
+        "csv": "support_responses.csv"
+      }
+    },
+    "support_tickets": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "subject",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "priority",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "support_tickets.json",
+        "csv": "support_tickets.csv"
+      }
+    },
+    "user_favorites": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "user_favorites.json",
+        "csv": "user_favorites.csv"
+      }
+    },
+    "user_notifications": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "title",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_read",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "read_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "link",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 0,
+      "export_files": {
+        "json": "user_notifications.json",
+        "csv": "user_notifications.csv"
+      }
+    },
+    "user_preferences": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "user_id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "email_notifications",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "sms_notifications",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "push_notifications",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "promotional_emails",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "product_recommendations",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "preferred_currency",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "preferred_language",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "show_reviews_publicly",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "share_data_for_recommendations",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 2,
+      "export_files": {
+        "json": "user_preferences.json",
+        "csv": "user_preferences.csv"
+      }
+    },
+    "users": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": true
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "hashed_password",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_type",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "phone",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "preferred_currency",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "first_name",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "last_name",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "cedula",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "birth_date",
+          "type": "DATE",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "address",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "company_name",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "rif",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "registro_mercantil",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "representante_legal_cedula",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "representante_legal_nombre",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "representantes_adicionales",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "referencia_comercial_proveedor",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "referencia_bancaria",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "dueno_telefono",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "dueno_email",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "dueno_cumpleanos",
+          "type": "DATE",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_compra_telefono",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_compra_email",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_compra_cumpleanos",
+          "type": "DATE",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_cobranza_telefono",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_cobranza_email",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "encargado_cobranza_cumpleanos",
+          "type": "DATE",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "redes_sociales",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "pagina_web",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "codigo_sicm",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "fotos_establecimiento",
+          "type": "JSON",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "direccion_establecimiento",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "is_verified",
+          "type": "BOOLEAN",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "role",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "verification_token",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reset_token",
+          "type": "VARCHAR",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "reset_token_expires",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "available_credit",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_limit",
+          "type": "NUMERIC(10, 2)",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "credit_status",
+          "type": "VARCHAR",
+          "not_null": true,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        },
+        {
+          "name": "last_login",
+          "type": "DATETIME",
+          "not_null": false,
+          "default_value": null,
+          "primary_key": false
+        }
+      ],
+      "record_count": 4,
+      "export_files": {
+        "json": "users.json",
+        "csv": "users.csv"
+      }
+    }
+  },
+  "total_records": 201,
+  "export_completed": true
+}

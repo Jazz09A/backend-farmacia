@@ -1,0 +1,32 @@
+[
+  {
+    "id": "d273556e-b241-4f56-acf1-31f2c5672dad",
+    "user_id": "7b3d79df-14b7-40eb-b0a8-5e66c0430673",
+    "email_notifications": true,
+    "sms_notifications": false,
+    "push_notifications": true,
+    "promotional_emails": true,
+    "product_recommendations": true,
+    "preferred_currency": "USD",
+    "preferred_language": "es",
+    "show_reviews_publicly": true,
+    "share_data_for_recommendations": true,
+    "created_at": "2025-07-26 22:50:44.547934",
+    "updated_at": "2025-07-26 22:50:44.547934"
+  },
+  {
+    "id": "4e15881c-6012-4109-988c-d4e8f1b5fee8",
+    "user_id": "6ffffe5d-26ef-40e7-952c-aac55c9c4f6d",
+    "email_notifications": true,
+    "sms_notifications": false,
+    "push_notifications": true,
+    "promotional_emails": true,
+    "product_recommendations": true,
+    "preferred_currency": "USD",
+    "preferred_language": "es",
+    "show_reviews_publicly": true,
+    "share_data_for_recommendations": true,
+    "created_at": "2025-07-30 18:10:37.364136",
+    "updated_at": "2025-07-30 18:10:37.364136"
+  }
+]

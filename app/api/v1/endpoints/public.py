@@ -10,7 +10,9 @@ from app.models.product import Product
 from app.models.user import User
 from app.core.dependencies import PaginationParams, get_pagination_params
 from app.schemas.product import ProductResponse, ProductListResponse, ProductSummary
+from app.schemas.promotion import QuantityDiscountResponse
 from app.core.dependencies import get_optional_current_user
+from app.services.discount_service import DiscountService
 
 router = APIRouter(prefix="/public")
 
@@ -33,6 +35,28 @@ async def get_public_product(
         'discount_percentage': product.discount_percentage,
         'is_available': product.is_available
     }
+    # Handle empty strings for required fields
+    if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+        product_dict['description'] = 'Sin descripción disponible'
+    
+    # Handle images - prioritize images list, fallback to single image
+    images = product_dict.get('images', [])
+    if not images or not isinstance(images, list) or len(images) == 0:
+        # If no images list, check single image field
+        single_image = product_dict.get('image', '')
+        if single_image and len(single_image.strip()) > 0:
+            images = [single_image]
+        else:
+            images = ['/static/images/no-image.png']
+    
+    # Ensure we have at least one image
+    if not images or len(images) == 0:
+        images = ['/static/images/no-image.png']
+    
+    # Set both fields for consistency
+    product_dict['images'] = images
+    product_dict['image'] = images[0]  # First image as main image
+    
     return ProductResponse.model_validate(product_dict)
 
 # =============================================================================
@@ -86,11 +110,11 @@ async def get_public_products(
         applied_filters["search"] = search
     
     if min_price is not None:
-        query = query.filter(Product.price_ves >= min_price)
+        query = query.filter(Product.price >= min_price)
         applied_filters["min_price"] = min_price
     
     if max_price is not None:
-        query = query.filter(Product.price_ves <= max_price)
+        query = query.filter(Product.price <= max_price)
         applied_filters["max_price"] = max_price
     
     if prescription_required is not None:
@@ -107,9 +131,9 @@ async def get_public_products(
     
     # Apply sorting
     if sort_by == "price_asc":
-        query = query.order_by(asc(Product.price_ves))
+        query = query.order_by(asc(Product.price))
     elif sort_by == "price_desc":
-        query = query.order_by(desc(Product.price_ves))
+        query = query.order_by(desc(Product.price))
     elif sort_by == "rating":
         query = query.order_by(desc(Product.rating))
     elif sort_by == "newest":
@@ -147,6 +171,28 @@ async def get_public_products(
             'discount_percentage': product.discount_percentage,
             'is_available': product.in_stock and product.stock > 0
         }
+        # Handle empty strings for required fields
+        if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+            product_dict['description'] = 'Sin descripción disponible'
+        
+        # Handle images - prioritize images list, fallback to single image
+        images = product_dict.get('images', [])
+        if not images or not isinstance(images, list) or len(images) == 0:
+            # If no images list, check single image field
+            single_image = product_dict.get('image', '')
+            if single_image and len(single_image.strip()) > 0:
+                images = [single_image]
+            else:
+                images = ['/static/images/no-image.png']
+        
+        # Ensure we have at least one image
+        if not images or len(images) == 0:
+            images = ['/static/images/no-image.png']
+        
+        # Set both fields for consistency
+        product_dict['images'] = images
+        product_dict['image'] = images[0]  # First image as main image
+        
         product_responses.append(ProductResponse.model_validate(product_dict))
     
     return ProductListResponse.create(
@@ -179,7 +225,35 @@ async def get_public_product_detail(
             detail="Producto no encontrado"
         )
     
-    return ProductResponse.from_orm(product)
+    product_dict = {
+        **product.__dict__,
+        'current_price': product.current_price,
+        'discount_percentage': product.discount_percentage,
+        'is_available': product.in_stock and product.stock > 0
+    }
+    # Handle empty strings for required fields
+    if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+        product_dict['description'] = 'Sin descripción disponible'
+    
+    # Handle images - prioritize images list, fallback to single image
+    images = product_dict.get('images', [])
+    if not images or not isinstance(images, list) or len(images) == 0:
+        # If no images list, check single image field
+        single_image = product_dict.get('image', '')
+        if single_image and len(single_image.strip()) > 0:
+            images = [single_image]
+        else:
+            images = ['/static/images/no-image.png']
+    
+    # Ensure we have at least one image
+    if not images or len(images) == 0:
+        images = ['/static/images/no-image.png']
+    
+    # Set both fields for consistency
+    product_dict['images'] = images
+    product_dict['image'] = images[0]  # First image as main image
+    
+    return ProductResponse.model_validate(product_dict)
 
 @router.get("/products/search", response_model=ProductListResponse)
 async def search_public_products(
@@ -216,9 +290,9 @@ async def search_public_products(
     
     # Apply sorting
     if sort_by == "price_asc":
-        query = query.order_by(asc(Product.price_ves))
+        query = query.order_by(asc(Product.price))
     elif sort_by == "price_desc":
-        query = query.order_by(desc(Product.price_ves))
+        query = query.order_by(desc(Product.price))
     elif sort_by == "rating":
         query = query.order_by(desc(Product.rating))
     elif sort_by == "name":
@@ -248,6 +322,28 @@ async def search_public_products(
             'discount_percentage': product.discount_percentage,
             'is_available': product.in_stock and product.stock > 0
         }
+        # Handle empty strings for required fields
+        if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+            product_dict['description'] = 'Sin descripción disponible'
+        
+        # Handle images - prioritize images list, fallback to single image
+        images = product_dict.get('images', [])
+        if not images or not isinstance(images, list) or len(images) == 0:
+            # If no images list, check single image field
+            single_image = product_dict.get('image', '')
+            if single_image and len(single_image.strip()) > 0:
+                images = [single_image]
+            else:
+                images = ['/static/images/no-image.png']
+        
+        # Ensure we have at least one image
+        if not images or len(images) == 0:
+            images = ['/static/images/no-image.png']
+        
+        # Set both fields for consistency
+        product_dict['images'] = images
+        product_dict['image'] = images[0]  # First image as main image
+        
         product_responses.append(ProductResponse.model_validate(product_dict))
     
     return ProductListResponse.create(
@@ -370,6 +466,24 @@ async def get_public_features():
         "supported_languages": ["es"],
         "api_version": "v1"
     } 
+
+# =============================================================================
+# DESCUENTOS PÚBLICOS
+# =============================================================================
+
+@router.get("/quantity-discounts/applicable", response_model=Optional[QuantityDiscountResponse])
+async def get_applicable_quantity_discount(
+    total_quantity: int = Query(..., gt=0, description="Cantidad total de productos"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener el descuento por cantidad aplicable para una cantidad dada.
+
+    **Endpoint público** - No requiere autenticación.
+    """
+    service = DiscountService(db)
+    discount = service.get_applicable_quantity_discount(total_quantity)
+    return discount
 
 # @router.get("/"):
 #     ...

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Pago Rechazado - FarmaPlus</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #e74c3c; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f8f9fa; }
+        .footer { background-color: #34495e; color: white; padding: 15px; text-align: center; font-size: 12px; }
+        .warning { background-color: #f8d7da; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0; }
+        .amount { font-size: 24px; font-weight: bold; color: #e74c3c; }
+        .reason { background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>❌ Pago Rechazado</h1>
+            <p>FarmaPlus - Sistema de Crédito</p>
+        </div>
+        
+        <div class="content">
+            <h2>Hola {{user_name}},</h2>
+            
+            <div class="warning">
+                <h3>⚠️ Tu pago ha sido rechazado</h3>
+                <p>Monto: <span class="amount">{{amount}} {{currency}}</span></p>
+                <p>Orden: <strong>{{order_number}}</strong></p>
+            </div>
+            
+            {% if admin_notes %}
+            <div class="reason">
+                <h3>📝 Motivo del Rechazo:</h3>
+                <p>{{admin_notes}}</p>
+            </div>
+            {% endif %}
+            
+            <h3>🔧 ¿Qué puedes hacer?</h3>
+            <ul>
+                <li>Verificar que la información del pago sea correcta</li>
+                <li>Subir una nueva captura del pago si es necesario</li>
+                <li>Contactar a nuestro equipo de soporte si tienes dudas</li>
+            </ul>
+            
+            <p>Puedes intentar realizar el pago nuevamente desde tu panel de usuario.</p>
+            
+            <p>Si necesitas ayuda, no dudes en contactarnos.</p>
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 FarmaPlus. Todos los derechos reservados.</p>
+            <p>Este es un email automático, por favor no responder.</p>
+        </div>
+    </div>
+</body>
+</html>

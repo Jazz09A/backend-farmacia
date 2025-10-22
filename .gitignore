@@ -1,7 +1,7 @@
 # =============================================================================
 # 🐍 PYTHON
 # =============================================================================
-
+database_visualization.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -502,7 +502,11 @@ TODO_personal.md
 ideas.txt
 seed_data.py
 run_tests.py
-
+*.md
+scripts/
+static/
+tests/
+alembic/
 # =============================================================================
 # 🔄 ARCHIVOS DE RESPALDO Y VERSIONES
 # =============================================================================

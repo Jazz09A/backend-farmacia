@@ -1,0 +1,38 @@
+[
+  {
+    "id": "6b9f5dec-8df2-4728-963f-b31681048ab6",
+    "user_id": "7b3d79df-14b7-40eb-b0a8-5e66c0430673",
+    "street": "Av. Principal de las Acacias, Res. A, Piso 1, Apto 1A",
+    "city": "Caracas",
+    "state": "Distrito Capital",
+    "postal_code": "1050",
+    "country": "Venezuela",
+    "recipient_name": "Nombre Apellido (Prueba)",
+    "recipient_phone": "0412-1234567",
+    "address_type": "home",
+    "delivery_instructions": "Llamar antes de entregar.",
+    "is_default": true,
+    "is_active": true,
+    "created_at": "2025-08-02 21:16:29.878997",
+    "updated_at": "2025-08-02 21:16:29.878997",
+    "shipping_zone_id": "caracas"
+  },
+  {
+    "id": "435f87c2-355f-45e2-940d-d11e911c0e0b",
+    "user_id": "a66fcdab-73ac-498f-8c4d-ea4aba13a965",
+    "street": "palo alto calle G",
+    "city": "Caracas",
+    "state": "Miranda",
+    "postal_code": "21342",
+    "country": "Venezuela",
+    "recipient_name": "dasfasdf",
+    "recipient_phone": "sdfafea",
+    "address_type": null,
+    "delivery_instructions": null,
+    "is_default": true,
+    "is_active": true,
+    "created_at": "2025-08-23 15:58:52.230484",
+    "updated_at": "2025-08-23 15:58:52.230484",
+    "shipping_zone_id": null
+  }
+]

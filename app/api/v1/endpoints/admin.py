@@ -149,6 +149,28 @@ async def get_admin_products(
             'discount_percentage': product.discount_percentage,
             'is_available': True if product.in_stock and product.stock > 0 else False
         }
+        # Handle empty strings for required fields
+        if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+            product_dict['description'] = 'Sin descripción disponible'
+        
+        # Handle images - prioritize images list, fallback to single image
+        images = product_dict.get('images', [])
+        if not images or not isinstance(images, list) or len(images) == 0:
+            # If no images list, check single image field
+            single_image = product_dict.get('image', '')
+            if single_image and len(single_image.strip()) > 0:
+                images = [single_image]
+            else:
+                images = ['/static/images/no-image.png']
+        
+        # Ensure we have at least one image
+        if not images or len(images) == 0:
+            images = ['/static/images/no-image.png']
+        
+        # Set both fields for consistency
+        product_dict['images'] = images
+        product_dict['image'] = images[0]  # First image as main image
+        
         product_responses.append(ProductResponse.model_validate(product_dict))
     
     return ProductListResponse.create(
@@ -161,30 +183,15 @@ async def get_admin_products(
 
 @router.post("/products", response_model=ProductResponse)
 async def create_product(
-    product_data: ProductCreateInput,
+    product_data: ProductCreate, # Changed from ProductCreateInput
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
     ➕ **Crear producto**
     
-    Crea un nuevo producto en el sistema con precio en USD.
-    El precio en VES se calcula automáticamente usando el tipo de cambio actual.
+    Crea un nuevo producto en el sistema. El precio debe ser en USD.
     """
-    # Get current exchange rate
-    current_rate = await exchange_service.get_current_rate_for_product_creation()
-    if not current_rate:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No se pudo obtener el tipo de cambio actual. Intente nuevamente."
-        )
-    
-    # Calculate VES prices
-    price_ves = exchange_service.calculate_ves_price(product_data.price_usd, current_rate)
-    original_price_ves = None
-    if product_data.original_price_usd:
-        original_price_ves = exchange_service.calculate_ves_price(product_data.original_price_usd, current_rate)
-    
     # Generate slug if not provided
     slug = product_data.slug
     if not slug:
@@ -201,13 +208,7 @@ async def create_product(
         )
     
     # Prepare product data for database
-    product_dict = product_data.model_dump(exclude={'price_usd', 'original_price_usd', 'slug'})
-    product_dict.update({
-        'price_ves': price_ves,
-        'price_ref': product_data.price_usd,  # Store USD as reference price
-        'original_price': original_price_ves,
-        'slug': slug
-    })
+    product_dict = product_data.model_dump()
     
     # Create product
     db_product = Product(**product_dict)
@@ -222,6 +223,11 @@ async def create_product(
         'discount_percentage': db_product.discount_percentage,
         'is_available': db_product.is_available
     }
+    # Handle empty strings for required fields
+    if not response_dict.get('description') or len(response_dict.get('description', '').strip()) < 10:
+        response_dict['description'] = 'Sin descripción disponible'
+    if not response_dict.get('image') or len(response_dict.get('image', '').strip()) < 1:
+        response_dict['image'] = '/static/images/no-image.png'
     
     return ProductResponse.model_validate(response_dict)
 
@@ -243,8 +249,7 @@ async def bulk_upload_products(
     
     **Columnas requeridas:**
     - name/nombre: Nombre del producto
-    - price_ves/precio_ves: Precio en bolívares
-    - price_ref/precio_ref: Precio de referencia en USD
+    - price/precio: Precio en USD (única moneda)
     - description/descripcion: Descripción del producto
     
     **Columnas opcionales:**
@@ -410,6 +415,11 @@ async def bulk_create_products(
                     'discount_percentage': db_product.discount_percentage,
                     'is_available': db_product.is_available
                 }
+                # Handle empty strings for required fields
+                if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+                    product_dict['description'] = 'Sin descripción disponible'
+                if not product_dict.get('image') or len(product_dict.get('image', '').strip()) < 1:
+                    product_dict['image'] = '/static/images/no-image.png'
                 
                 created_products.append(ProductResponse.model_validate(product_dict))
                 
@@ -492,6 +502,11 @@ async def get_admin_product(
         'discount_percentage': product.discount_percentage,
         'is_available': product.is_available
     }
+    # Handle empty strings for required fields
+    if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+        product_dict['description'] = 'Sin descripción disponible'
+    if not product_dict.get('image') or len(product_dict.get('image', '').strip()) < 1:
+        product_dict['image'] = '/static/images/no-image.png'
     
     return ProductResponse.model_validate(product_dict)
 
@@ -525,6 +540,20 @@ async def update_product(
             detail="Error al actualizar el producto"
         )
     
+    # If a new image URL is provided, add it to the images list
+    if 'image' in update_data and update_data['image']:
+        new_image_url = update_data['image']
+        # Ensure product.images is a list
+        if not isinstance(product.images, list):
+            product.images = []
+        
+        # Add the new image if it's not already in the list
+        if new_image_url not in product.images:
+            from sqlalchemy.orm.attributes import flag_modified
+            product.images.append(new_image_url)
+            # Flag the change for SQLAlchemy's JSON mutable type
+            flag_modified(product, "images")
+
     # Check slug uniqueness if being updated
     if 'slug' in update_data and update_data['slug']:
         existing_slug = db.query(Product).filter(
@@ -550,6 +579,11 @@ async def update_product(
         'discount_percentage': product.discount_percentage,
         'is_available': product.is_available
     }
+    # Handle empty strings for required fields
+    if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
+        product_dict['description'] = 'Sin descripción disponible'
+    if not product_dict.get('image') or len(product_dict.get('image', '').strip()) < 1:
+        product_dict['image'] = '/static/images/no-image.png'
     
     return ProductResponse.model_validate(product_dict)
 
@@ -1154,108 +1188,6 @@ async def get_admin_dashboard(
     } 
     
 # =============================================================================
-# GESTIÓN DE TIPO DE CAMBIO
-# =============================================================================
-
-@router.get("/exchange-rate")
-async def get_current_exchange_rate(
-    current_user: User = Depends(get_admin_user)
-):
-    """
-    💱 **Obtener tipo de cambio actual**
-    
-    Obtiene el tipo de cambio USD/VES actual desde la API del BCV.
-    """
-    rate_data = await exchange_service.get_exchange_rate(force_refresh=False)
-    
-    if not rate_data:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No se pudo obtener el tipo de cambio actual"
-        )
-    
-    return {
-        "success": True,
-        "data": rate_data,
-        "message": "Tipo de cambio obtenido exitosamente"
-    }
-
-@router.post("/exchange-rate/refresh")
-async def refresh_exchange_rate(
-    current_user: User = Depends(get_admin_user)
-):
-    """
-    🔄 **Actualizar tipo de cambio**
-    
-    Fuerza la actualización del tipo de cambio desde la API del BCV.
-    """
-    rate_data = await exchange_service.get_exchange_rate(force_refresh=True)
-    
-    if not rate_data:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No se pudo actualizar el tipo de cambio"
-        )
-    
-    return {
-        "success": True,
-        "data": rate_data,
-        "message": "Tipo de cambio actualizado exitosamente"
-    }
-
-@router.post("/products/update-prices")
-async def update_all_product_prices(
-    force_refresh: bool = Query(False, description="Forzar actualización del tipo de cambio"),
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    💰 **Actualizar precios de todos los productos**
-    
-    Actualiza los precios en VES de todos los productos basándose en:
-    - Sus precios de referencia en USD (price_ref)
-    - El tipo de cambio actual del BCV
-    
-    **Parámetros:**
-    - `force_refresh`: Si es True, fuerza la actualización del tipo de cambio antes de calcular
-    
-    **Proceso:**
-    1. Obtiene el tipo de cambio actual (con opción de forzar actualización)
-    2. Recalcula price_ves = price_ref * tipo_cambio para cada producto
-    3. Actualiza solo los productos cuyos precios cambien
-    4. Retorna estadísticas de la actualización
-    """
-    try:
-        result = await exchange_service.update_all_product_prices(
-            db=db, 
-            force_refresh=force_refresh
-        )
-        
-        if not result["success"]:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=result["message"]
-            )
-        
-        return {
-            "success": True,
-            "message": result["message"],
-            "data": {
-                "updated_count": result["updated_count"],
-                "exchange_rate": result["exchange_rate"],
-                "rate_timestamp": result.get("rate_timestamp"),
-                "rate_source": result.get("rate_source")
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error updating product prices: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno al actualizar los precios"
-        )
-
-# =============================================================================
 # GESTIÓN DE IMÁGENES
 # =============================================================================
 @router.post("/products/{product_id}/images")
@@ -1270,9 +1202,10 @@ async def add_product_images(
     
     Agrega imágenes a un producto existente.
     """
-    return image_service.add_images_to_product(product_id, images)
+    image_service = ImageService(db)
+    return await image_service.add_images_to_product(product_id, images)
 
-@router.get("/products/{product_id}/images/{image_url}")
+@router.delete("/products/{product_id}/images/{image_url}")
 async def delete_product_images(
     product_id: str,
     image_url: str,
@@ -1280,9 +1213,10 @@ async def delete_product_images(
     db: Session = Depends(get_db)
 ):
     """
-    🖼️ **Obtener imágenes de producto**
+    🖼️ **Eliminar imagen de producto**
     """
-    return image_service.delete_image_from_product(product_id, image_url)
+    image_service = ImageService(db)
+    return await image_service.delete_image_from_product(product_id, image_url)
 
 @router.put("/payments/status")
 async def update_payment_status(

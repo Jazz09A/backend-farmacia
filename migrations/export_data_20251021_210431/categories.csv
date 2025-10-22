@@ -1,0 +1,17 @@
+id,name,slug,description,icon,color,parent_id,is_active,sort_order,created_at,updated_at
+b987005f-f9d7-4317-a0c5-0250c6cf2ab4,SISTEMA OSTEOARTICULAR,sistema-osteoarticular,Categoría SISTEMA OSTEOARTICULAR - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.388472,2025-07-25 18:38:11.388472
+dc2e2adf-fa9a-4381-adab-4aa17e922b8f,BIENESTAR GENERAL,bienestar-general,Categoría BIENESTAR GENERAL - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.408484,2025-07-25 18:38:11.408484
+e7f81648-d4cd-453e-bc4e-41798763464c,SISTEMA NERVIOSO,sistema-nervioso,Categoría SISTEMA NERVIOSO - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.473484,2025-07-25 18:38:11.473484
+609b6db9-8896-4da4-8233-bf2118653160,SALUD INTESTINAL,salud-intestinal,Categoría SALUD INTESTINAL - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.512485,2025-07-25 18:38:11.512485
+f425e72b-302e-4466-9885-f72b1c263d05,SISTEMA INMUNOLÓGICO,sistema-inmunológico,Categoría SISTEMA INMUNOLÓGICO - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.552481,2025-07-25 18:38:11.552481
+a2070303-98b5-4324-a02c-892cc4a8c169,Sin Categoría**,sin-categoría,Categoría Sin Categoría** - Descripción genérica**,,,,True,0,2025-07-25 18:38:11.599484,2025-07-25 18:38:11.599484
+a33ee82c-f80a-4ed4-a89c-32f485661f33,ALIMENTACION SALUDABLE,alimentacion-saludable,Categoría ALIMENTACION SALUDABLE - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.046491,2025-07-25 18:38:12.046491
+63b086f4-8a8a-4f04-9d10-c2352aea0060,SISTEMA OSTEO ARTICULAR,sistema-osteo-articular,Categoría SISTEMA OSTEO ARTICULAR - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.277969,2025-07-25 18:38:12.277969
+9077e4f8-76ef-4c0f-8a55-2ec9ba310bf4,SALUD CARDIOVASCULAR,salud-cardiovascular,Categoría SALUD CARDIOVASCULAR - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.339971,2025-07-25 18:38:12.339971
+7485095f-8abd-46dc-8c99-01365096335e,SALUD VISUAL,salud-visual,Categoría SALUD VISUAL - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.429993,2025-07-25 18:38:12.429993
+78e848f5-04c1-4c96-bf43-2c86e437c415,SALUD FEMENINA,salud-femenina,Categoría SALUD FEMENINA - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.466973,2025-07-25 18:38:12.466973
+ac9b4410-1d1e-4915-8ea9-87a5bffdebc8,PERDIDA DE PESO,perdida-de-peso,Categoría PERDIDA DE PESO - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.581971,2025-07-25 18:38:12.581971
+57ed35bd-40ee-4838-a05c-91ff8a4879c6,SALUD OSTEO ARTICULAR,salud-osteo-articular,Categoría SALUD OSTEO ARTICULAR - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.596965,2025-07-25 18:38:12.596965
+5f235aef-66f5-48d9-9677-6539eb6e918c,SALUD HEPATICA,salud-hepatica,Categoría SALUD HEPATICA - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.612983,2025-07-25 18:38:12.612983
+39e5c01c-8226-44f9-8e4f-c8153874a4f0,SALUD RESPIRATORIA,salud-respiratoria,Categoría SALUD RESPIRATORIA - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.772662,2025-07-25 18:38:12.772662
+6902c8e7-bfd3-4006-81a3-aaaff7410498,SALUD MASCULINA,salud-masculina,Categoría SALUD MASCULINA - Descripción genérica**,,,,True,0,2025-07-25 18:38:12.803663,2025-07-25 18:38:12.803663

@@ -1,9 +1,10 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
+from decimal import Decimal
 
 from app.schemas.order import PaymentStatusEnum
 
@@ -29,17 +30,13 @@ class Order(Base):
     status = Column(String, nullable=False, default=OrderStatus.PENDING.value, index=True)
     # Status options: received, confirmed, preparing, shipping, delivered, cancelled
     
-    # Pricing
-    subtotal = Column(Float, nullable=False)
-    subtotal_ref = Column(Float, nullable=False)  # Precio en USD/REF
-    shipping_cost = Column(Float, nullable=False)
-    shipping_cost_ref = Column(Float, nullable=False)  # Precio en USD/REF
-    taxes = Column(Float, nullable=False)
-    taxes_ref = Column(Float, nullable=False)  # Precio en USD/REF
-    total = Column(Float, nullable=False)
-    total_ref = Column(Float, nullable=False)  # Precio en USD/REF
-    currency = Column(String, nullable=False, default='VES')
-    exchange_rate = Column(Float, nullable=True)  # Tipo de cambio usado al crear la orden
+    # Pricing (TODO EN USD - sistema unificado)
+    subtotal = Column(Numeric(10, 2), nullable=False)  # USD
+    shipping_cost = Column(Numeric(10, 2), nullable=False)  # USD
+    taxes = Column(Numeric(10, 2), nullable=False)  # USD
+    total = Column(Numeric(10, 2), nullable=False)  # USD
+    payment_currency = Column(String, nullable=True)  # Moneda en que pagó el usuario ('USD' o 'VES')
+    exchange_rate = Column(Numeric(10, 4), nullable=True)  # Tasa de cambio si pagó en VES
     
     # Payment information
     payment_method = Column(String, nullable=False)
@@ -58,6 +55,19 @@ class Order(Base):
     customer_notes = Column(Text, nullable=True)
     admin_notes = Column(Text, nullable=True)
     
+    # Credit fields
+    is_credit_order = Column(Boolean, default=False, nullable=False)
+    credit_amount = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)
+    credit_remaining = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)  # Saldo pendiente
+    credit_paid_total = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)  # Total pagado hasta ahora
+    payment_due_date = Column(DateTime, nullable=True)  # Fecha límite de pago
+    credit_paid = Column(Boolean, default=False, nullable=False)
+    credit_payment_date = Column(DateTime, nullable=True)
+
+    # Discount fields
+    quantity_discount_id = Column(String, ForeignKey("quantity_discounts.id"), nullable=True)
+    quantity_discount_amount = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)  # USD
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
@@ -66,6 +76,9 @@ class Order(Base):
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     shipping_address = relationship("OrderAddress", back_populates="order", uselist=False, cascade="all, delete-orphan")
+    credit_payments = relationship("CreditPayment", back_populates="order")
+    quantity_discount = relationship("QuantityDiscount")
+    discounts = relationship("OrderDiscount", back_populates="order", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Order(id={self.id}, order_number={self.order_number}, status={self.status})>"
@@ -98,12 +111,10 @@ class OrderItem(Base):
     order_id = Column(String, ForeignKey("orders.id"), nullable=False, index=True)
     product_id = Column(String, ForeignKey("products.id"), nullable=False, index=True)
     
-    # Item details
+    # Item details (TODO EN USD - sistema unificado)
     quantity = Column(Integer, nullable=False)
-    unit_price = Column(Float, nullable=False)
-    unit_price_ref = Column(Float, nullable=False)  # Precio unitario en USD/REF
-    total_price = Column(Float, nullable=False)
-    total_price_ref = Column(Float, nullable=False)  # Precio total en USD/REF
+    unit_price = Column(Numeric(10, 2), nullable=False)  # USD
+    total_price = Column(Numeric(10, 2), nullable=False)  # USD
     selected_presentation = Column(String, nullable=True)
     
     # Product snapshot (in case product changes)

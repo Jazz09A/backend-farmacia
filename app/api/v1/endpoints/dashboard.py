@@ -1,6 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from decimal import Decimal
 from app.schemas.dashboard import DashboardData
 from app.services.dashboard_service import get_dashboard_data, get_order_by_id, update_order_status, get_all_customers
 from app.core.dependencies import get_db, get_current_user
@@ -81,15 +82,11 @@ def get_all_orders_endpoint(
             'order_number': order.order_number,
             'status': order.status,
             'subtotal': order.subtotal,
-            'subtotal_ref': order.subtotal_ref,
             'shipping_cost': order.shipping_cost,
-            'shipping_cost_ref': order.shipping_cost_ref,
             'taxes': order.taxes,
-            'taxes_ref': order.taxes_ref,
             'total': order.total,
-            'total_ref': order.total_ref,
-            'currency': order.currency,
-            'exchange_rate': order.exchange_rate,
+            'payment_currency': order.payment_currency,
+            'exchange_rate': order.exchange_rate.quantize(Decimal('0.01')) if order.exchange_rate else None,
             'payment_method': order.payment_method,
             'payment_status': order.payment_status,
             'payment_reference': order.payment_reference,

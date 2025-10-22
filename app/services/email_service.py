@@ -147,5 +147,65 @@ class EmailService:
             context=context
         )
 
+    async def send_payment_registered_email(self, to_email: str, payment_data: Dict[str, Any]):
+        """Enviar email de pago registrado"""
+        context = {
+            "user_name": payment_data.get("user_name", "Usuario"),
+            "amount": payment_data.get("amount", 0),
+            "currency": payment_data.get("currency", "VES"),
+            "order_number": payment_data.get("order_number", "N/A"),
+            "payment_reference": payment_data.get("payment_reference", "N/A"),
+            "payment_date": payment_data.get("payment_date", "N/A")
+        }
+        
+        subject = f"Pago registrado - Orden #{payment_data.get('order_number', 'N/A')}"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="payment_registered.html",
+            context=context
+        )
+
+    async def send_payment_approved_email(self, to_email: str, payment_data: Dict[str, Any]):
+        """Enviar email de pago aprobado"""
+        context = {
+            "user_name": payment_data.get("user_name", "Usuario"),
+            "amount": payment_data.get("amount", 0),
+            "currency": payment_data.get("currency", "VES"),
+            "order_number": payment_data.get("order_number", "N/A"),
+            "order_total": payment_data.get("order_total", 0),
+            "paid_total": payment_data.get("paid_total", 0),
+            "remaining_balance": payment_data.get("remaining_balance", 0)
+        }
+        
+        subject = f"¡Pago aprobado! - Orden #{payment_data.get('order_number', 'N/A')}"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="payment_approved.html",
+            context=context
+        )
+
+    async def send_payment_rejected_email(self, to_email: str, payment_data: Dict[str, Any]):
+        """Enviar email de pago rechazado"""
+        context = {
+            "user_name": payment_data.get("user_name", "Usuario"),
+            "amount": payment_data.get("amount", 0),
+            "currency": payment_data.get("currency", "VES"),
+            "order_number": payment_data.get("order_number", "N/A"),
+            "admin_notes": payment_data.get("admin_notes", "No se proporcionó motivo específico")
+        }
+        
+        subject = f"Pago rechazado - Orden #{payment_data.get('order_number', 'N/A')}"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="payment_rejected.html",
+            context=context
+        )
+
 # Singleton instance
 email_service = EmailService()

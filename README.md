@@ -9,17 +9,50 @@ Sistema backend completo para farmacia online construido con FastAPI, PostgreSQL
 - 🛒 **Sistema de carrito de compras** persistente
 - 📦 **Gestión de pedidos** con seguimiento y estados
 - ⭐ **Sistema de reseñas y calificaciones**
-- 💰 **Soporte para múltiples monedas** (VES/USD)
+- 💰 **Sistema unificado USD** (almacenamiento en USD, conversión VES en pagos)
 - 🔗 **URLs obfuscadas para productos** (SEO-friendly)
 - 🔍 **Búsqueda avanzada y filtros**
 - 📧 **Sistema de notificaciones por email**
 - 🐳 **Dockerizado** para fácil deployment
 - 📚 **Documentación automática** con Swagger/OpenAPI
 
+## 💱 Sistema Unificado de Monedas (USD)
+
+### ¿Qué cambió?
+
+El sistema ahora opera completamente en **USD** internamente:
+
+- ✅ **Almacenamiento**: Todo se guarda en USD (precios, totales, créditos)
+- ✅ **Conversión**: Solo cuando el usuario paga en VES (se convierte a USD)
+- ✅ **Frontend**: Maneja la conversión USD→VES para display
+- ✅ **Trazabilidad**: Se guarda la moneda original del pago y la tasa usada
+
+### Cambios en los Endpoints
+
+#### Crear Orden
+```json
+{
+  "payment_currency": "VES",  // Nuevo campo: "USD" o "VES"
+  "payment_method": "transfer",
+  ...
+}
+```
+
+#### Pago de Crédito
+```json
+{
+  "amount": 2050.00,
+  "payment_currency": "VES",  // Renombrado de "currency"
+  ...
+}
+```
+
+**📚 Documentación completa**: Ver [`GUIA_CAMBIOS_USD_UNIFICADO.md`](GUIA_CAMBIOS_USD_UNIFICADO.md)
+
 ## 🛠️ Tecnologías
 
 - **FastAPI** - Framework web moderno y rápido
-- **PostgreSQL** - Base de datos principal
+- **PostgreSQL** - Base de datos principal (SQLite en desarrollo)
 - **SQLAlchemy** - ORM para Python
 - **Pydantic** - Validación de datos
 - **JWT** - Autenticación basada en tokens
@@ -112,13 +145,30 @@ MAX_FILE_SIZE=5242880
 DEBUG=True
 ```
 
-## 📚 Documentación de la API
+## 📚 Documentación
+
+### Documentación de la API
 
 Una vez que la aplicación esté ejecutándose, puedes acceder a:
 
 - **Documentación Swagger:** `http://localhost:8000/api/v1/docs`
 - **Documentación ReDoc:** `http://localhost:8000/api/v1/redoc`
 - **OpenAPI JSON:** `http://localhost:8000/api/v1/openapi.json`
+
+### Documentación Técnica
+
+- **[GUIA_CAMBIOS_USD_UNIFICADO.md](GUIA_CAMBIOS_USD_UNIFICADO.md)** - Guía completa de cambios del sistema unificado USD
+  - Cambios en la base de datos
+  - Cambios en los endpoints
+  - Flujos de trabajo
+  - Ejemplos de uso
+  - Guía de migración para frontend
+
+- **[PLAN_MIGRACION_USD.md](PLAN_MIGRACION_USD.md)** - Plan técnico detallado de la migración a USD
+  - Estrategia de migración
+  - Cambios en modelos y servicios
+  - Scripts de migración
+  - Procedimiento de rollback
 
 ## 🔌 Endpoints Principales
 

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     
     # Frontend URL
     FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+    # Cloudinary
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
+    CLOUDINARY_UPLOAD_PRESET: Optional[str] = None
     
     class Config:
         env_file = ".env"
