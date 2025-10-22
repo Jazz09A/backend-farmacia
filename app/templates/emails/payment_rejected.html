@@ -1,57 +1,300 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pago Rechazado - FarmaPlus</title>
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #e74c3c; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; background-color: #f8f9fa; }
-        .footer { background-color: #34495e; color: white; padding: 15px; text-align: center; font-size: 12px; }
-        .warning { background-color: #f8d7da; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0; }
-        .amount { font-size: 24px; font-weight: bold; color: #e74c3c; }
-        .reason { background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 650px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+        .header img {
+            max-width: 180px;
+            height: auto;
+            position: relative;
+            z-index: 1;
+        }
+        .rejected-icon {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            margin: 30px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+            color: white;
+            box-shadow: 0 10px 25px rgba(231, 76, 60, 0.3);
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .content {
+            padding: 50px 40px;
+            line-height: 1.7;
+            text-align: center;
+        }
+        .content h1 {
+            color: #e74c3c;
+            font-size: 32px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        .content h2 {
+            color: #005A87;
+            font-size: 24px;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        .content p {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 20px;
+        }
+        .payment-rejected {
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            border: 2px solid #e74c3c;
+        }
+        .payment-rejected h3 {
+            color: #721c24;
+            margin-top: 0;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .amount {
+            font-size: 36px;
+            font-weight: 700;
+            color: #e74c3c;
+            margin: 15px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .reason-box {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border-left: 5px solid #ffc107;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: left;
+            border-radius: 8px;
+        }
+        .reason-box h4 {
+            color: #856404;
+            margin-top: 0;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .reason-box p {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+        .action-steps {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: left;
+            border: 1px solid #e0e0e0;
+        }
+        .action-steps h3 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .step-number {
+            background: linear-gradient(135deg, #009FE3, #007bb5);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-content h4 {
+            color: #005A87;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .step-content p {
+            margin: 0;
+            font-size: 14px;
+            color: #555;
+        }
+        .contact-info {
+            background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+            border-left: 5px solid #009FE3;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: center;
+            border-radius: 8px;
+        }
+        .contact-info h4 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .contact-info p {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+        .footer {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+        }
+        .footer a {
+            color: #009FE3;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .content h1 {
+                font-size: 28px;
+            }
+            .content h2 {
+                font-size: 20px;
+            }
+            .amount {
+                font-size: 28px;
+            }
+            .step {
+                flex-direction: column;
+                text-align: center;
+            }
+            .step-number {
+                margin: 0 0 10px 0;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>❌ Pago Rechazado</h1>
-            <p>FarmaPlus - Sistema de Crédito</p>
+            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="FarmaPlus Logo">
         </div>
-        
         <div class="content">
+            <div class="rejected-icon">❌</div>
+            <h1>Pago Rechazado</h1>
             <h2>Hola {{user_name}},</h2>
             
-            <div class="warning">
+            <div class="payment-rejected">
                 <h3>⚠️ Tu pago ha sido rechazado</h3>
-                <p>Monto: <span class="amount">{{amount}} {{currency}}</span></p>
-                <p>Orden: <strong>{{order_number}}</strong></p>
+                <div class="amount">{{amount}} {{currency}}</div>
+                <p style="font-size: 18px; color: #721c24; margin: 0;">Orden: <strong>{{order_number}}</strong></p>
             </div>
             
             {% if admin_notes %}
-            <div class="reason">
-                <h3>📝 Motivo del Rechazo:</h3>
+            <div class="reason-box">
+                <h4>📝 Motivo del Rechazo</h4>
                 <p>{{admin_notes}}</p>
             </div>
             {% endif %}
             
-            <h3>🔧 ¿Qué puedes hacer?</h3>
-            <ul>
-                <li>Verificar que la información del pago sea correcta</li>
-                <li>Subir una nueva captura del pago si es necesario</li>
-                <li>Contactar a nuestro equipo de soporte si tienes dudas</li>
-            </ul>
+            <div class="action-steps">
+                <h3>🔧 ¿Qué puedes hacer?</h3>
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Verificar información</h4>
+                        <p>Revisa que todos los datos del pago sean correctos y coincidan con tu comprobante.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Subir nueva captura</h4>
+                        <p>Si es necesario, sube una nueva captura del pago con mejor calidad desde tu panel de usuario.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Contactar soporte</h4>
+                        <p>Si tienes dudas o necesitas ayuda, contacta a nuestro equipo de soporte.</p>
+                    </div>
+                </div>
+            </div>
             
-            <p>Puedes intentar realizar el pago nuevamente desde tu panel de usuario.</p>
+            <div class="contact-info">
+                <h4>💬 ¿Necesitas ayuda?</h4>
+                <p>Nuestro equipo de soporte está disponible para ayudarte a resolver cualquier problema con tu pago.</p>
+                <p>📧 Email: <a href="mailto:soporte@farmaplus.com">soporte@farmaplus.com</a></p>
+                <p>📞 Teléfono: <a href="tel:+584141234567">+58 414 123 4567</a></p>
+                <p>💬 WhatsApp: <a href="https://wa.me/584141234567">+58 414 123 4567</a></p>
+            </div>
             
-            <p>Si necesitas ayuda, no dudes en contactarnos.</p>
+            <p style="font-size: 18px; color: #e74c3c; font-weight: 600; margin-top: 30px;">
+                Puedes intentar realizar el pago nuevamente desde tu panel de usuario.
+            </p>
         </div>
-        
         <div class="footer">
-            <p>© 2024 FarmaPlus. Todos los derechos reservados.</p>
-            <p>Este es un email automático, por favor no responder.</p>
+            <p><strong>FarmaPlus - Tu farmacia de confianza</strong></p>
+            <p>Medicamentos de calidad • Envío rápido • Atención personalizada</p>
+            <p>&copy; {{ year }} FarmaPlus. Todos los derechos reservados.</p>
+            <p>Este es un correo automático, por favor no responder.</p>
         </div>
     </div>
 </body>

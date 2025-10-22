@@ -1,48 +1,259 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pago Registrado - FarmaPlus</title>
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background-color: #2c3e50; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; background-color: #f8f9fa; }
-        .footer { background-color: #34495e; color: white; padding: 15px; text-align: center; font-size: 12px; }
-        .highlight { background-color: #e8f4f8; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }
-        .amount { font-size: 24px; font-weight: bold; color: #27ae60; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 650px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+        .header img {
+            max-width: 180px;
+            height: auto;
+            position: relative;
+            z-index: 1;
+        }
+        .pending-icon {
+            background: linear-gradient(135deg, #ffc107, #ff8c00);
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            margin: 30px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+            color: white;
+            box-shadow: 0 10px 25px rgba(255, 193, 7, 0.3);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .content {
+            padding: 50px 40px;
+            line-height: 1.7;
+            text-align: center;
+        }
+        .content h1 {
+            color: #2c3e50;
+            font-size: 32px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        .content h2 {
+            color: #005A87;
+            font-size: 24px;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        .content p {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 20px;
+        }
+        .payment-registered {
+            background: linear-gradient(135deg, #e8f4f8, #d1ecf1);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            border: 2px solid #17a2b8;
+        }
+        .payment-registered h3 {
+            color: #0c5460;
+            margin-top: 0;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .amount {
+            font-size: 36px;
+            font-weight: 700;
+            color: #17a2b8;
+            margin: 15px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .payment-details {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: left;
+            border: 1px solid #e0e0e0;
+        }
+        .payment-details h3 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+        .detail-value {
+            color: #555;
+            font-weight: 500;
+            font-size: 16px;
+        }
+        .status-pending {
+            background: linear-gradient(135deg, #ffc107, #ff8c00);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .info-box {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border-left: 5px solid #ffc107;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: left;
+            border-radius: 8px;
+        }
+        .info-box h4 {
+            color: #856404;
+            margin-top: 0;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .info-box p {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+        .footer {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+        }
+        .footer a {
+            color: #009FE3;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .content h1 {
+                font-size: 28px;
+            }
+            .content h2 {
+                font-size: 20px;
+            }
+            .amount {
+                font-size: 28px;
+            }
+            .detail-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>💳 Pago Registrado</h1>
-            <p>FarmaPlus - Sistema de Crédito</p>
+            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="FarmaPlus Logo">
         </div>
-        
         <div class="content">
+            <div class="pending-icon">💳</div>
+            <h1>Pago Registrado</h1>
             <h2>¡Hola {{user_name}}!</h2>
             
-            <p>Hemos registrado tu pago de <span class="amount">{{amount}} {{currency}}</span> para la orden <strong>{{order_number}}</strong>.</p>
-            
-            <div class="highlight">
-                <h3>📋 Detalles del Pago:</h3>
-                <ul>
-                    <li><strong>Referencia:</strong> {{payment_reference}}</li>
-                    <li><strong>Monto:</strong> {{amount}} {{currency}}</li>
-                    <li><strong>Fecha:</strong> {{payment_date}}</li>
-                    <li><strong>Estado:</strong> <span style="color: #f39c12;">⏳ Pendiente de aprobación</span></li>
-                </ul>
+            <div class="payment-registered">
+                <h3>📝 Tu pago ha sido registrado</h3>
+                <div class="amount">{{amount}} {{currency}}</div>
+                <p style="font-size: 18px; color: #0c5460; margin: 0;">Orden: <strong>{{order_number}}</strong></p>
             </div>
             
-            <p>Nuestro equipo revisará tu pago y te notificaremos cuando sea aprobado.</p>
+            <div class="payment-details">
+                <h3>📋 Detalles del Pago</h3>
+                <div class="detail-row">
+                    <span class="detail-label">🔖 Referencia:</span>
+                    <span class="detail-value">{{payment_reference}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">💰 Monto:</span>
+                    <span class="detail-value" style="font-weight: 700; color: #17a2b8;">{{amount}} {{currency}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">📅 Fecha:</span>
+                    <span class="detail-value">{{payment_date}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">📊 Estado:</span>
+                    <span class="status-pending">⏳ Pendiente de aprobación</span>
+                </div>
+            </div>
             
-            <p>Si tienes alguna pregunta, no dudes en contactarnos.</p>
+            <div class="info-box">
+                <h4>⏰ ¿Qué sigue ahora?</h4>
+                <p>Nuestro equipo de administración revisará tu pago en las próximas 24 horas y te notificaremos cuando sea aprobado.</p>
+                <p>Una vez aprobado, tu orden será procesada y enviada según el método de envío seleccionado.</p>
+            </div>
+            
+            <p style="font-size: 18px; color: #17a2b8; font-weight: 600; margin-top: 30px;">
+                ¡Gracias por tu pago! Te mantendremos informado sobre el estado de tu orden.
+            </p>
         </div>
-        
         <div class="footer">
-            <p>© 2024 FarmaPlus. Todos los derechos reservados.</p>
-            <p>Este es un email automático, por favor no responder.</p>
+            <p><strong>FarmaPlus - Tu farmacia de confianza</strong></p>
+            <p>Medicamentos de calidad • Envío rápido • Atención personalizada</p>
+            <p>&copy; {{ year }} FarmaPlus. Todos los derechos reservados.</p>
+            <p>Este es un correo automático, por favor no responder.</p>
         </div>
     </div>
 </body>

@@ -3,91 +3,178 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificación de Correo Electrónico</title>
+    <title>Verificación de Correo Electrónico - FarmaPlus</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f7f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #333;
+            min-height: 100vh;
         }
         .container {
             max-width: 600px;
             margin: 20px auto;
             background-color: #ffffff;
-            border-radius: 8px;
+            border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
         .header {
-            background-color: #009FE3; /* Azul del logo */
-            padding: 30px;
+            background: linear-gradient(135deg, #009FE3 0%, #005A87 100%);
+            padding: 40px 30px;
             text-align: center;
+            position: relative;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
         }
         .header img {
-            max-width: 200px;
+            max-width: 180px;
             height: auto;
+            position: relative;
+            z-index: 1;
+        }
+        .verification-icon {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+            box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
         }
         .content {
-            padding: 40px;
-            line-height: 1.6;
+            padding: 50px 40px;
+            line-height: 1.7;
             text-align: center;
         }
         .content h1 {
-            color: #005A87; /* Azul oscuro del logo */
-            font-size: 24px;
+            color: #005A87;
+            font-size: 28px;
+            margin-bottom: 20px;
+            font-weight: 700;
         }
         .content p {
             font-size: 16px;
             color: #555;
+            margin-bottom: 20px;
         }
         .button {
             display: inline-block;
-            background-color: #009FE3;
+            background: linear-gradient(135deg, #009FE3, #007bb5);
             color: #ffffff;
-            padding: 15px 30px;
+            padding: 18px 40px;
             text-decoration: none;
             border-radius: 50px;
-            font-weight: bold;
-            margin-top: 20px;
+            font-weight: 600;
+            margin: 30px 0;
             font-size: 16px;
-            transition: background-color 0.3s;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(0, 159, 227, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .button:hover {
-            background-color: #007bb5;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(0, 159, 227, 0.4);
+        }
+        .security-note {
+            background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+            border-left: 4px solid #009FE3;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+            text-align: left;
+        }
+        .security-note h4 {
+            color: #005A87;
+            margin-top: 0;
+            font-size: 16px;
         }
         .footer {
-            background-color: #EBF0F2;
-            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
             text-align: center;
-            font-size: 12px;
-            color: #888;
+            font-size: 13px;
+            color: #666;
         }
         .footer a {
             color: #009FE3;
             text-decoration: none;
+            font-weight: 500;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            color: #009FE3;
+            font-size: 20px;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .content h1 {
+                font-size: 24px;
+            }
+            .button {
+                padding: 15px 30px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <!-- Asumiendo que el logo está hosteado. Reemplaza con una URL real -->
-            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="Grupo Drozainka Logo">
+            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="FarmaPlus Logo">
         </div>
         <div class="content">
-            <h1>¡Un paso más para completar tu registro!</h1>
-            <p>Gracias por registrarte en Grupo Drozainka. Por favor, haz clic en el botón de abajo para verificar tu dirección de correo electrónico y activar tu cuenta.</p>
-            <a href="{{ verification_link }}" class="button">Verificar mi correo</a>
-            <p style="font-size: 12px; color: #888; margin-top: 30px;">
+            <div class="verification-icon">✉️</div>
+            <h1>¡Bienvenido a FarmaPlus!</h1>
+            <p>Gracias por registrarte en nuestra plataforma farmacéutica. Para completar tu registro y acceder a todos nuestros servicios, necesitamos verificar tu dirección de correo electrónico.</p>
+            
+            <a href="{{ verification_link }}" class="button">Verificar mi correo electrónico</a>
+            
+            <div class="security-note">
+                <h4>🔒 Información de seguridad:</h4>
+                <p>Este enlace de verificación es válido por 24 horas y solo puede ser usado una vez. Si no solicitaste esta cuenta, puedes ignorar este correo de forma segura.</p>
+            </div>
+            
+            <p style="font-size: 14px; color: #888; margin-top: 30px;">
                 Si no puedes hacer clic en el botón, copia y pega el siguiente enlace en tu navegador:<br>
-                <a href="{{ verification_link }}" style="color: #009FE3; word-break: break-all;">{{ verification_link }}</a>
+                <a href="{{ verification_link }}" style="color: #009FE3; word-break: break-all; font-size: 12px;">{{ verification_link }}</a>
             </p>
         </div>
         <div class="footer">
-            <p>&copy; {{ year }} Grupo Drozainka. Todos los derechos reservados.</p>
-            <p>Si no creaste esta cuenta, puedes ignorar este correo de forma segura.</p>
+            <p><strong>FarmaPlus - Tu farmacia de confianza</strong></p>
+            <p>Medicamentos de calidad • Envío rápido • Atención personalizada</p>
+            <div class="social-links">
+                <a href="#">📧</a>
+                <a href="#">📱</a>
+                <a href="#">🌐</a>
+            </div>
+            <p>&copy; {{ year }} FarmaPlus. Todos los derechos reservados.</p>
+            <p>Este es un correo automático, por favor no responder.</p>
         </div>
     </div>
 </body>

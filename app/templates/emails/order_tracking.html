@@ -3,175 +3,312 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tu Orden ha sido Confirmada - Tracking Disponible</title>
+    <title>Tu Orden ha sido Confirmada - FarmaPlus</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f7f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #333;
+            min-height: 100vh;
         }
         .container {
-            max-width: 600px;
+            max-width: 650px;
             margin: 20px auto;
             background-color: #ffffff;
-            border-radius: 8px;
+            border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
         .header {
-            background-color: #009FE3; /* Azul del logo */
-            padding: 30px;
+            background: linear-gradient(135deg, #009FE3 0%, #005A87 100%);
+            padding: 40px 30px;
             text-align: center;
+            position: relative;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
         }
         .header img {
-            max-width: 200px;
+            max-width: 180px;
             height: auto;
+            position: relative;
+            z-index: 1;
         }
         .success-icon {
-            background-color: #28a745;
+            background: linear-gradient(135deg, #28a745, #20c997);
             border-radius: 50%;
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 20px;
+            width: 100px;
+            height: 100px;
+            margin: 30px auto;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
+            font-size: 50px;
             color: white;
+            box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
         .content {
-            padding: 40px;
-            line-height: 1.6;
+            padding: 50px 40px;
+            line-height: 1.7;
             text-align: center;
         }
         .content h1 {
-            color: #005A87; /* Azul oscuro del logo */
-            font-size: 24px;
-            margin-bottom: 10px;
+            color: #005A87;
+            font-size: 32px;
+            margin-bottom: 15px;
+            font-weight: 700;
         }
         .content h2 {
             color: #28a745;
-            font-size: 20px;
-            margin-bottom: 20px;
+            font-size: 24px;
+            margin-bottom: 25px;
+            font-weight: 600;
         }
         .content p {
             font-size: 16px;
             color: #555;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
         .order-details {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 12px;
+            padding: 30px;
+            margin: 30px 0;
             text-align: left;
+            border: 1px solid #e0e0e0;
         }
         .order-details h3 {
             color: #005A87;
             margin-top: 0;
-            font-size: 18px;
+            font-size: 20px;
+            margin-bottom: 20px;
+            text-align: center;
         }
-        .order-details p {
-            margin: 8px 0;
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #333;
+        }
+        .detail-value {
+            color: #555;
+            font-weight: 500;
+        }
+        .status-badge {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
             font-size: 14px;
+            font-weight: 600;
         }
         .tracking-button {
             display: inline-block;
-            background-color: #009FE3;
+            background: linear-gradient(135deg, #009FE3, #007bb5);
             color: #ffffff;
-            padding: 15px 30px;
+            padding: 20px 40px;
             text-decoration: none;
             border-radius: 50px;
-            font-weight: bold;
-            margin-top: 20px;
-            font-size: 16px;
-            transition: background-color 0.3s;
+            font-weight: 600;
+            margin: 30px 0;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(0, 159, 227, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .tracking-button:hover {
-            background-color: #007bb5;
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(0, 159, 227, 0.4);
         }
         .info-box {
-            background-color: #e7f3ff;
-            border-left: 4px solid #009FE3;
-            padding: 15px;
-            margin: 20px 0;
+            background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+            border-left: 5px solid #009FE3;
+            padding: 25px;
+            margin: 30px 0;
             text-align: left;
+            border-radius: 8px;
         }
         .info-box h4 {
             color: #005A87;
             margin-top: 0;
-            font-size: 16px;
+            font-size: 18px;
+            margin-bottom: 15px;
         }
         .info-box p {
-            margin: 5px 0;
-            font-size: 14px;
+            margin: 8px 0;
+            font-size: 15px;
+        }
+        .contact-info {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
+            margin: 30px 0;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .contact-info h4 {
+            color: #005A87;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        .contact-methods {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .contact-method {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .contact-method:hover {
+            transform: translateY(-2px);
+        }
+        .contact-method a {
+            color: #009FE3;
+            text-decoration: none;
+            font-weight: 500;
         }
         .footer {
-            background-color: #EBF0F2;
-            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
             text-align: center;
-            font-size: 12px;
-            color: #888;
+            font-size: 13px;
+            color: #666;
         }
         .footer a {
             color: #009FE3;
             text-decoration: none;
+            font-weight: 500;
         }
-        .contact-info {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 12px;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .content h1 {
+                font-size: 28px;
+            }
+            .content h2 {
+                font-size: 20px;
+            }
+            .tracking-button {
+                padding: 15px 30px;
+                font-size: 16px;
+            }
+            .contact-methods {
+                flex-direction: column;
+                align-items: center;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="Grupo Drozainka Logo">
+            <img src="https://res.cloudinary.com/dxsrz7kgo/image/upload/v1723821016/Grupo_Drozainka_widelkeb.png" alt="FarmaPlus Logo">
         </div>
         <div class="content">
             <div class="success-icon">✓</div>
             <h1>¡Tu orden ha sido confirmada!</h1>
             <h2>Orden #{{ order_number }}</h2>
             
-            <p>¡Felicitaciones! Tu pedido ha sido procesado exitosamente y está siendo preparado para el envío.</p>
+            <p>¡Felicitaciones! Tu pedido ha sido procesado exitosamente y está siendo preparado para el envío. Te mantendremos informado sobre cada paso del proceso.</p>
             
             <div class="order-details">
-                <h3>📋 Detalles de tu orden:</h3>
-                <p><strong>Fecha de orden:</strong> {{ order_date }}</p>
-                <p><strong>Total:</strong> {{ order_total }}</p>
-                <p><strong>Estado:</strong> <span style="color: #28a745; font-weight: bold;">{{ order_status }}</span></p>
-                <p><strong>Método de pago:</strong> {{ payment_method }}</p>
+                <h3>📋 Detalles de tu orden</h3>
+                <div class="detail-row">
+                    <span class="detail-label">📅 Fecha de orden:</span>
+                    <span class="detail-value">{{ order_date }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">💰 Total:</span>
+                    <span class="detail-value" style="font-weight: 600; color: #28a745;">{{ order_total }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">📊 Estado:</span>
+                    <span class="status-badge">{{ order_status }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">💳 Método de pago:</span>
+                    <span class="detail-value">{{ payment_method }}</span>
+                </div>
                 {% if estimated_delivery %}
-                <p><strong>Entrega estimada:</strong> {{ estimated_delivery }}</p>
+                <div class="detail-row">
+                    <span class="detail-label">🚚 Entrega estimada:</span>
+                    <span class="detail-value">{{ estimated_delivery }}</span>
+                </div>
                 {% endif %}
             </div>
             
             <div class="info-box">
-                <h4>🚚 Seguimiento de tu pedido:</h4>
+                <h4>🚚 Seguimiento de tu pedido</h4>
                 <p>Puedes hacer seguimiento en tiempo real del estado de tu orden haciendo clic en el botón de abajo.</p>
                 <p>Te notificaremos por email cada vez que haya una actualización importante en tu pedido.</p>
             </div>
             
             <a href="{{ tracking_link }}" class="tracking-button">Ver Seguimiento de mi Orden</a>
             
-            <p style="font-size: 12px; color: #888; margin-top: 30px;">
+            <p style="font-size: 14px; color: #888; margin-top: 30px;">
                 Si no puedes hacer clic en el botón, copia y pega el siguiente enlace en tu navegador:<br>
-                <a href="{{ tracking_link }}" style="color: #009FE3; word-break: break-all;">{{ tracking_link }}</a>
+                <a href="{{ tracking_link }}" style="color: #009FE3; word-break: break-all; font-size: 12px;">{{ tracking_link }}</a>
             </p>
             
             <div class="contact-info">
-                <p><strong>¿Tienes alguna pregunta sobre tu orden?</strong></p>
+                <h4>¿Tienes alguna pregunta sobre tu orden?</h4>
                 <p>Nuestro equipo de atención al cliente está disponible para ayudarte:</p>
-                <p>📧 Email: <a href="mailto:soporte@grupodrozainka.com">soporte@grupodrozainka.com</a></p>
-                <p>📞 Teléfono: <a href="tel:+584141234567">+58 414 123 4567</a></p>
-                <p>💬 WhatsApp: <a href="https://wa.me/584141234567">+58 414 123 4567</a></p>
+                <div class="contact-methods">
+                    <div class="contact-method">
+                        <span>📧</span>
+                        <a href="mailto:soporte@farmaplus.com">soporte@farmaplus.com</a>
+                    </div>
+                    <div class="contact-method">
+                        <span>📞</span>
+                        <a href="tel:+584141234567">+58 414 123 4567</a>
+                    </div>
+                    <div class="contact-method">
+                        <span>💬</span>
+                        <a href="https://wa.me/584141234567">WhatsApp</a>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="footer">
-            <p>&copy; {{ year }} Grupo Drozainka. Todos los derechos reservados.</p>
+            <p><strong>FarmaPlus - Tu farmacia de confianza</strong></p>
+            <p>Medicamentos de calidad • Envío rápido • Atención personalizada</p>
+            <p>&copy; {{ year }} FarmaPlus. Todos los derechos reservados.</p>
             <p>Gracias por confiar en nosotros para tus necesidades farmacéuticas.</p>
         </div>
     </div>

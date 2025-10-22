@@ -129,10 +129,40 @@ async def create_order(
         # This avoids the validation error caused by the mismatch between the
         # Order model's `discounts` relationship (a list) and the
         # OrderResponse schema's `discounts` field (an object).
-        response_data = new_order.__dict__
-        response_data['items'] = new_order.items
-        response_data['shipping_address'] = new_order.shipping_address
-        response_data['item_count'] = len(new_order.items)
+        response_data = {
+            'id': new_order.id,
+            'user_id': new_order.user_id,
+            'order_number': new_order.order_number,
+            'status': new_order.status,
+            'subtotal': new_order.subtotal,
+            'shipping_cost': new_order.shipping_cost,
+            'taxes': new_order.taxes,
+            'total': new_order.total,
+            'payment_currency': new_order.payment_currency,
+            'exchange_rate': new_order.exchange_rate,
+            'payment_method': new_order.payment_method,
+            'payment_status': new_order.payment_status,
+            'payment_reference': new_order.payment_reference,
+            'tracking_number': new_order.tracking_number,
+            'estimated_delivery': new_order.estimated_delivery,
+            'delivered_at': new_order.delivered_at,
+            'customer_notes': new_order.customer_notes,
+            'created_at': new_order.created_at,
+            'updated_at': new_order.updated_at,
+            'items': new_order.items,
+            'shipping_address': new_order.shipping_address,
+            'item_count': len(new_order.items),
+            'payment_capture_url': new_order.payment_capture_url,
+            'is_credit_order': new_order.is_credit_order,
+            'credit_amount': new_order.credit_amount,
+            'credit_remaining': new_order.credit_remaining,
+            'credit_paid_total': new_order.credit_paid_total,
+            'payment_due_date': new_order.payment_due_date,
+            'credit_paid': new_order.credit_paid,
+            'credit_payment_date': new_order.credit_payment_date,
+            'quantity_discount': new_order.quantity_discount,
+            'quantity_discount_amount': new_order.quantity_discount_amount,
+        }
         
         from app.schemas.order_discount import OrderDiscountSummary
 
@@ -149,10 +179,15 @@ async def create_order(
         response_data['original_subtotal'] = discount_info.get("original_subtotal", new_order.subtotal)
         response_data['total_savings'] = discount_info.get("total_savings", Decimal('0.00'))
 
+        # Crear la respuesta de la orden
         order_response = OrderResponse.model_validate(response_data)
         
         # Limpiar el carrito SOLO después de que TODO el proceso sea exitoso
+        # Hacer commit explícito y expunge para evitar problemas de sesión
         try:
+            db.commit()  # Asegurar que todo esté confirmado
+            db.expunge_all()  # Desconectar objetos de la sesión
+            
             cart_service = CartService(db)
             cart_service.clear_cart(current_user.id)
         except Exception as cart_error:

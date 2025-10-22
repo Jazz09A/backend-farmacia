@@ -3,11 +3,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from email.utils import formataddr
-from typing import List, Dict, Any
+from typing import Dict, Any
 from app.config.settings import settings
 from app.config.logging_config import get_logger, log_error
 import os
 from jinja2 import Environment, FileSystemLoader
+import socket
 
 class EmailService:
     def __init__(self):
@@ -35,7 +36,7 @@ class EmailService:
         Sends an email using an HTML template.
         """
         self.email_logger.info(
-            f"Attempting to send email",
+            "Attempting to send email",
             extra={
                 'to_email': to_email,
                 'user_email': to_email,  # El destinatario es el usuario
@@ -70,13 +71,14 @@ class EmailService:
         message.attach(MIMEText(html_body, "html"))
 
         try:
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+            # Configurar timeout más corto para fallar rápido en caso de problemas de red
+            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
                 server.starttls()  # Secure the connection
                 server.login(self.smtp_user, self.smtp_password)
                 server.sendmail(self.from_email, to_email, message.as_string())
                 
                 self.email_logger.info(
-                    f"Email sent successfully",
+                    "Email sent successfully",
                     extra={
                         'to_email': to_email,
                         'user_email': to_email,
@@ -85,6 +87,46 @@ class EmailService:
                         'event': 'email_sent_successfully'
                     }
                 )
+        except (socket.timeout, socket.error, OSError) as e:
+            # Errores de red - fallar silenciosamente pero logear
+            self.email_logger.warning(
+                f"Network error sending email - Email service may be unavailable: {type(e).__name__}",
+                extra={
+                    'to_email': to_email,
+                    'user_email': to_email,
+                    'subject': subject,
+                    'template': template_name,
+                    'error_type': 'network_error',
+                    'error': str(e),
+                    'event': 'email_send_network_error'
+                }
+            )
+            # No relanzar el error para no interrumpir el flujo principal
+        except smtplib.SMTPException as e:
+            # Errores SMTP específicos
+            log_error(
+                self.error_logger,
+                e,
+                context={
+                    'to_email': to_email,
+                    'subject': subject,
+                    'template': template_name,
+                    'operation': 'email_sending',
+                    'error_type': 'smtp_error'
+                },
+                user_email=to_email
+            )
+            self.email_logger.error(
+                "SMTP error sending email",
+                extra={
+                    'to_email': to_email,
+                    'user_email': to_email,
+                    'subject': subject,
+                    'template': template_name,
+                    'error': str(e),
+                    'event': 'email_send_smtp_error'
+                }
+            )
         except Exception as e:
             log_error(
                 self.error_logger,
@@ -98,7 +140,7 @@ class EmailService:
                 user_email=to_email
             )
             self.email_logger.error(
-                f"Failed to send email",
+                "Failed to send email",
                 extra={
                     'to_email': to_email,
                     'user_email': to_email,
@@ -149,16 +191,19 @@ class EmailService:
 
     async def send_payment_registered_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago registrado"""
+        from datetime import datetime
+        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
-            "currency": payment_data.get("currency", "VES"),
+            "currency": payment_data.get("currency", "USD"),
             "order_number": payment_data.get("order_number", "N/A"),
             "payment_reference": payment_data.get("payment_reference", "N/A"),
-            "payment_date": payment_data.get("payment_date", "N/A")
+            "payment_date": payment_data.get("payment_date", "N/A"),
+            "year": datetime.now().year
         }
         
-        subject = f"Pago registrado - Orden #{payment_data.get('order_number', 'N/A')}"
+        subject = f"Pago registrado - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
         
         await self.send_email(
             to_email=to_email,
@@ -169,17 +214,20 @@ class EmailService:
 
     async def send_payment_approved_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago aprobado"""
+        from datetime import datetime
+        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
-            "currency": payment_data.get("currency", "VES"),
+            "currency": payment_data.get("currency", "USD"),
             "order_number": payment_data.get("order_number", "N/A"),
             "order_total": payment_data.get("order_total", 0),
             "paid_total": payment_data.get("paid_total", 0),
-            "remaining_balance": payment_data.get("remaining_balance", 0)
+            "remaining_balance": payment_data.get("remaining_balance", 0),
+            "year": datetime.now().year
         }
         
-        subject = f"¡Pago aprobado! - Orden #{payment_data.get('order_number', 'N/A')}"
+        subject = f"¡Pago aprobado! - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
         
         await self.send_email(
             to_email=to_email,
@@ -190,20 +238,41 @@ class EmailService:
 
     async def send_payment_rejected_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago rechazado"""
+        from datetime import datetime
+        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
-            "currency": payment_data.get("currency", "VES"),
+            "currency": payment_data.get("currency", "USD"),
             "order_number": payment_data.get("order_number", "N/A"),
-            "admin_notes": payment_data.get("admin_notes", "No se proporcionó motivo específico")
+            "admin_notes": payment_data.get("admin_notes", "No se proporcionó motivo específico"),
+            "year": datetime.now().year
         }
         
-        subject = f"Pago rechazado - Orden #{payment_data.get('order_number', 'N/A')}"
+        subject = f"Pago rechazado - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
         
         await self.send_email(
             to_email=to_email,
             subject=subject,
             template_name="payment_rejected.html",
+            context=context
+        )
+
+    async def send_verification_email(self, to_email: str, verification_data: Dict[str, Any]):
+        """Enviar email de verificación de correo electrónico"""
+        from datetime import datetime
+        
+        context = {
+            "verification_link": verification_data.get("verification_link", "#"),
+            "year": datetime.now().year
+        }
+        
+        subject = "Verifica tu correo electrónico - FarmaPlus"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="verify_email.html",
             context=context
         )
 
