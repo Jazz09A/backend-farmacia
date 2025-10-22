@@ -119,8 +119,15 @@ async def create_order(
     actualiza el stock de productos y limpia el carrito.
     """
     try:
+        print(f"🔵 [DEBUG] Iniciando creación de orden para usuario: {current_user.id}")
+        print(f"🔵 [DEBUG] Email del usuario: {current_user.email}")
+        print(f"🔵 [DEBUG] Datos de orden recibidos: payment_method={order_data.payment_method}, payment_currency={getattr(order_data, 'payment_currency', 'USD')}")
+        
         order_service = OrderService(db)
         new_order = await order_service.create_order_from_cart(current_user.id, order_data)
+        
+        print(f"🟢 [DEBUG] Orden creada exitosamente: order_id={new_order.id}, order_number={new_order.order_number}")
+        print(f"🟢 [DEBUG] Total de orden: {new_order.total} {new_order.payment_currency}")
         
         # Formatear información de descuentos según el schema OrderDiscountSummary
         discount_info = order_service._calculate_order_discount_info(new_order)
@@ -180,23 +187,43 @@ async def create_order(
         response_data['total_savings'] = discount_info.get("total_savings", Decimal('0.00'))
 
         # Crear la respuesta de la orden
+        print("🔵 [DEBUG] Validando respuesta de orden...")
         order_response = OrderResponse.model_validate(response_data)
+        print("🟢 [DEBUG] Respuesta de orden validada exitosamente")
         
         # Limpiar el carrito SOLO después de que TODO el proceso sea exitoso
         # Hacer commit explícito y expunge para evitar problemas de sesión
         try:
-            db.commit()  # Asegurar que todo esté confirmado
-            db.expunge_all()  # Desconectar objetos de la sesión
+            print("🔵 [DEBUG] Iniciando limpieza de carrito...")
+            # Almacenar user_id ANTES de expunge_all() para evitar error de sesión
+            user_id = current_user.id
+            print(f"🔵 [DEBUG] User ID almacenado: {user_id}")
             
+            print("🔵 [DEBUG] Haciendo commit de la sesión...")
+            db.commit()  # Asegurar que todo esté confirmado
+            print("🟢 [DEBUG] Commit exitoso")
+            
+            print("🔵 [DEBUG] Desvinculando objetos de la sesión (expunge_all)...")
+            db.expunge_all()  # Desconectar objetos de la sesión
+            print("🟢 [DEBUG] Objetos desvinculados")
+            
+            print("🔵 [DEBUG] Creando CartService...")
             cart_service = CartService(db)
-            cart_service.clear_cart(current_user.id)
+            print(f"🔵 [DEBUG] Limpiando carrito para user_id: {user_id}")
+            cart_service.clear_cart(user_id)  # Usar user_id almacenado
+            print("🟢 [DEBUG] Carrito limpiado exitosamente")
         except Exception as cart_error:
             # Log pero no fallar si no se puede limpiar el carrito
-            print(f"Warning: Failed to clear cart after order creation: {cart_error}")
+            print(f"🔴 [ERROR] Failed to clear cart after order creation: {cart_error}")
+            import traceback
+            print(f"🔴 [ERROR] Traceback: {traceback.format_exc()}")
         
+        print("🟢 [DEBUG] Retornando respuesta de orden completada")
         return order_response
     except Exception as e:
-        print(f"Error al crear la orden: {e}")
+        print(f"🔴 [ERROR] Error al crear la orden: {e}")
+        import traceback
+        print(f"🔴 [ERROR] Traceback completo: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/checkout/preview", response_model=CheckoutPreviewResponse, summary="Preview checkout totals")
