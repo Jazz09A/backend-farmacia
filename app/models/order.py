@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Numeric
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import JSON
 from app.config.database import Base
 import uuid
 from datetime import datetime, timezone
@@ -121,6 +122,7 @@ class OrderItem(Base):
     product_name = Column(String, nullable=False)
     product_brand = Column(String, nullable=False)
     product_image = Column(String, nullable=True)
+    product_images = Column(JSON, nullable=True)  # Array de URLs de imágenes
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.now(timezone.utc))

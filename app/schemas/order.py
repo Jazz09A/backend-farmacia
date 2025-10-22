@@ -46,6 +46,7 @@ class OrderItemResponse(BaseModel):
     product_name: str
     product_brand: str
     product_image: Optional[str] = None
+    product_images: Optional[List[str]] = None
 
     class Config:
         from_attributes = True
