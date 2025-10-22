@@ -266,19 +266,13 @@ class OrderService:
             new_order.shipping_address = order_address
 
             # 9. Add to session and commit
-            print("🔵 [OrderService] Agregando orden a la sesión...")
             self.db.add(new_order)
-            print("🔵 [OrderService] Haciendo commit de la orden...")
             self.db.commit()
-            print(f"🟢 [OrderService] Orden commiteada exitosamente: {new_order.id}")
             
             # 10. Guardar descuentos aplicados a la orden
             try:
-                print(f"🔵 [OrderService] Guardando descuentos para orden: {new_order.id}")
                 self._save_order_discounts(new_order.id, discounts_info)
-                print("🟢 [OrderService] Descuentos guardados exitosamente")
             except Exception as e:
-                print(f"🔴 [OrderService ERROR] Error guardando descuentos: {e}")
                 self.error_logger.error(f"Error guardando descuentos para orden {new_order.id}: {e}")
                 # No fallar la creación de la orden por error en descuentos
             
@@ -297,9 +291,7 @@ class OrderService:
                 }
             )
 
-            print("🔵 [OrderService] Refrescando objeto de orden...")
             self.db.refresh(new_order)
-            print("🟢 [OrderService] Orden refrescada, retornando...")
             
             # 11. Send order tracking email to customer
             try:

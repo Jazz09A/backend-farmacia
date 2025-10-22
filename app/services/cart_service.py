@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
@@ -84,25 +84,8 @@ class CartService:
         """
         Removes all items from a user's cart.
         """
-        print(f"🔵 [CartService] Iniciando clear_cart para user_id: {user_id}")
-        try:
-            # Contar items antes de borrar
-            item_count = self.db.query(CartItem).filter(CartItem.user_id == user_id).count()
-            print(f"🔵 [CartService] Items en el carrito a borrar: {item_count}")
-            
-            # Borrar items
-            deleted_count = self.db.query(CartItem).filter(CartItem.user_id == user_id).delete()
-            print(f"🔵 [CartService] Items borrados: {deleted_count}")
-            
-            # Commit
-            print(f"🔵 [CartService] Haciendo commit...")
-            self.db.commit()
-            print(f"🟢 [CartService] Carrito limpiado exitosamente para user_id: {user_id}")
-        except Exception as e:
-            print(f"🔴 [CartService ERROR] Error al limpiar carrito: {e}")
-            import traceback
-            print(f"🔴 [CartService ERROR] Traceback: {traceback.format_exc()}")
-            raise
+        self.db.query(CartItem).filter(CartItem.user_id == user_id).delete()
+        self.db.commit()
 
     def get_user_cart(self, user_id: str) -> Optional[CartResponse]:
         """
