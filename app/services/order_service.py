@@ -401,25 +401,11 @@ class OrderService:
         original_subtotal = order.subtotal + total_discount_amount
         savings_percentage = (total_discount_amount / original_subtotal * 100) if original_subtotal > 0 else 0.0
         
-        # Convertir descuentos a formato de respuesta
+        # Convertir descuentos a formato de respuesta usando model_validate
         from app.schemas.order_discount import OrderDiscountResponse
-        discount_breakdown = []
-        for discount in order.discounts:
-            discount_breakdown.append(OrderDiscountResponse(
-                id=discount.id,
-                order_id=discount.order_id,
-                discount_type=discount.discount_type.value,
-                discount_id=discount.discount_id,
-                discount_name=discount.discount_name,
-                discount_description=discount.discount_description,
-                discount_value=discount.discount_value,
-                discount_amount=discount.discount_amount,
-                applied_to=discount.applied_to,
-                product_id=discount.product_id,
-                quantity_threshold=discount.quantity_threshold,
-                created_at=discount.created_at,
-                formatted_discount=discount.formatted_discount
-            ))
+        discount_breakdown = [
+            OrderDiscountResponse.model_validate(discount) for discount in order.discounts
+        ]
         
         return {
             "total_discounts": len(order.discounts),
