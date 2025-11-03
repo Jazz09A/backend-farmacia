@@ -12,8 +12,9 @@ from datetime import datetime
 from typing import Dict, Any
 import json
 
-from app.config.settings import settings
+from app.config.settings import Settings
 
+settings = Settings()
 
 class JSONFormatter(logging.Formatter):
     """

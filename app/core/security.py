@@ -3,8 +3,10 @@ from typing import Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
-from app.config.settings import settings
+from app.config.settings import Settings
 import uuid
+
+settings = Settings()
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

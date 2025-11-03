@@ -4,12 +4,13 @@ from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from email.utils import formataddr
 from typing import Dict, Any
-from app.config.settings import settings
+from app.config.settings import Settings
 from app.config.logging_config import get_logger, log_error
 import os
 from jinja2 import Environment, FileSystemLoader
 import socket
 
+settings = Settings()
 class EmailService:
     def __init__(self):
         self.smtp_server = settings.SMTP_HOST
@@ -72,9 +73,25 @@ class EmailService:
 
         try:
             # Configurar timeout más corto para fallar rápido en caso de problemas de red
+            self.email_logger.info(
+                f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}",
+                extra={
+                    'smtp_server': self.smtp_server,
+                    'smtp_port': self.smtp_port,
+                    'to_email': to_email,
+                    'event': 'smtp_connection_attempt'
+                }
+            )
+            
             with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
+                self.email_logger.info("SMTP connection established, starting TLS...")
+                
                 server.starttls()  # Secure the connection
+                self.email_logger.info("TLS started, attempting login...")
+                
                 server.login(self.smtp_user, self.smtp_password)
+                self.email_logger.info("Login successful, sending email...")
+                
                 server.sendmail(self.from_email, to_email, message.as_string())
                 
                 self.email_logger.info(
@@ -88,19 +105,38 @@ class EmailService:
                     }
                 )
         except (socket.timeout, socket.error, OSError) as e:
-            # Errores de red - fallar silenciosamente pero logear
+            # Errores de red - fallar silenciosamente pero logear con más detalles
+            error_details = {
+                'to_email': to_email,
+                'user_email': to_email,
+                'subject': subject,
+                'template': template_name,
+                'error_type': 'network_error',
+                'error_class': type(e).__name__,
+                'error_message': str(e),
+                'smtp_server': self.smtp_server,
+                'smtp_port': self.smtp_port,
+                'event': 'email_send_network_error'
+            }
+            
+            # Agregar información específica del error
+            if hasattr(e, 'errno'):
+                error_details['error_errno'] = e.errno
+            if hasattr(e, 'strerror'):
+                error_details['error_strerror'] = e.strerror
+            
             self.email_logger.warning(
-                f"Network error sending email - Email service may be unavailable: {type(e).__name__}",
-                extra={
-                    'to_email': to_email,
-                    'user_email': to_email,
-                    'subject': subject,
-                    'template': template_name,
-                    'error_type': 'network_error',
-                    'error': str(e),
-                    'event': 'email_send_network_error'
-                }
+                f"Network error sending email - {type(e).__name__}: {str(e)}",
+                extra=error_details
             )
+            
+            # Log adicional con traceback completo para debugging
+            import traceback
+            self.email_logger.debug(
+                f"Full traceback for network error:\n{traceback.format_exc()}",
+                extra={'to_email': to_email, 'event': 'email_network_error_traceback'}
+            )
+            
             # No relanzar el error para no interrumpir el flujo principal
         except smtplib.SMTPException as e:
             # Errores SMTP específicos

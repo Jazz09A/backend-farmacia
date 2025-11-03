@@ -1,19 +1,18 @@
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import time
 import os
-import sys
 from contextlib import asynccontextmanager
 
-from app.config.settings import settings
+from app.config.settings import Settings
 from app.core.exceptions import FarmaException
 # from app.core.middleware import LoggingMiddleware, SecurityMiddleware
 from app.config.logging_config import get_logger
 
+settings = Settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup

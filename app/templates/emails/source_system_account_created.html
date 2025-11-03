@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuenta Creada - FarmaPlus</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .content {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border-radius: 0 0 5px 5px;
+        }
+        .password-box {
+            background-color: #fff;
+            border: 2px dashed #4CAF50;
+            padding: 15px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .password {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>¡Bienvenido a FarmaPlus!</h1>
+        <p>Tu cuenta ha sido creada</p>
+    </div>
+    
+    <div class="content">
+        <p>Estimado/a <strong>{{ customer_name }}</strong>,</p>
+        <p>Nos complace informarte que hemos creado tu cuenta en FarmaPlus. 
+        A partir de ahora podrás acceder a nuestro sistema de pedidos en línea.</p>
+        <h2>Datos de Acceso</h2>
+        <p><strong>Email:</strong> {{ email }}</p>
+        <div class="password-box">
+            <p><strong>Contraseña Temporal:</strong></p>
+            <div class="password">{{ temporary_password }}</div>
+        </div>
+        <div class="warning">
+            <strong>⚠️ Importante:</strong>
+            <p>Esta es una contraseña temporal. Por tu seguridad, 
+            <strong>debes cambiar tu contraseña</strong> después de tu primer inicio de sesión.</p>
+        </div>
+        <h2>Próximos Pasos</h2>
+        <ol>
+            <li>Inicia sesión con tu email y la contraseña temporal</li>
+            <li>Cambia tu contraseña de inmediato</li>
+            <li>Explora tu historial de facturas históricas</li>
+            <li>Realiza tus pedidos en línea</li>
+        </ol>
+        <p style="text-align: center;">
+            <a href="{{ login_url }}" class="button">Iniciar Sesión</a>
+        </p>
+        <p style="text-align: center;">
+            <a href="{{ change_password_url }}">Cambiar Contraseña</a>
+        </p>
+        <p>Si tienes alguna pregunta o necesitas ayuda, no dudes en contactarnos.</p>
+        <p>¡Esperamos verte pronto!</p>
+        <p>Atentamente,<br>
+        <strong>Equipo FarmaPlus</strong><br>
+        Grupo Drozainka</p>
+    </div>
+    <div class="footer">
+        <p>© {{ year }} FarmaPlus - Grupo Drozainka. Todos los derechos reservados.</p>
+        <p>Este es un email automático, por favor no responder.</p>
+    </div>
+</body>
+</html>

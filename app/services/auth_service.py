@@ -23,9 +23,11 @@ from app.core.exceptions import (
     UserNotFoundException,
 )
 from app.schemas.role import UserRole
-from app.config.settings import settings
+from app.config.settings import Settings
 from app.services.email_service import email_service # Import the service instance
-
+from app.services.source_system_service import source_system_service
+from app.services.source_system_user_creation_service import SourceSystemUserCreationService
+settings = Settings()
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
@@ -138,6 +140,37 @@ class AuthService:
             user = db.query(User).filter(User.email == login_data.email).first()
             print("USER: " + str(user))
             if not user:
+                # Fallback: buscar en DEMOA por email y auto-provisionar
+                try:
+                    demoa_customer = source_system_service.get_customer_by_email(login_data.email)
+                except Exception as _e:
+                    demoa_customer = None
+                if demoa_customer and demoa_customer.get('customer_code'):
+                    try:
+                        provisioner = SourceSystemUserCreationService(db)
+                        provision_result = await provisioner.create_user_from_source_system(
+                            demoa_customer['customer_code'],
+                            use_alternate_email=False
+                        )
+                        auth_logger.info(
+                            f"Auto-provisioned user from DEMOA: {login_data.email}",
+                            extra={
+                                'email': login_data.email,
+                                'user_email': login_data.email,
+                                'event': 'auto_provision_demoa',
+                                'provision_success': provision_result.get('success', False),
+                                'email_sent': provision_result.get('email_sent', False)
+                            }
+                        )
+                    except Exception as _e:
+                        auth_logger.warning(
+                            f"Auto-provision from DEMOA failed for {login_data.email}: {_e}",
+                            extra={'email': login_data.email, 'event': 'auto_provision_demoa_failed'}
+                        )
+                    # En cualquier caso, indicar al usuario que revise su email
+                    raise InvalidCredentialsException(
+                        "No tenías cuenta en el sistema. La hemos creado y enviamos una contraseña temporal a tu correo. Intenta nuevamente tras revisar tu email."
+                    )
                 auth_logger.warning(
                     f"Login failed - user not found: {login_data.email}",
                     extra={

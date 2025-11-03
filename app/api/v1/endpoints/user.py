@@ -1,8 +1,8 @@
 """
 Endpoints protegidos para usuarios autenticados.
 """
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 from app.config.database import get_db
@@ -14,10 +14,17 @@ from app.schemas.user import UserResponse, UserStats, UserUpdate
 from app.schemas.address import AddressResponse, AddressCreate, AddressUpdate
 from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
 from app.schemas.order import OrderResponse, OrderCreate, OrderSummary, CheckoutPreviewRequest, CheckoutPreviewResponse
+from app.schemas.demoa_invoice import (
+    DEMOAInvoiceResponse,
+    DEMOAInvoiceDetails,
+    DEMOAInvoiceSummary,
+    DEMOAPaymentResponse
+)
 from app.services.cart_service import CartService
 from app.services.order_service import OrderService
 from app.services.discount_service import DiscountService
 from app.services.user_service import UserService
+from app.services.demoa_invoice_service import DEMOAInvoiceService
 
 router = APIRouter(prefix="/user", tags=["User Protected"])
 
@@ -678,3 +685,139 @@ async def get_user_stats(
     """
     user_service = UserService(db)
     return user_service.get_user_stats_by_id(current_user.id)
+
+# =============================================================================
+# FACTURAS DEMOA
+# =============================================================================
+
+@router.get("/invoices/summary", response_model=DEMOAInvoiceSummary)
+async def get_invoices_summary(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    📊 **Resumen de Facturas**: Obtiene un resumen de facturas del usuario
+    desde el sistema DEMOA.
+    """
+    demoa_service = DEMOAInvoiceService()
+    
+    # Obtener código de cliente en DEMOA
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        return DEMOAInvoiceSummary(
+            total_invoices=0,
+            pending_invoices=0,
+            paid_invoices=0,
+            total_pending_amount=Decimal('0.00'),
+            total_invoiced=Decimal('0.00')
+        )
+    
+    # Obtener resumen
+    summary = demoa_service.get_invoices_summary(customer_code)
+    return DEMOAInvoiceSummary(**summary)
+
+@router.get("/invoices", response_model=List[DEMOAInvoiceResponse])
+async def get_all_invoices(
+    status_filter: Optional[str] = Query(None, description="Filtrar por estado: 'pending', 'paid', 'all'"),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    📄 **Mis Facturas**: Obtiene todas las facturas del usuario desde DEMOA.
+    
+    Filtros disponibles:
+    - `pending`: Solo facturas pendientes
+    - `paid`: Solo facturas pagadas
+    - `all` o sin filtro: Todas las facturas
+    """
+    demoa_service = DEMOAInvoiceService()
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        return []
+    
+    if status_filter == 'pending':
+        invoices = demoa_service.get_pending_invoices(customer_code)
+    elif status_filter == 'paid':
+        invoices = demoa_service.get_paid_invoices(customer_code)
+    else:
+        invoices = demoa_service.get_all_invoices(customer_code)
+    
+    # Convertir a respuesta
+    return [DEMOAInvoiceResponse(**inv) for inv in invoices]
+
+@router.get("/invoices/pending", response_model=List[DEMOAInvoiceResponse])
+async def get_pending_invoices(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    ⏳ **Facturas Pendientes**: Obtiene facturas con pago pendiente.
+    """
+    demoa_service = DEMOAInvoiceService()
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        return []
+    
+    invoices = demoa_service.get_pending_invoices(customer_code)
+    return [DEMOAInvoiceResponse(**inv) for inv in invoices]
+
+@router.get("/invoices/paid", response_model=List[DEMOAInvoiceResponse])
+async def get_paid_invoices(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    ✅ **Facturas Pagadas**: Obtiene historial de facturas pagadas.
+    """
+    demoa_service = DEMOAInvoiceService()
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        return []
+    
+    invoices = demoa_service.get_paid_invoices(customer_code)
+    return [DEMOAInvoiceResponse(**inv) for inv in invoices]
+
+@router.get("/invoices/{invoice_number}", response_model=DEMOAInvoiceDetails)
+async def get_invoice_details(
+    invoice_number: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    📋 **Detalles de Factura**: Obtiene detalles completos de una factura,
+    incluyendo items y productos.
+    """
+    demoa_service = DEMOAInvoiceService()
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado en DEMOA"
+        )
+    
+    invoice = demoa_service.get_invoice_details(invoice_number, customer_code)
+    
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Factura no encontrada o no pertenece al usuario"
+        )
+    
+    return DEMOAInvoiceDetails(**invoice)
+
+@router.get("/invoices/payments", response_model=List[DEMOAPaymentResponse])
+async def get_payment_history(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    💳 **Historial de Pagos**: Obtiene el historial completo de pagos
+    aplicados a facturas.
+    """
+    demoa_service = DEMOAInvoiceService()
+    customer_code = demoa_service.get_customer_code_by_email(current_user.email)
+    
+    if not customer_code:
+        return []
+    
+    payments = demoa_service.get_payment_history(customer_code)
+    return [DEMOAPaymentResponse(**payment) for payment in payments]

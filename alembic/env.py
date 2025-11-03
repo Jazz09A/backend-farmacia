@@ -8,14 +8,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Importar Alembic context y SQLAlchemy después de ajustar el path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-from app.config.settings import settings
+from app.config.settings import Settings
 # Ahora importar tus módulos
 from app.config.database import Base
 from app.models import *  # Asegúrate de que esto no cause importaciones circulares
 
 # Configuración de Alembic
 config = context.config  # Esto funcionará si se ejecuta via comando 'alembic'
-
+settings = Settings()
 # Configurar logging
 if config.config_file_name is not None:
     from logging.config import fileConfig

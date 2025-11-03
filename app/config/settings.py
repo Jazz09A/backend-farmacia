@@ -58,9 +58,13 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: Optional[str] = None
     CLOUDINARY_UPLOAD_PRESET: Optional[str] = None
     
+    # SourceSystem Database Configuration
+    SOURCE_SYSTEM_SERVER: Optional[str] = os.getenv("SOURCE_SYSTEM_SERVER", "localhost")
+    SOURCE_SYSTEM_PORT: Optional[int] = int(os.getenv("SOURCE_SYSTEM_PORT", "49571"))
+    SOURCE_SYSTEM_DATABASE: Optional[str] = os.getenv("SOURCE_SYSTEM_DATABASE", "DEMOA")
+    SOURCE_SYSTEM_USER: Optional[str] = os.getenv("SOURCE_SYSTEM_USER", None)
+    SOURCE_SYSTEM_PASSWORD: Optional[str] = os.getenv("SOURCE_SYSTEM_PASSWORD", None)
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
-
-
-settings = Settings()

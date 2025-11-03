@@ -2,28 +2,28 @@
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
 from app.config.database import get_db
 from app.core.auth import get_admin_user, get_super_admin_user
-from app.models.order import Order, OrderStatus
+from app.models.order import Order
 from app.models.user import User
 from app.models.product import Product
-from app.schemas.order import PaymentStatusEnum, UpdatePaymentStatus
+from app.schemas.order import UpdatePaymentStatus
 from app.services.role_service import RoleService
 from app.schemas.role import (
     UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse,
-    PromotionRequest, PromotionResponse, UserRole
+    UserRole
 )
-from app.schemas.dashboard import DashboardData, DashboardStats, OrderStatusSummary, RecentOrder
+from app.schemas.dashboard import DashboardData
 from app.schemas.product import (
-    ProductResponse, ProductCreate, ProductCreateInput, ProductUpdate, ProductListResponse,
+    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse,
     ProductBulkUploadResult, ProductBulkUploadItem
 )
-from app.services.exchange_service import exchange_service
+# from app.services.exchange_service import exchange_service
 from app.schemas.user import (
     CustomerDetailedStats, CustomerStats, ProductPurchaseStats,
     OrderStatusDistribution, MonthlyPurchaseStats, UserResponse
@@ -32,6 +32,50 @@ from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
 from app.services.imges_service import ImageService
 from app.services.product_bulk_service import ProductBulkService
+
+# SourceSystem imports y endpoints
+from app.services.source_system_service import source_system_service
+from app.services.source_system_user_creation_service import SourceSystemUserCreationService
+from app.core.dependencies import PaginationParams, get_pagination_params
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr
+
+# Schemas para endpoints
+class SourceSystemCustomerResponse(BaseModel):
+    customer_code: str
+    customer_name: str
+    email: Optional[str]
+    alternate_email: Optional[str]
+    rif: Optional[str]
+    phones: Optional[str]
+    inactive: bool
+    is_juridico: bool
+
+class SourceSystemCustomerListResponse(BaseModel):
+    customers: List[SourceSystemCustomerResponse]
+    total: int
+    page: int
+    limit: int
+
+class CreateUsersFromSourceSystemRequest(BaseModel):
+    customer_codes: List[str]
+    use_alternate_emails: bool = False
+
+class UserCreationResult(BaseModel):
+    success: bool
+    customer_code: str
+    customer_name: Optional[str]
+    email: Optional[str]
+    user_id: Optional[str]
+    error: Optional[str]
+    email_sent: Optional[bool]
+    email_error: Optional[str]
+
+class CreateUsersResponse(BaseModel):
+    total: int
+    successful: List[UserCreationResult]
+    failed: List[UserCreationResult]
+    summary: dict
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 image_service = ImageService()
@@ -1253,4 +1297,98 @@ async def update_payment_status(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Error interno al actualizar el estado del pago"
+        )
+
+# SourceSystem imports y endpoints
+@router.get("/source-system/customers", response_model=SourceSystemCustomerListResponse)
+async def get_source_system_customers(
+    pagination: PaginationParams = Depends(get_pagination_params),
+    include_inactive: bool = Query(False, description="Incluir clientes inactivos"),
+    only_with_email: bool = Query(True, description="Solo clientes con email"),
+    search: Optional[str] = Query(None, description="Buscar por nombre o código"),
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        customers = source_system_service.get_all_customers(
+            include_inactive=include_inactive,
+            only_with_email=only_with_email,
+            limit=pagination.limit,
+            offset=pagination.skip
+        )
+        if search:
+            search_lower = search.lower()
+            customers = [
+                c for c in customers
+                if search_lower in c.get('customer_name', '').lower()
+                or search_lower in c.get('customer_code', '').lower()
+            ]
+        all_customers = source_system_service.get_all_customers(
+            include_inactive=include_inactive,
+            only_with_email=only_with_email
+        )
+        total = len(all_customers)
+        if search:
+            search_lower = search.lower()
+            all_customers = [
+                c for c in all_customers
+                if search_lower in c.get('customer_name', '').lower()
+                or search_lower in c.get('customer_code', '').lower()
+            ]
+            total = len(all_customers)
+        customer_responses = [
+            SourceSystemCustomerResponse(**customer)
+            for customer in customers
+        ]
+        return SourceSystemCustomerListResponse(
+            customers=customer_responses,
+            total=total,
+            page=pagination.page,
+            limit=pagination.limit
+        )
+    except Exception as e:
+        logger.error(f"Error obteniendo clientes SourceSystem: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener clientes de SourceSystem: {str(e)}"
+        )
+
+@router.post("/source-system/create-users", response_model=CreateUsersResponse)
+async def create_users_from_source_system(
+    request: CreateUsersFromSourceSystemRequest,
+    current_user: User = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        service = SourceSystemUserCreationService(db)
+        results = await service.create_multiple_users_from_source_system(
+            customer_codes=request.customer_codes,
+            use_alternate_emails=request.use_alternate_emails
+        )
+        successful = [UserCreationResult(**r) for r in results["successful"]]
+        failed = [UserCreationResult(**r) for r in results["failed"]]
+        total_attempted = results["total"]
+        total_successful = len(successful)
+        total_failed = len(failed)
+        emails_sent_count = sum(1 for r in successful if r.email_sent)
+        emails_failed_count = sum(1 for r in successful if not r.email_sent) + total_failed
+        summary = {
+            "total_attempted": total_attempted,
+            "users_created": total_successful,
+            "users_failed": total_failed,
+            "emails_sent": emails_sent_count,
+            "emails_failed": emails_failed_count,
+            "success_rate": round((total_successful / total_attempted * 100) if total_attempted > 0 else 0, 2)
+        }
+        return CreateUsersResponse(
+            total=total_attempted,
+            successful=successful,
+            failed=failed,
+            summary=summary
+        )
+    except Exception as e:
+        logger.error(f"Error creando usuarios desde SourceSystem: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear usuarios: {str(e)}"
         )
