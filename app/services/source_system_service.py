@@ -11,28 +11,53 @@ class SourceSystemService:
         self.server = settings.SOURCE_SYSTEM_SERVER
         self.port = settings.SOURCE_SYSTEM_PORT
         self.database = settings.SOURCE_SYSTEM_DATABASE
-        self.user = settings.SOURCE_SYSTEM_USER
-        self.password = settings.SOURCE_SYSTEM_PASSWORD
+        # Limpiar espacios en blanco de usuario y contraseña para evitar errores de autenticación
+        self.user = settings.SOURCE_SYSTEM_USER.strip() if settings.SOURCE_SYSTEM_USER else None
+        self.password = settings.SOURCE_SYSTEM_PASSWORD.strip() if settings.SOURCE_SYSTEM_PASSWORD else None
 
     def get_connection(self):
         try:
+            # Validar que los parámetros básicos estén configurados
+            if not self.server:
+                raise ValueError("SOURCE_SYSTEM_SERVER no está configurado")
+            if not self.database:
+                raise ValueError("SOURCE_SYSTEM_DATABASE no está configurado")
+            
             connect_kwargs = {
-                "server": self.server,
+                "server": self.server.strip() if isinstance(self.server, str) else self.server,
                 "port": self.port,
-                "database": self.database,
+                "database": self.database.strip() if isinstance(self.database, str) else self.database,
                 "as_dict": True,
                 "login_timeout": 15,  # Segundos para establecer conexión
                 "timeout": 30,        # Segundos para queries
             }
             # Solo agregar credenciales si están configuradas
+            # Asegurar que se limpien espacios en blanco
             if self.user and self.password:
-                connect_kwargs["user"] = self.user
-                connect_kwargs["password"] = self.password
+                user_clean = self.user.strip() if isinstance(self.user, str) else self.user
+                password_clean = self.password.strip() if isinstance(self.password, str) else self.password
+                
+                if not user_clean or not password_clean:
+                    self.logger.warning("Usuario o contraseña están vacíos después de limpiar espacios")
+                else:
+                    connect_kwargs["user"] = user_clean
+                    connect_kwargs["password"] = password_clean
+                    self.logger.debug(f"Conectando con usuario: {user_clean[:3]}*** (longitud: {len(user_clean)})")
             
+            self.logger.debug(f"Conectando a {connect_kwargs['server']}:{connect_kwargs['port']}/{connect_kwargs['database']}")
             conn = pymssql.connect(**connect_kwargs)
+            self.logger.info("Conexión a SourceSystem establecida exitosamente")
             return conn
         except Exception as e:
-            self.logger.error(f"Error conectando a SourceSystem: {str(e)}")
+            error_msg = str(e)
+            self.logger.error(f"Error conectando a SourceSystem: {error_msg}")
+            
+            # Proporcionar información adicional para debugging
+            if "18456" in error_msg:
+                self.logger.error("Error 18456: Fallo de autenticación. Verificar usuario y contraseña.")
+            if "20002" in error_msg:
+                self.logger.error("Error 20002: No se pudo conectar al servidor. Verificar conectividad de red.")
+            
             raise
 
     def get_all_customers(
