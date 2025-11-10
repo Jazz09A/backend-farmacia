@@ -9,6 +9,7 @@ from app.config.logging_config import get_logger, log_error
 import os
 from jinja2 import Environment, FileSystemLoader
 import socket
+from app.utils.timezone import get_ve_now
 
 settings = Settings()
 class EmailService:
@@ -202,18 +203,17 @@ class EmailService:
                 - estimated_delivery: Estimated delivery date (optional)
                 - tracking_link: URL to the order tracking page
         """
-        from datetime import datetime
-        
         # Prepare context for the template
+        current_time = get_ve_now()
         context = {
             "order_number": order_data.get("order_number", "N/A"),
-            "order_date": order_data.get("order_date", datetime.now().strftime("%d/%m/%Y %H:%M")),
+            "order_date": order_data.get("order_date", current_time.strftime("%d/%m/%Y %H:%M")),
             "order_total": order_data.get("order_total", "N/A"),
             "order_status": order_data.get("order_status", "Confirmada"),
             "payment_method": order_data.get("payment_method", "N/A"),
             "estimated_delivery": order_data.get("estimated_delivery"),
             "tracking_link": order_data.get("tracking_link", "#"),
-            "year": datetime.now().year
+            "year": current_time.year
         }
         
         subject = f"Tu orden #{order_data.get('order_number', 'N/A')} ha sido confirmada - Tracking disponible"
@@ -227,8 +227,6 @@ class EmailService:
 
     async def send_payment_registered_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago registrado"""
-        from datetime import datetime
-        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
@@ -236,7 +234,7 @@ class EmailService:
             "order_number": payment_data.get("order_number", "N/A"),
             "payment_reference": payment_data.get("payment_reference", "N/A"),
             "payment_date": payment_data.get("payment_date", "N/A"),
-            "year": datetime.now().year
+            "year": get_ve_now().year
         }
         
         subject = f"Pago registrado - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
@@ -250,8 +248,6 @@ class EmailService:
 
     async def send_payment_approved_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago aprobado"""
-        from datetime import datetime
-        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
@@ -260,7 +256,7 @@ class EmailService:
             "order_total": payment_data.get("order_total", 0),
             "paid_total": payment_data.get("paid_total", 0),
             "remaining_balance": payment_data.get("remaining_balance", 0),
-            "year": datetime.now().year
+            "year": get_ve_now().year
         }
         
         subject = f"¡Pago aprobado! - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
@@ -274,15 +270,13 @@ class EmailService:
 
     async def send_payment_rejected_email(self, to_email: str, payment_data: Dict[str, Any]):
         """Enviar email de pago rechazado"""
-        from datetime import datetime
-        
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
             "amount": payment_data.get("amount", 0),
             "currency": payment_data.get("currency", "USD"),
             "order_number": payment_data.get("order_number", "N/A"),
             "admin_notes": payment_data.get("admin_notes", "No se proporcionó motivo específico"),
-            "year": datetime.now().year
+            "year": get_ve_now().year
         }
         
         subject = f"Pago rechazado - Orden #{payment_data.get('order_number', 'N/A')} - FarmaPlus"
@@ -296,11 +290,9 @@ class EmailService:
 
     async def send_verification_email(self, to_email: str, verification_data: Dict[str, Any]):
         """Enviar email de verificación de correo electrónico"""
-        from datetime import datetime
-        
         context = {
             "verification_link": verification_data.get("verification_link", "#"),
-            "year": datetime.now().year
+            "year": get_ve_now().year
         }
         
         subject = "Verifica tu correo electrónico - FarmaPlus"

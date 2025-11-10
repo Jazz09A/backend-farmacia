@@ -6,11 +6,12 @@ This service handles fetching exchange rates from the BCV API and updating produ
 import httpx
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models.product import Product
+from app.utils.timezone import get_ve_now
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class ExchangeRateService:
                 
                 # Cache the response
                 self._cached_rate = rate_data
-                self._last_fetch = datetime.now()
+                self._last_fetch = get_ve_now()
                 
                 logger.info(f"Exchange rate fetched successfully: {rate_data['price']} VES/USD")
                 return rate_data
@@ -84,7 +85,7 @@ class ExchangeRateService:
         if not self._cached_rate or not self._last_fetch:
             return False
         
-        return datetime.now() - self._last_fetch < self._cache_duration
+        return get_ve_now() - self._last_fetch < self._cache_duration
     
     def _validate_rate_response(self, data: Dict[str, Any]) -> bool:
         """Validate the structure of the rate response."""

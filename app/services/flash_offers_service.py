@@ -1,7 +1,6 @@
 """
 Servicio para manejar la lógica de negocio de Flash Offers
 """
-from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -10,6 +9,7 @@ from fastapi import HTTPException, status
 from app.models.promotion import FlashOffer
 from app.models.product import Product
 from app.schemas.promotion import FlashOfferCreate, FlashOfferUpdate
+from app.utils.timezone import get_ve_now
 
 
 class FlashOffersService:
@@ -84,7 +84,7 @@ class FlashOffersService:
             query = query.filter(FlashOffer.is_active == True)
         
         if valid_only:
-            now = datetime.utcnow()
+            now = get_ve_now()
             query = query.filter(
                 and_(
                     FlashOffer.is_active == True,
@@ -158,7 +158,7 @@ class FlashOffersService:
         for field, value in update_dict.items():
             setattr(flash_offer, field, value)
         
-        flash_offer.updated_at = datetime.utcnow()
+        flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
         
@@ -181,7 +181,7 @@ class FlashOffersService:
             return None
         
         flash_offer.is_active = not flash_offer.is_active
-        flash_offer.updated_at = datetime.utcnow()
+        flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
         
@@ -189,7 +189,7 @@ class FlashOffersService:
     
     def get_active_flash_offers_for_product(self, product_id: str) -> List[FlashOffer]:
         """Obtener todas las flash offers válidas para un producto."""
-        now = datetime.utcnow()
+        now = get_ve_now()
         return self.db.query(FlashOffer).filter(
             and_(
                 FlashOffer.product_id == product_id,
@@ -217,7 +217,7 @@ class FlashOffersService:
             )
         
         flash_offer.used_quantity += quantity
-        flash_offer.updated_at = datetime.utcnow()
+        flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
         
@@ -225,7 +225,7 @@ class FlashOffersService:
     
     def get_expired_flash_offers(self) -> List[FlashOffer]:
         """Obtener flash offers expiradas."""
-        now = datetime.utcnow()
+        now = get_ve_now()
         return self.db.query(FlashOffer).filter(
             and_(
                 FlashOffer.is_active == True,
@@ -240,7 +240,7 @@ class FlashOffersService:
         
         for offer in expired_offers:
             offer.is_active = False
-            offer.updated_at = datetime.utcnow()
+            offer.updated_at = get_ve_now()
             count += 1
         
         if count > 0:

@@ -7,7 +7,7 @@ from app.core.security import get_password_hash
 from app.services.source_system_service import source_system_service
 from app.services.email_service import email_service
 from app.config.logging_config import get_logger
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 from app.config.settings import Settings
 settings = Settings()
 class SourceSystemUserCreationService:
@@ -76,7 +76,7 @@ class SourceSystemUserCreationService:
                             "temporary_password": temp_password,
                             "login_url": f"{settings.FRONTEND_URL}/login",
                             "change_password_url": f"{settings.FRONTEND_URL}/change-password",
-                            "year": datetime.now().year,
+                            "year": get_ve_now().year,
                         }
                     )
                     email_sent = True
@@ -134,7 +134,7 @@ class SourceSystemUserCreationService:
                         "temporary_password": temp_password,
                         "login_url": f"{settings.FRONTEND_URL}/login",
                         "change_password_url": f"{settings.FRONTEND_URL}/change-password",
-                        "year": datetime.now().year,
+                        "year": get_ve_now().year,
                     }
                 )
                 email_sent = True

@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class BlogCategory(Base):
     __tablename__ = "blog_categories"
@@ -32,8 +32,8 @@ class BlogPost(Base):
     status = Column(String, default='draft', index=True) # draft, published
     
     published_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
 
     author = relationship("User")
     category = relationship("BlogCategory", back_populates="posts")

@@ -1,7 +1,6 @@
 """
 Servicio para manejo de roles y permisos.
 """
-from datetime import datetime
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -10,6 +9,7 @@ from app.schemas.role import (
     UserRoleUpdate, PromotionRequest, RoleInfo, 
     UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse
 )
+from app.utils.timezone import get_ve_now
 
 class RoleService:
     """Servicio para gestión de roles y permisos."""
@@ -171,7 +171,7 @@ class RoleService:
         
         # Actualizar rol
         target_user.role = new_role
-        target_user.updated_at = datetime.utcnow()
+        target_user.updated_at = get_ve_now()
         
         try:
             db.commit()
@@ -240,7 +240,7 @@ class RoleService:
         
         previous_role = target_user.role
         target_user.role = new_role
-        target_user.updated_at = datetime.utcnow()
+        target_user.updated_at = get_ve_now()
         
         try:
             db.commit()

@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class UserFavorite(Base):
     __tablename__ = "user_favorites"
@@ -15,8 +15,8 @@ class UserFavorite(Base):
     product_id = Column(String, ForeignKey("products.id"), nullable=False, index=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     user = relationship("User", back_populates="favorites")

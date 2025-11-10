@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts
+from app.api.v1.endpoints import quotes
 from app.api.v1.endpoints import exchange_rate
 api_router = APIRouter()
 
@@ -50,6 +51,20 @@ api_router.include_router(
     credit.router,
     prefix="/credit",
     tags=["💳 Crédito"],
+)
+
+# Cotizaciones - creación desde checkout
+api_router.include_router(
+    quotes.router,
+    prefix="/quotes",
+    tags=["📝 Cotizaciones"],
+)
+
+# Cotizaciones - vistas del usuario autenticado
+api_router.include_router(
+    quotes.user_quotes_router,
+    prefix="/user/quotes",
+    tags=["📝 Cotizaciones"],
 )
 
 # =============================================================================

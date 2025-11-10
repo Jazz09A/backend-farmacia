@@ -5,13 +5,14 @@ from app.models.cart import CartItem
 from app.models.address import Address
 from app.models.shipping import ShippingZone
 from fastapi import HTTPException
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from app.config.logging_config import get_logger
 from app.schemas.order import OrderCreate
 from decimal import Decimal
 
 from app.services.currency_service import CurrencyService
 from app.services.exchange_service import ExchangeRateService
+from app.utils.timezone import get_ve_now
 
 class CreditService:
     def __init__(self, db: Session):
@@ -127,7 +128,7 @@ class CreditService:
         order.credit_amount = order.total           # Total en USD
         order.credit_remaining = order.total        # Saldo pendiente en USD
         order.credit_paid_total = Decimal('0.00')   # Pagado hasta ahora en USD
-        order.payment_due_date = datetime.now(timezone.utc) + timedelta(days=30)
+        order.payment_due_date = get_ve_now() + timedelta(days=30)
         # exchange_rate será None porque payment_currency es USD
         
         # 7. Usar crédito del usuario (en USD)

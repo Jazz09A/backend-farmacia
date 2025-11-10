@@ -2,15 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.schemas.auth import (
-    LoginRequest, 
+    LoginRequest,
     RegisterRequest,
-    Token, 
+    Token,
     RefreshTokenRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
-    VerifyEmailRequest,
     ResendVerificationRequest,
-    AuthResponse
+    AuthResponse,
 )
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
@@ -40,8 +39,6 @@ async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
     **Verificar correo electrónico**: Confirma la dirección de correo del usuario a través de un token.
     """
     try:
-        #TODO BORRAR
-        print("TOKEN: " + str(token))
         success = await AuthService(db).verify_email(db, token)
         if success:
             return AuthResponse(message="Email verified successfully. You can now log in.")

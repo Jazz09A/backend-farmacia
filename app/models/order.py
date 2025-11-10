@@ -3,9 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from app.config.database import Base
 import uuid
-from datetime import datetime, timezone
 from enum import Enum
 from decimal import Decimal
+from app.utils.timezone import get_ve_now
 
 from app.schemas.order import PaymentStatusEnum
 
@@ -70,8 +70,8 @@ class Order(Base):
     quantity_discount_amount = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)  # USD
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     user = relationship("User", back_populates="orders")
@@ -98,7 +98,7 @@ class Order(Base):
         """Generate a unique order number."""
         import random
         import string
-        timestamp = datetime.now().strftime("%Y%m%d")
+        timestamp = get_ve_now().strftime("%Y%m%d")
         random_suffix = ''.join(random.choices(string.digits, k=4))
         return f"FP{timestamp}{random_suffix}"
 
@@ -125,7 +125,7 @@ class OrderItem(Base):
     images = Column(JSON, nullable=True)  # Array de URLs de imágenes
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ve_now)
     
     # Relationships
     order = relationship("Order", back_populates="items")
@@ -159,7 +159,7 @@ class OrderAddress(Base):
     delivery_instructions = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ve_now)
     
     # Relationships
     order = relationship("Order", back_populates="shipping_address")

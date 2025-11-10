@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.schemas.order import PaymentStatusEnum
 from app.schemas.order import UpdatePaymentStatus
 from decimal import Decimal
+from app.utils.timezone import get_ve_now
 
 from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
 
@@ -69,7 +70,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     )
     
     # 1. Calculate date range for filtering
-    end_date = datetime.now(timezone.utc)
+    end_date = get_ve_now()
     start_date = end_date - timedelta(days=days_filter)
 
     # 2. Basic Stats
@@ -298,7 +299,6 @@ def get_credit_payments_dashboard(db: Session) -> dict:
     from app.models.credit_payment import CreditPayment
     from app.models.order import Order
     from sqlalchemy import func
-    from datetime import datetime, timezone
     
     
     # Pagos pendientes
@@ -307,7 +307,7 @@ def get_credit_payments_dashboard(db: Session) -> dict:
     ).count()
     
     # Pagos aprobados hoy
-    today = datetime.now(timezone.utc).date()
+    today = get_ve_now().date()
     approved_today = db.query(CreditPayment).filter(
         CreditPayment.status == "approved",
         func.date(CreditPayment.approved_at) == today

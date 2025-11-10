@@ -1,11 +1,10 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from app.models.user import User
 from app.config.logging_config import get_logger, log_error
-from app.models.address import UserPreferences
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.schemas.user import UserResponse
 from app.core.security import (
@@ -27,6 +26,7 @@ from app.config.settings import Settings
 from app.services.email_service import email_service # Import the service instance
 from app.services.source_system_service import source_system_service
 from app.services.source_system_user_creation_service import SourceSystemUserCreationService
+from app.utils.timezone import get_ve_now
 settings = Settings()
 class AuthService:
     def __init__(self, db: Session):
@@ -95,7 +95,7 @@ class AuthService:
                 template_name="verify_email.html",
                 context={
                     "verification_link": verification_link,
-                    "year": datetime.now().year
+                    "year": get_ve_now().year
                 }
             )
 
@@ -209,7 +209,7 @@ class AuthService:
                 raise InvalidCredentialsException("Cuenta desactivada")
             
             # TODO: Verify email if not verified
-            user.last_login = datetime.now(timezone.utc)
+            user.last_login = get_ve_now()
             db.commit()
             
             auth_logger.info(
@@ -302,7 +302,7 @@ class AuthService:
         # Generate reset token
         reset_token = generate_reset_token()
         user.reset_token = reset_token
-        user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+        user.reset_token_expires = get_ve_now() + timedelta(hours=1)
         db.commit()
         
         # TODO: Send reset email
@@ -315,7 +315,7 @@ class AuthService:
         """Reset user password with token."""
         user = db.query(User).filter(
             User.reset_token == token,
-            User.reset_token_expires > datetime.utcnow()
+            User.reset_token_expires > get_ve_now()
         ).first()
         
         if not user:
@@ -351,7 +351,7 @@ class AuthService:
             template_name="verify_email.html",
             context={
                 "verification_link": f"{settings.FRONTEND_URL}/verify-email/{user.verification_token}",
-                "year": datetime.now().year
+                "year": get_ve_now().year
             }
         )
         

@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Foreig
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class Review(Base):
     __tablename__ = "reviews"
@@ -33,8 +33,8 @@ class Review(Base):
     reviewer_age_group = Column(String, nullable=True)  # 18-25, 26-35, etc.
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     user = relationship("User", back_populates="reviews")

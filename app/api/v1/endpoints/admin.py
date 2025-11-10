@@ -2,7 +2,8 @@
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.utils.timezone import get_ve_now
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from sqlalchemy.orm import Session
@@ -1009,8 +1010,8 @@ async def get_customer_statistics(
     last_order_date = sorted_orders[-1].created_at
     
     # Días como cliente
-    # Usar datetime.utcnow() para mantener consistencia con los timestamps de la DB
-    days_as_customer = (datetime.utcnow() - customer.created_at).days
+    # Usar hora local de Venezuela para consistencia con los timestamps de la DB
+    days_as_customer = (get_ve_now() - customer.created_at).days
     
     # Frecuencia de pedidos (promedio de días entre pedidos)
     order_frequency_days = None
@@ -1213,7 +1214,7 @@ async def get_admin_dashboard(
     admin_users = db.query(User).filter(User.role.in_(["admin", "super_admin"])).count()
     
     # Usuarios recientes (últimos 7 días)
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = get_ve_now() - timedelta(days=7)
     recent_users = db.query(User).filter(User.created_at >= week_ago).count()
     
     return {

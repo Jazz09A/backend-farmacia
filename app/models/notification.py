@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class UserNotification(Base):
     __tablename__ = "user_notifications"
@@ -21,7 +21,7 @@ class UserNotification(Base):
     # You can add a link to a relevant page
     link = Column(String, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
 
     user = relationship("User", back_populates="notifications")
 

@@ -1,12 +1,12 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, ForeignKey, Table, Index, Numeric
+from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.types import TypeDecorator, JSON
 from app.config.database import Base
 import uuid
-from datetime import datetime
 import json
 from decimal import Decimal
+from app.utils.timezone import get_ve_now
 
 # Custom array type that works with both SQLite and PostgreSQL
 class ArrayType(TypeDecorator):
@@ -110,8 +110,8 @@ class Product(Base):
     meta_description = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Add index for date sorting
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now, index=True)  # Add index for date sorting
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     brand_obj = relationship("Brand", back_populates="products")

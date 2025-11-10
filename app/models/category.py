@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Text, Boolean, Integer, ForeignKey, DateT
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class Category(Base):
     __tablename__ = "categories"
@@ -25,8 +25,8 @@ class Category(Base):
     sort_order = Column(Integer, default=0)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     parent = relationship("Category", remote_side=[id], backref="subcategories")
@@ -59,8 +59,8 @@ class Brand(Base):
     is_active = Column(Boolean, default=True, index=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     products = relationship("Product", back_populates="brand_obj")

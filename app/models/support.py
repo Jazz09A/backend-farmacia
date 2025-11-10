@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
+from app.utils.timezone import get_ve_now
 
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
@@ -17,8 +17,8 @@ class SupportTicket(Base):
     priority = Column(String, nullable=False, default='medium', index=True) # low, medium, high, urgent
     category = Column(String, nullable=True, index=True) # billing, technical, general
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
 
     user = relationship("User", back_populates="support_tickets")
     responses = relationship("SupportResponse", back_populates="ticket", cascade="all, delete-orphan")
@@ -35,7 +35,7 @@ class SupportResponse(Base):
     
     message = Column(Text, nullable=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
 
     ticket = relationship("SupportTicket", back_populates="responses")
     author = relationship("User")

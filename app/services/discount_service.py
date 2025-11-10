@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_
 from app.models.promotion import QuantityDiscount, FlashOffer, DiscountType
 from app.models.cart import CartItem
 from app.models.product import Product
+from app.utils.timezone import get_ve_now
 
 
 class DiscountService:
@@ -32,9 +33,7 @@ class DiscountService:
 
     def get_active_flash_offers_for_products(self, product_ids: List[str]) -> Dict[str, FlashOffer]:
         """Obtener ofertas flash activas para una lista de productos."""
-        from datetime import datetime
-
-        now = datetime.utcnow()
+        now = get_ve_now()
         flash_offers = self.db.query(FlashOffer).filter(
             and_(
                 FlashOffer.product_id.in_(product_ids),

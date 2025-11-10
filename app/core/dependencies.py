@@ -23,24 +23,47 @@ async def get_current_user(
     )
     
     try:
+        print(
+            "[auth] get_current_user called",
+            f"scheme={credentials.scheme if credentials else 'None'}",
+        )
         # Verify token
         email = verify_token(credentials.credentials, "access")
+        print("[auth] token verified", f"email={email}")
         
         # Get user from database
         user = db.query(User).filter(User.email == email).first()
         if user is None:
+            print("[auth] user not found in database", f"email={email}")
             raise credentials_exception
+        print(
+            "[auth] user fetched",
+            f"id={user.id}",
+            f"is_active={user.is_active}",
+            f"is_verified={getattr(user, 'is_verified', None)}",
+        )
         return user
-    except Exception:
+    except Exception as e:
+        print("[auth] get_current_user error", repr(e))
         raise credentials_exception
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Get current active user."""
     if not current_user.is_active:
+        print(
+            "[auth] inactive user attempted access",
+            f"id={current_user.id}",
+            f"email={current_user.email}",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="Usuario inactivo"
         )
+    print(
+        "[auth] current active user",
+        f"id={current_user.id}",
+        f"email={current_user.email}",
+    )
     return current_user
 
 async def get_current_verified_user(current_user: User = Depends(get_current_active_user)) -> User:

@@ -5,8 +5,8 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Enum, Numeric
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
 from enum import Enum as PyEnum
+from app.utils.timezone import get_ve_now
 
 class DiscountType(PyEnum):
     """Tipos de descuentos aplicables a órdenes"""
@@ -41,7 +41,7 @@ class OrderDiscount(Base):
     quantity_threshold = Column(String, nullable=True)  # Para descuentos por cantidad (ej: "50+")
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
 
     # Relationships
     order = relationship("Order", back_populates="discounts")

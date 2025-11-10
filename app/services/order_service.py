@@ -15,6 +15,7 @@ from app.schemas.order import OrderCreate
 from app.services.discount_service import DiscountService
 from app.config.logging_config import get_logger, log_error
 from dotenv import load_dotenv
+from app.utils.timezone import get_ve_now
 
 load_dotenv()
 
@@ -419,9 +420,8 @@ class OrderService:
 
     async def _generate_order_number(self):
         """Generates a unique, human-readable order number."""
-        from datetime import datetime
         import random
-        timestamp = datetime.now().strftime("%Y%m%d")
+        timestamp = get_ve_now().strftime("%Y%m%d")
         random_suffix = ''.join(random.choices('0123456789', k=4))
         return f"FP-{timestamp}-{random_suffix}"
 

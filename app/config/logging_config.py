@@ -8,9 +8,9 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from datetime import datetime
 from typing import Dict, Any
 import json
+from app.utils.timezone import get_ve_now
 
 from app.config.settings import Settings
 
@@ -24,7 +24,7 @@ class JSONFormatter(logging.Formatter):
     
     def format(self, record: logging.LogRecord) -> str:
         log_entry = {
-            "timestamp": datetime.now().isoformat() + "Z",
+            "timestamp": get_ve_now().isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

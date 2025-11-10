@@ -10,6 +10,7 @@ from app.models.order import Order
 from app.models.user import User
 from app.config.logging_config import get_logger
 from app.services.currency_service import CurrencyService
+from app.utils.timezone import get_ve_now
 
 class CreditPaymentService:
     def __init__(self, db: Session):
@@ -113,7 +114,7 @@ class CreditPaymentService:
         
         # Aprobar el pago
         payment.status = "approved"
-        payment.approved_at = datetime.utcnow()
+        payment.approved_at = get_ve_now()
         payment.approved_by = admin_id
         payment.admin_notes = admin_notes
         
@@ -125,7 +126,7 @@ class CreditPaymentService:
         # Verificar si la orden está completamente pagada
         if order.credit_remaining <= Decimal('0.01'):  # Tolerancia para redondeo
             order.credit_paid = True
-            order.credit_payment_date = datetime.utcnow()
+            order.credit_payment_date = get_ve_now()
             order.credit_remaining = Decimal('0.00')  # Asegurar cero exacto
             
             self.logger.info(f"Orden {order.id} completamente pagada")
@@ -147,7 +148,7 @@ class CreditPaymentService:
             return False
         
         payment.status = "rejected"
-        payment.approved_at = datetime.utcnow()
+        payment.approved_at = get_ve_now()
         payment.approved_by = admin_id
         payment.admin_notes = admin_notes
         

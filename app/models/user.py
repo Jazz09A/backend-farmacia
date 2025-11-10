@@ -2,8 +2,8 @@ from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, Date, J
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
+from app.utils.timezone import get_ve_now
 
 class User(Base):
     __tablename__ = "users"
@@ -83,8 +83,8 @@ class User(Base):
     credit_status = Column(String, default="active", nullable=False)  # active, suspended
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     last_login = Column(DateTime, nullable=True)
     
     # Relationships

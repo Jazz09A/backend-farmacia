@@ -2,8 +2,8 @@ from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Foreig
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime
 import enum
+from app.utils.timezone import get_ve_now
 
 class MovementType(enum.Enum):
     IN = "in"
@@ -37,7 +37,7 @@ class InventoryMovement(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
     
     # Relationships
     product = relationship("Product", backref="inventory_movements")
@@ -70,9 +70,9 @@ class StockAlert(Base):
     overstocked_notified = Column(Boolean, default=False)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_check = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
+    last_check = Column(DateTime, default=get_ve_now)
     
     # Relationships
     product = relationship("Product", backref="stock_alert")
@@ -85,7 +85,7 @@ class StockAlert(Base):
         self.is_out_of_stock = current_stock == 0
         self.is_low_stock = 0 < current_stock <= self.min_stock_threshold
         self.is_overstocked = current_stock > self.max_stock_threshold
-        self.last_check = datetime.utcnow()
+        self.last_check = get_ve_now()
 
 class BatchTracking(Base):
     __tablename__ = "batch_tracking"
@@ -123,8 +123,8 @@ class BatchTracking(Base):
     is_active = Column(Boolean, default=True, index=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     product = relationship("Product", backref="batches")
@@ -142,12 +142,12 @@ class BatchTracking(Base):
         """Check if batch is expired."""
         if not self.expiry_date:
             return False
-        return datetime.utcnow() > self.expiry_date
+        return get_ve_now() > self.expiry_date
     
     @property
     def days_to_expiry(self):
         """Return days until expiry."""
         if not self.expiry_date:
             return None
-        delta = self.expiry_date - datetime.utcnow()
+        delta = self.expiry_date - get_ve_now()
         return delta.days if delta.days > 0 else 0 

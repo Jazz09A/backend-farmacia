@@ -4,9 +4,9 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.types import TypeDecorator, JSON
 from app.config.database import Base
 import uuid
-from datetime import datetime
 import json
 import enum
+from app.utils.timezone import get_ve_now
 
 # Custom array type for SQLite compatibility
 class ArrayType(TypeDecorator):
@@ -71,8 +71,8 @@ class FlashOffer(Base):
     is_active = Column(Boolean, default=True, index=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
 
     # Relationships
     product = relationship("Product", backref="flash_offers")
@@ -83,7 +83,7 @@ class FlashOffer(Base):
     @property
     def is_valid(self):
         """Check if flash offer is currently valid."""
-        now = datetime.utcnow()
+        now = get_ve_now()
         return (
             self.is_active and
             self.start_time <= now <= self.end_time and
@@ -132,8 +132,8 @@ class PromotionalCode(Base):
     is_active = Column(Boolean, default=True, index=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
 
     # Relationships
     usages = relationship("PromotionUsage", back_populates="promotional_code", cascade="all, delete-orphan")
@@ -144,7 +144,7 @@ class PromotionalCode(Base):
     @property
     def is_valid(self):
         """Check if promotional code is currently valid."""
-        now = datetime.utcnow()
+        now = get_ve_now()
         return (
             self.is_active and
             self.valid_from <= now <= self.valid_until and
@@ -193,7 +193,7 @@ class PromotionUsage(Base):
     order_amount = Column(Float, nullable=False)
 
     # Timestamps
-    used_at = Column(DateTime, default=datetime.utcnow)
+    used_at = Column(DateTime, default=get_ve_now)
 
     # Relationships
     promotional_code = relationship("PromotionalCode", back_populates="usages")
@@ -227,8 +227,8 @@ class QuantityDiscount(Base):
     priority = Column(Integer, default=0)  # Para ordenar aplicación de descuentos
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ve_now)
+    updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
 
     def __repr__(self):
         return f"<QuantityDiscount(id={self.id}, name={self.name}, min_qty={self.min_quantity}, discount={self.discount_value})>"

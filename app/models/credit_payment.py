@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
-from datetime import datetime, timezone
+from app.utils.timezone import get_ve_now
 
 
 class CreditPayment(Base):
@@ -26,7 +26,7 @@ class CreditPayment(Base):
     admin_notes = Column(Text, nullable=True)  # Notas del admin
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=get_ve_now)
     approved_at = Column(DateTime, nullable=True)
     approved_by = Column(String, nullable=True)  # Admin que aprobó
     
