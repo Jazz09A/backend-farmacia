@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", True)
     
+    # API URL
+    API_URL: str = os.getenv("API_URL", "http://localhost:8000")
     # Database
     # DATABASE_URL: str = "postgresql://farmaplus:password@localhost:5432/farmaplus"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./db.sqlite3")
@@ -61,7 +63,7 @@ class Settings(BaseSettings):
     # SourceSystem Database Configuration
     SOURCE_SYSTEM_SERVER: Optional[str] = os.getenv("SOURCE_SYSTEM_SERVER", "localhost")
     SOURCE_SYSTEM_PORT: Optional[int] = int(os.getenv("SOURCE_SYSTEM_PORT", "49571"))
-    SOURCE_SYSTEM_DATABASE: Optional[str] = os.getenv("SOURCE_SYSTEM_DATABASE", "DEMOA")
+    SOURCE_SYSTEM_DATABASE: Optional[str] = os.getenv("SOURCE_SYSTEM_DATABASE", "GDROZAINK_A")
     SOURCE_SYSTEM_USER: Optional[str] = os.getenv("SOURCE_SYSTEM_USER", None)
     SOURCE_SYSTEM_PASSWORD: Optional[str] = os.getenv("SOURCE_SYSTEM_PASSWORD", None)
     

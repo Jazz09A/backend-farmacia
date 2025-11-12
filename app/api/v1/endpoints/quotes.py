@@ -10,11 +10,63 @@ from app.schemas.quote import (
     QuoteCreatedResponse,
     QuoteListResponse,
     QuoteDetailResponse,
+    QuoteVerifyRequest,
+    QuoteVerifyResponse,
+    CartValidationRequest,
+    CartValidationResponse,
 )
 from app.services.quote_service import QuoteService
 
 # Router for /api/v1/quotes
 router = APIRouter()
+
+@router.post("/verify", response_model=QuoteVerifyResponse)
+async def verify_quote(
+    data: QuoteVerifyRequest,
+    x_source_system: str = Header(..., alias="X-Source-System"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Verifica artículos y totales estimados para una cotización sin escribir en Profit Plus.
+    (Endpoint legacy - usar /verificar para validación de carrito)
+    """
+    service = QuoteService(db)
+    return service.verify_quote_payload(data)
+
+
+@router.post("/verificar", response_model=CartValidationResponse)
+async def verificar_carrito(
+    data: CartValidationRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    price_code: Optional[str] = Query("01", description="Código de lista de precios"),
+    warehouse_code: Optional[str] = Query("001", description="Código de almacén para verificar stock"),
+):
+    """
+    Valida un carrito de compras enviado por el frontend.
+    
+    Este endpoint NO guarda nada en la base de datos. Su único propósito es validar
+    el carrito enviado por el cliente y devolver un resumen verificado con precios
+    reales para que el usuario dé su confirmación final.
+    
+    Principio: Desconfianza absoluta. Solo se confía en co_art y cantidad.
+    Todos los demás datos (precio, descripción, impuestos, disponibilidad) se
+    obtienen y calculan desde la base de datos.
+    
+    El frontend debe enviar únicamente:
+    - co_art: Código del artículo
+    - cantidad: Cantidad deseada
+    
+    Todos los demás campos enviados por el frontend serán ignorados.
+    """
+    service = QuoteService(db)
+    return service.validate_cart(
+        cart_request=data,
+        user_email=current_user.email,
+        price_code=price_code or "01",
+        warehouse_code=warehouse_code or "001",
+    )
 
 
 @router.post("/", response_model=QuoteCreatedResponse, status_code=status.HTTP_201_CREATED)
@@ -35,9 +87,10 @@ async def create_quote(
     except HTTPException:
         raise
     except Exception as e:
+        # Incluir el mensaje de error real para depuración
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudo registrar la cotización en Profit Plus",
+            detail=f"No se pudo registrar la cotización en Profit Plus: {str(e)}",
         ) from e
 
 

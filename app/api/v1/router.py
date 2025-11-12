@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts
 from app.api.v1.endpoints import quotes
 from app.api.v1.endpoints import exchange_rate
+from app.api.v1.endpoints import articles
 api_router = APIRouter()
 
 # =============================================================================
@@ -65,6 +66,13 @@ api_router.include_router(
     quotes.user_quotes_router,
     prefix="/user/quotes",
     tags=["📝 Cotizaciones"],
+)
+
+# Artículos (Profit Plus) - Requiere autenticación
+api_router.include_router(
+    articles.router,
+    prefix="/articles",
+    tags=["📦 Artículos (Profit Plus)"],
 )
 
 # =============================================================================

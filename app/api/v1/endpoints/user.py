@@ -71,12 +71,14 @@ async def add_to_cart(
 ):
     """➕ **Agregar al carrito**: Agrega un producto al carrito del usuario."""
     cart_service = CartService(db)
+    print(f"Adding item to cart: {item}")
     cart_service.add_item(
         user_id=current_user.id,
         product_id=item.product_id,
         quantity=item.quantity,
         selected_presentation=item.selected_presentation
     )
+    print(f"Item added to cart: {item}")
     return cart_service.get_user_cart(current_user.id)
 
 @router.put("/cart/item/{item_id}", summary="Update cart item quantity", response_model=CartResponse)
