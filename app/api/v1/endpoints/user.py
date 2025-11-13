@@ -11,6 +11,13 @@ from app.models.user import User
 from app.models.address import Address
 from app.models.cart import CartItem
 from app.schemas.user import UserResponse, UserStats, UserUpdate
+from app.schemas.article import ArticleSummary
+from app.services.recommendation_service import RecommendationService
+from app.services.source_system_service import source_system_service
+from app.services.article_service import article_service
+from app.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 from app.schemas.address import AddressResponse, AddressCreate, AddressUpdate
 from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
 from app.schemas.order import OrderResponse, OrderCreate, OrderSummary, CheckoutPreviewRequest, CheckoutPreviewResponse
@@ -729,6 +736,62 @@ async def get_user_stats(
     """
     user_service = UserService(db)
     return user_service.get_user_stats_by_id(current_user.id, user_email=current_user.email)
+
+@router.get("/recommendations", response_model=List[ArticleSummary], summary="Obtiene artículos recomendados para el usuario")
+async def get_user_recommendations(
+    limit: int = Query(12, ge=1, le=50, description="Número máximo de artículos recomendados"),
+    price_code: str = Query("01", description="Lista de precio de referencia"),
+    warehouse_code: str = Query("001", description="Almacén principal para stock"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🎯 **Artículos recomendados para ti**
+    
+    Obtiene artículos recomendados basados en tu historial de compras desde source_system (DEMOA).
+    Incluye artículos de categorías que has comprado, artículos populares y mejor valorados.
+    """
+    recommendation_service = RecommendationService()
+    
+    # Obtener código de cliente desde source_system
+    customer_code = None
+    try:
+        customer = source_system_service.get_customer_by_email(current_user.email)
+        if customer:
+            customer_code = customer.get('customer_code')
+    except Exception as e:
+        logger.error(f"No se pudo obtener código de cliente para recomendaciones: {e}")
+    
+    recommended = recommendation_service.get_recommended_articles(
+        customer_code=customer_code,
+        limit=limit,
+        price_code=price_code,
+        warehouse_code=warehouse_code
+    )
+    
+    # Convertir a ArticleSummary
+    def row_to_summary(row):
+        image_guid = row.get('image_guid')
+        image_guid_normalized = None
+        if image_guid:
+            image_guid_normalized = str(image_guid).strip().upper().replace('{', '').replace('}', '')
+        
+        image_url = article_service._build_image_url(image_guid_normalized)
+        
+        return ArticleSummary(
+            co_art=(row.get('co_art') or '').strip(),
+            art_des=row.get('art_des') or '',
+            category_code=(row.get('category_code') or '').strip() if row.get('category_code') else None,
+            category_name=row.get('category_name'),
+            price=article_service._to_decimal(row.get('price')),
+            currency=(row.get('currency') or 'VES').strip(),
+            stock=article_service._to_decimal(row.get('stock')),
+            warehouse_code=(row.get('warehouse_code') or '').strip() if row.get('warehouse_code') else None,
+            image_url=image_url,
+            has_image=bool(image_guid_normalized)
+        )
+    
+    return [row_to_summary(row) for row in recommended]
 
 # =============================================================================
 # FACTURAS DEMOA

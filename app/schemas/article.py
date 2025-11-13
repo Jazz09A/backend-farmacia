@@ -125,3 +125,9 @@ class ImageUploadResponse(BaseModel):
     image_guid: str = Field(..., description="RowGUID generado en saArtImagen")
     url: str = Field(..., description="URL pública de la imagen recién subida")
 
+
+class ArticleRecommendations(BaseModel):
+    """Respuesta con artículos relacionados y recomendados"""
+    related_articles: List[ArticleSummary] = Field(default_factory=list, description="Artículos relacionados")
+    frequently_bought_together: List[ArticleSummary] = Field(default_factory=list, description="Artículos frecuentemente comprados juntos")
+    you_may_also_like: List[ArticleSummary] = Field(default_factory=list, description="También te pueden interesar")

@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Dict
 
 from fastapi import (
     APIRouter,
@@ -21,8 +21,10 @@ from app.core.dependencies import (
     get_pagination_params,
 )
 from app.models.user import User
-from app.schemas.article import ArticleDetail, ArticleListResponse, ImageUploadResponse
+from app.schemas.article import ArticleDetail, ArticleListResponse, ImageUploadResponse, ArticleRecommendations, ArticleSummary
 from app.services.article_service import article_service
+from app.services.recommendation_service import RecommendationService
+from app.services.source_system_service import source_system_service
 
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -80,6 +82,90 @@ async def get_article_detail(
     Requiere autenticación (token JWT).
     """
     return article_service.get_article_detail(co_art)
+
+
+@router.get("/{co_art}/recommendations", response_model=ArticleRecommendations)
+async def get_article_recommendations(
+    co_art: str,
+    price_code: str = Query("01", description="Lista de precio de referencia"),
+    warehouse_code: str = Query("001", description="Almacén principal para stock"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    🎯 **Recomendaciones de artículo**
+    
+    Obtiene artículos relacionados y recomendados para un artículo específico.
+    Incluye:
+    - Artículos relacionados (misma categoría, línea, etc.)
+    - Artículos frecuentemente comprados juntos
+    - También te pueden interesar (basado en historial del cliente si está autenticado)
+    """
+    # Verificar que el artículo existe
+    article_detail = article_service.get_article_detail(co_art)
+    if not article_detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artículo no encontrado"
+        )
+    
+    recommendation_service = RecommendationService()
+    
+    # Obtener código de cliente si el usuario está autenticado
+    customer_code = None
+    try:
+        customer = source_system_service.get_customer_by_email(current_user.email)
+        if customer:
+            customer_code = customer.get('customer_code')
+    except Exception as e:
+        logger = article_service.logger
+        logger.debug(f"No se pudo obtener código de cliente para recomendaciones: {e}")
+    
+    # Obtener artículos relacionados
+    related = recommendation_service.get_related_articles(
+        co_art, 
+        limit=3, 
+        price_code=price_code, 
+        warehouse_code=warehouse_code
+    )
+    
+    # Obtener artículos frecuentemente comprados juntos
+    frequently_bought = recommendation_service.get_frequently_bought_together(co_art, limit=4)
+    
+    # Obtener recomendaciones personalizadas
+    you_may_like = recommendation_service.get_recommended_articles(
+        customer_code=customer_code,
+        limit=3,
+        price_code=price_code,
+        warehouse_code=warehouse_code
+    )
+    
+    # Convertir a ArticleSummary
+    def row_to_summary(row: Dict) -> ArticleSummary:
+        image_guid = row.get('image_guid')
+        image_guid_normalized = None
+        if image_guid:
+            image_guid_normalized = str(image_guid).strip().upper().replace('{', '').replace('}', '')
+        
+        image_url = article_service._build_image_url(image_guid_normalized)
+        
+        return ArticleSummary(
+            co_art=(row.get('co_art') or '').strip(),
+            art_des=row.get('art_des') or '',
+            category_code=(row.get('category_code') or '').strip() if row.get('category_code') else None,
+            category_name=row.get('category_name'),
+            price=article_service._to_decimal(row.get('price')),
+            currency=(row.get('currency') or 'VES').strip(),
+            stock=article_service._to_decimal(row.get('stock')),
+            warehouse_code=(row.get('warehouse_code') or '').strip() if row.get('warehouse_code') else None,
+            image_url=image_url,
+            has_image=bool(image_guid_normalized)
+        )
+    
+    return ArticleRecommendations(
+        related_articles=[row_to_summary(row) for row in related],
+        frequently_bought_together=[row_to_summary(row) for row in frequently_bought],
+        you_may_also_like=[row_to_summary(row) for row in you_may_like]
+    )
 
 
 @router.post(

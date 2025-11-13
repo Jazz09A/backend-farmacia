@@ -310,4 +310,10 @@ class ProductBulkUploadResult(BaseModel):
     def success_rate(self) -> Decimal:
         if self.total_rows == 0:
             return Decimal('0.00')
-        return Decimal(str(round((self.processed_count / self.total_rows) * 100, 2))) 
+        return Decimal(str(round((self.processed_count / self.total_rows) * 100, 2)))
+
+class ProductRecommendations(BaseModel):
+    """Respuesta con productos relacionados y recomendados"""
+    related_products: List[ProductResponse] = Field(default_factory=list, description="Productos relacionados")
+    frequently_bought_together: List[ProductResponse] = Field(default_factory=list, description="Productos frecuentemente comprados juntos")
+    you_may_also_like: List[ProductResponse] = Field(default_factory=list, description="También te pueden interesar") 
