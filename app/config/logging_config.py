@@ -5,7 +5,6 @@ Implementa buenas prácticas de logging con diferentes niveles y formateo estruc
 
 import logging
 import logging.handlers
-import os
 import sys
 from pathlib import Path
 from typing import Dict, Any

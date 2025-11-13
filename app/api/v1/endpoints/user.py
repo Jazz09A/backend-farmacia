@@ -724,10 +724,11 @@ async def get_user_stats(
     db: Session = Depends(get_db)
 ):
     """
-    **Estadísticas del usuario**: Obtiene estadísticas del usuario.
+    **Estadísticas del usuario**: Obtiene estadísticas del usuario desde source_system (DEMOA).
+    Incluye total de órdenes, total gastado y total de productos comprados.
     """
     user_service = UserService(db)
-    return user_service.get_user_stats_by_id(current_user.id)
+    return user_service.get_user_stats_by_id(current_user.id, user_email=current_user.email)
 
 # =============================================================================
 # FACTURAS DEMOA
