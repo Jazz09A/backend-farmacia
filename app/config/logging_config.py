@@ -316,6 +316,14 @@ def log_response_info(logger: logging.Logger, request, response, duration_ms: fl
         user_email: Email del usuario (siempre que esté disponible)
         request_id: ID único del request
     """
+    # Obtener el body de forma segura (no todas las respuestas tienen .body)
+    response_body = None
+    if hasattr(response, 'body'):
+        try:
+            response_body = response.body if response.body else None
+        except (AttributeError, TypeError):
+            response_body = None
+    
     extra = {
         'endpoint': str(request.url.path),
         'method': request.method,
@@ -324,13 +332,13 @@ def log_response_info(logger: logging.Logger, request, response, duration_ms: fl
         'user_id': user_id,
         'user_email': user_email,
         'request_id': request_id,
-        'response': response.body if response.body else None
+        'response': response_body
     }
     
     level = logging.WARNING if response.status_code >= 400 else logging.INFO
     logger.log(
         level,
-        f"Response: {request.method} {request.url.path} - {response.status_code} ({duration_ms:.2f}ms) resp: {response}",
+        f"Response: {request.method} {request.url.path} - {response.status_code} ({duration_ms:.2f}ms)",
         extra=extra
     )
 

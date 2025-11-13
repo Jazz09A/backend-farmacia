@@ -8,6 +8,9 @@ from app.models.user import User
 from app.models.order import Order
 from app.schemas.order import OrderCreate, OrderResponse
 from app.services.order_service import OrderService
+from app.config.logging_config import get_logger, log_error
+
+logger = get_logger("orders")
 
 router = APIRouter()
 
@@ -30,7 +33,14 @@ async def create_order(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating order: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "endpoint": "create_order",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al crear la orden"
@@ -50,7 +60,14 @@ async def get_user_orders(
         return [OrderResponse.model_validate(order) for order in orders]
         
     except Exception as e:
-        print(f"Error getting user orders: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "endpoint": "get_user_orders",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener las órdenes"
@@ -80,7 +97,15 @@ async def get_order_by_id(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error getting order: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "order_id": order_id,
+                "endpoint": "get_order_by_id",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener la orden"
@@ -148,7 +173,15 @@ async def get_order_tracking(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error getting order tracking: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "order_id": order_id,
+                "endpoint": "get_order_tracking",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno del servidor al obtener el seguimiento"

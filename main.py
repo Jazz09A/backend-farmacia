@@ -10,9 +10,16 @@ from contextlib import asynccontextmanager
 from app.config.settings import Settings
 from app.core.exceptions import FarmaException
 # from app.core.middleware import LoggingMiddleware, SecurityMiddleware
-from app.config.logging_config import get_logger
+from app.config.logging_config import (
+    get_logger,
+    log_request_info,
+    log_response_info,
+    log_error,
+)
 
 settings = Settings()
+logger = get_logger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -58,6 +65,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Debug middleware para capturar todos los requests
+@app.middleware("http")
+async def debug_middleware(request: Request, call_next):
+    start_time = time.perf_counter()
+    log_request_info(logger, request)
+
+    auth_header = request.headers.get('authorization')
+    x_source_system = request.headers.get('x-source-system')
+    content_type = request.headers.get('content-type')
+
+    logger.debug(
+        "Detalles adicionales del request",
+        extra={
+            "authorization_tail": auth_header[-10:] if auth_header and len(auth_header) > 10 else auth_header,
+            "authorization_present": bool(auth_header),
+            "x_source_system": x_source_system,
+            "content_type": content_type,
+        },
+    )
+
+    response = await call_next(request)
+
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    log_response_info(logger, request, response, duration_ms=duration_ms)
+    logger.debug(
+        "Detalles de respuesta",
+        extra={
+            "status_code": response.status_code,
+            "has_body": hasattr(response, 'body'),
+            "duration_ms": f"{duration_ms:.2f}",
+        },
+    )
+
+    return response
 
 # Add other middlewares
 # app.add_middleware(LoggingMiddleware)
@@ -116,6 +157,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.warning(
+        "HTTPException atrapada",
+        extra={
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+            "path": request.url.path,
+            "method": request.method,
+            "query_params": dict(request.query_params),
+            "authorization_tail": request.headers.get('authorization', '')[-10:]
+            if request.headers.get('authorization')
+            else None,
+            "x_source_system": request.headers.get('x-source-system'),
+            "content_type": request.headers.get('content-type'),
+        },
+    )
+
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "success": False}
@@ -123,10 +180,16 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    if settings.DEBUG:
-        import traceback
-        traceback.print_exc()
-    
+    log_error(
+        logger,
+        exc,
+        context={
+            "path": request.url.path,
+            "method": request.method,
+            "query_params": dict(request.query_params),
+        },
+    )
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

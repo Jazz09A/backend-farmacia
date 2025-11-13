@@ -16,6 +16,8 @@ from app.utils.timezone import get_ve_now
 
 from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
 
+orders_logger = get_logger("orders")
+
 def _calculate_order_discount_info(order: Order) -> dict:
     """
     Calculates discount information for an order.
@@ -271,21 +273,35 @@ def get_all_customers(db: Session) -> List[User]:
     return customers_without_admin_users
 
 def update_payment_status(db: Session, order_id: str, status: PaymentStatusEnum) -> Order:
-    print("STATUS", status)
-    print("ORDER_ID", order_id)
+    status_value = status.value if isinstance(status, PaymentStatusEnum) else status
+    orders_logger.info(
+        "Actualizando estado de pago desde dashboard",
+        extra={
+            "order_id": order_id,
+            "new_status": status_value,
+        },
+    )
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
     # Validar que el status sea válido para pagos
     valid_payment_statuses = [status.value for status in PaymentStatusEnum]
-    if status not in valid_payment_statuses:
+    if status_value not in valid_payment_statuses:
+        orders_logger.warning(
+            "Estado de pago inválido recibido",
+            extra={
+                "order_id": order_id,
+                "new_status": status_value,
+                "valid_statuses": valid_payment_statuses,
+            },
+        )
         raise HTTPException(
             status_code=400, 
             detail=f"Status de pago inválido. Valores válidos: {valid_payment_statuses}"
         )
     
-    order.payment_status = status.value
+    order.payment_status = status_value
     db.commit()
     db.refresh(order)
     return order

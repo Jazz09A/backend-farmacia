@@ -15,8 +15,10 @@ from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
+from app.config.logging_config import get_logger, log_error
 
 router = APIRouter( tags=["Authentication"])
+logger = get_logger("auth")
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
@@ -27,10 +29,17 @@ async def register_user(
         new_user = await AuthService(db).register_user(user_data)
         return new_user
     except HTTPException as e:
-        print(e)
+        logger.warning(
+            "Error de validación al registrar usuario",
+            extra={"detail": str(e), "email": user_data.email},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        print(e)
+        log_error(
+            logger,
+            e,
+            context={"operation": "register_user", "email": user_data.email},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 @router.get("/verify-email/{token}", response_model=AuthResponse)
@@ -59,7 +68,7 @@ async def login(
     Funciona para ambos tipos de usuario (natural y jurídico).
     Retorna tokens de acceso y actualización.
     """
-    print("LOGIN DATA: " + str(login_data))
+    logger.info("Intento de inicio de sesión recibido", extra={"email": login_data.email})
     return await AuthService.authenticate_user(db, login_data)
 
 @router.post("/refresh", response_model=Token)
@@ -102,7 +111,7 @@ async def get_email_verification(
     """
     Obtener email de verificación.
     """
-    print(f"EMAIL RECIBIDO: {email}")
+    logger.info("Solicitud de verificación por email recibida", extra={"email": email})
     return await AuthService.get_email_verification(db, email) 
 
 @router.post("/forgot-password", response_model=AuthResponse)

@@ -21,10 +21,8 @@ class SourceSystemService:
         
         # Log de configuración (sin mostrar contraseña completa)
         if self.user:
-            print(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: {self.user[:3]}***")
             self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: {self.user[:3]}***")
         else:
-            print(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: (sin autenticación)")
             self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: (sin autenticación)")
 
     def get_connection(self):
@@ -38,9 +36,15 @@ class SourceSystemService:
             # Preparar parámetros de conexión
             # El servidor puede incluir instancia (ej: sql.bsite.net\MSSQL2016)
             server_clean = self.server.strip() if isinstance(self.server, str) else self.server
-            print(f"Server clean: {server_clean}")
             database_clean = self.database.strip() if isinstance(self.database, str) else self.database
-            print(f"Database clean: {database_clean}")
+            self.logger.debug(
+                "Parámetros de conexión depurados",
+                extra={
+                    "server": server_clean,
+                    "database": database_clean,
+                    "port": self.port,
+                },
+            )
             connect_kwargs = {
                 "server": server_clean,
                 "port": self.port,
@@ -65,19 +69,13 @@ class SourceSystemService:
                     self.logger.debug(f"Usuario de conexión: '{user_clean}' (longitud: {len(user_clean)})")
             
             # Log de parámetros de conexión (sin contraseña)
-            print(f"Conectando a SourceSystem: {server_clean}:{self.port}/{database_clean}")
             self.logger.info(f"Conectando a SourceSystem: {server_clean}:{self.port}/{database_clean}")
-            
-            print(f"Parámetros de conexión: {connect_kwargs}")
+            self.logger.debug(f"Parámetros de conexión: {connect_kwargs}")
             conn = pymssql.connect(**connect_kwargs)
-            print(f"Conexión a SourceSystem establecida exitosamente: {conn}")
-            self.logger.info("Conexión a SourceSystem establecida exitosamente")
-            print(f"Conexión a SourceSystem establecida exitosamente: {conn}")
             self.logger.info("Conexión a SourceSystem establecida exitosamente")
             return conn
         except Exception as e:
             error_msg = str(e)
-            print(f"Error conectando a SourceSystem: {error_msg}")
             self.logger.error(f"Error conectando a SourceSystem: {error_msg}")
             
             # Proporcionar información adicional para debugging
@@ -193,6 +191,84 @@ class SourceSystemService:
             return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente por email {email}: {str(e)}")
+            raise
+    
+    def get_customer_addresses(self, customer_code: str) -> List[Dict[str, Any]]:
+        """
+        Obtiene las direcciones de un cliente desde Profit Plus (saCliente).
+        
+        Args:
+            customer_code: Código de cliente (co_cli)
+            
+        Returns:
+            Lista de direcciones del cliente
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            query = """
+            SELECT 
+                co_cli AS customer_code,
+                RTRIM(direc1) AS address1,
+                RTRIM(dir_ent2) AS delivery_address2,
+                RTRIM(direc2) AS address2,
+                RTRIM(ciudad) AS city,
+                RTRIM(zip) AS postal_code,
+                RTRIM(telefonos) AS phones,
+                RTRIM(cli_des) AS customer_name
+            FROM dbo.saCliente
+            WHERE RTRIM(co_cli) = %s
+            """
+            cursor.execute(query, (customer_code.strip(),))
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if not result:
+                return []
+            
+            # Construir lista de direcciones disponibles
+            addresses = []
+            
+            # Dirección principal (direc1)
+            if result.get('address1'):
+                addresses.append({
+                    'type': 'principal',
+                    'label': 'Dirección Principal',
+                    'address': result.get('address1', '').strip(),
+                    'city': result.get('city', '').strip() if result.get('city') else None,
+                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                })
+            
+            # Dirección de entrega 2 (dir_ent2)
+            if result.get('delivery_address2'):
+                addresses.append({
+                    'type': 'entrega',
+                    'label': 'Dirección de Entrega',
+                    'address': result.get('delivery_address2', '').strip(),
+                    'city': result.get('city', '').strip() if result.get('city') else None,
+                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                })
+            
+            # Dirección secundaria (direc2)
+            if result.get('address2'):
+                addresses.append({
+                    'type': 'secundaria',
+                    'label': 'Dirección Secundaria',
+                    'address': result.get('address2', '').strip(),
+                    'city': result.get('city', '').strip() if result.get('city') else None,
+                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                })
+            
+            return addresses
+        except Exception as e:
+            self.logger.error(f"Error obteniendo direcciones para cliente {customer_code}: {str(e)}")
             raise
     
     # =========================================================================

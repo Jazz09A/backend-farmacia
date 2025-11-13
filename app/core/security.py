@@ -6,6 +6,9 @@ from fastapi import HTTPException, status
 from app.config.settings import Settings
 import uuid
 from app.utils.timezone import get_ve_now
+from app.config.logging_config import get_logger, log_error
+
+logger = get_logger("auth")
 
 settings = Settings()
 
@@ -42,25 +45,66 @@ def create_refresh_token(data: dict) -> str:
 
 def verify_token(token: str, token_type: str = "access") -> str:
     """Verify and decode JWT token."""
+    logger.debug(
+        "verify_token invocado",
+        extra={
+            "token_type_expected": token_type,
+            "token_length": len(token) if token else 0,
+        },
+    )
+    
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        logger.debug(
+            "Token decodificado correctamente",
+            extra={
+                "payload_keys": list(payload.keys()),
+            },
+        )
+        
         email: str = payload.get("sub")
         token_type_check: str = payload.get("type")
         
+        logger.debug(
+            "Datos extraídos del token",
+            extra={
+                "email_present": bool(email),
+                "token_type_from_token": token_type_check,
+            },
+        )
+        
         if email is None:
+            logger.warning("Email no encontrado en el token decodificado")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token inválido: email no encontrado"
             )
         
         if token_type_check != token_type:
+            logger.warning(
+                "Tipo de token inválido",
+                extra={
+                    "expected_type": token_type,
+                    "received_type": token_type_check,
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Token inválido: tipo esperado {token_type}"
             )
         
+        logger.debug("Token verificado correctamente", extra={"email": email})
         return email
     except JWTError as e:
+        log_error(logger, e, context={"token_type_expected": token_type})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error(logger, e, context={"token_type_expected": token_type})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido o expirado"

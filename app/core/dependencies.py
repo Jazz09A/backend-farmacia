@@ -6,6 +6,9 @@ from app.config.database import get_db
 from app.config.settings import Settings
 from app.core.security import verify_token
 from app.models.user import User
+from app.config.logging_config import get_logger, log_error
+
+logger = get_logger("auth")
 
 settings = Settings()
 # HTTP Bearer security scheme
@@ -16,54 +19,86 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user."""
+    logger.info("get_current_user invocado")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    logger.debug(
+        "Credenciales recibidas",
+        extra={
+            "scheme": credentials.scheme if credentials else None,
+            "has_token": bool(credentials and credentials.credentials),
+            "token_preview": (credentials.credentials[:5] + "***")
+            if credentials and credentials.credentials
+            else None,
+        },
+    )
+    
     try:
-        print(
-            "[auth] get_current_user called",
-            f"scheme={credentials.scheme if credentials else 'None'}",
-        )
+        if not credentials:
+            logger.warning("Solicitud sin credenciales Bearer")
+            raise credentials_exception
+            
+        if not credentials.credentials:
+            logger.warning("Bearer token vacío")
+            raise credentials_exception
+        
+        logger.debug("Verificando token de acceso")
         # Verify token
         email = verify_token(credentials.credentials, "access")
-        print("[auth] token verified", f"email={email}")
+        logger.debug("Token de acceso verificado", extra={"email": email})
         
         # Get user from database
+        logger.debug("Consultando usuario en base de datos", extra={"email": email})
         user = db.query(User).filter(User.email == email).first()
         if user is None:
-            print("[auth] user not found in database", f"email={email}")
+            logger.warning("Usuario no encontrado para email autenticado", extra={"email": email})
             raise credentials_exception
-        print(
-            "[auth] user fetched",
-            f"id={user.id}",
-            f"is_active={user.is_active}",
-            f"is_verified={getattr(user, 'is_verified', None)}",
+        
+        logger.info(
+            "Usuario autenticado correctamente",
+            extra={
+                "user_id": user.id,
+                "user_email": user.email,
+                "is_active": user.is_active,
+            },
         )
         return user
+    except HTTPException as e:
+        logger.warning(
+            "HTTPException en get_current_user",
+            extra={"status_code": e.status_code, "detail": e.detail},
+        )
+        raise
     except Exception as e:
-        print("[auth] get_current_user error", repr(e))
+        log_error(logger, e, context={"dependency": "get_current_user"})
         raise credentials_exception
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Get current active user."""
+    logger.debug(
+        "Validando usuario activo",
+        extra={
+            "user_id": current_user.id if current_user else None,
+            "user_email": current_user.email if current_user else None,
+        },
+    )
+    
     if not current_user.is_active:
-        print(
-            "[auth] inactive user attempted access",
-            f"id={current_user.id}",
-            f"email={current_user.email}",
+        logger.warning(
+            "Usuario inactivo detectado",
+            extra={"user_id": current_user.id, "user_email": current_user.email},
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
+            status_code=status.HTTP_403_FORBIDDEN, 
             detail="Usuario inactivo"
         )
-    print(
-        "[auth] current active user",
-        f"id={current_user.id}",
-        f"email={current_user.email}",
-    )
+    
+    logger.debug("Usuario activo confirmado", extra={"user_id": current_user.id})
     return current_user
 
 async def get_current_verified_user(current_user: User = Depends(get_current_active_user)) -> User:

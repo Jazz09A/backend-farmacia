@@ -27,9 +27,27 @@ class SourceSystemUserCreationService:
         use_alternate_email: bool = False
     ) -> Dict[str, Any]:
         try:
-            source_customer = source_system_service.get_customer_by_code(customer_code)
+            # Validar que el código de cliente no esté vacío
+            if not customer_code or not customer_code.strip():
+                raise ValueError("El código de cliente no puede estar vacío")
+            
+            customer_code = customer_code.strip()
+            self.logger.info(f"Verificando existencia del cliente {customer_code} en SourceSystem")
+            
+            # Verificar que el cliente exista en SourceSystem ANTES de continuar
+            try:
+                source_customer = source_system_service.get_customer_by_code(customer_code)
+            except Exception as e:
+                error_msg = f"Error al consultar SourceSystem para el cliente {customer_code}: {str(e)}"
+                self.logger.error(error_msg)
+                raise ValueError(f"No se pudo verificar el cliente en SourceSystem. Error de conexión: {str(e)}")
+            
             if not source_customer:
-                raise ValueError(f"Cliente {customer_code} no encontrado en SourceSystem")
+                error_msg = f"Cliente {customer_code} no encontrado en SourceSystem. Verifique que el código sea correcto."
+                self.logger.warning(error_msg)
+                raise ValueError(error_msg)
+            
+            self.logger.info(f"Cliente {customer_code} encontrado en SourceSystem: {source_customer.get('customer_name', 'N/A')}")
             # Email principal o alterno
             email = None
             if use_alternate_email and source_customer.get('alternate_email'):
@@ -45,27 +63,17 @@ class SourceSystemUserCreationService:
             temp_password = self.generate_temporary_password()
             hashed_password = get_password_hash(temp_password)
             
-            # Actualizar contraseña en SourceSystem (base de datos principal)
-            try:
-                source_system_service.update_customer_password(customer_code, hashed_password)
-                self.logger.info(f"Contraseña actualizada en SourceSystem para {customer_code}")
-            except Exception as e:
-                self.logger.error(f"Error actualizando contraseña en SourceSystem: {str(e)}")
-                raise ValueError(f"No se pudo actualizar la contraseña en SourceSystem: {str(e)}")
-            
-            # Verificar si el usuario ya existe en la base de datos local (temporal)
+            # Verificar si el usuario ya existe en la base de datos local
             existing_user = self.db.query(User).filter(User.email == email).first()
             
             if existing_user:
-                # Usuario ya existe en BD local: actualizar contraseña también aquí
-                existing_user.hashed_password = hashed_password
-                self.db.flush()
-                
+                # Usuario ya existe en BD local: actualizar contraseña solo en BD local
+                # PERO primero debemos enviar el email antes de hacer commit
                 customer_name = source_customer.get('customer_name', 'Cliente')
-                email_sent = False
-                email_error = None
                 
+                # Intentar enviar el email PRIMERO, antes de actualizar la BD
                 try:
+                    self.logger.info(f"Enviando email con contraseña temporal a {email}")
                     await email_service.send_email(
                         to_email=email,
                         subject="Nueva contraseña temporal - FarmaPlus",
@@ -79,11 +87,15 @@ class SourceSystemUserCreationService:
                             "year": get_ve_now().year,
                         }
                     )
-                    email_sent = True
+                    self.logger.info(f"Email enviado exitosamente a {email}")
                 except Exception as e:
                     email_error = str(e)
                     self.logger.error(f"Error enviando email a {email}: {email_error}")
+                    # Si el email falla, NO actualizamos la contraseña
+                    raise ValueError(f"No se pudo enviar el email con la contraseña temporal. El usuario no fue actualizado. Error: {email_error}")
                 
+                # Solo si el email se envió exitosamente, actualizamos la contraseña
+                existing_user.hashed_password = hashed_password
                 self.db.commit()
                 self.db.refresh(existing_user)
                 
@@ -93,8 +105,8 @@ class SourceSystemUserCreationService:
                     "email": email,
                     "customer_code": customer_code,
                     "customer_name": customer_name,
-                    "email_sent": email_sent,
-                    "email_error": email_error,
+                    "email_sent": True,
+                    "email_error": None,
                     "temporary_password": temp_password,
                     "error": None
                 }
@@ -118,12 +130,14 @@ class SourceSystemUserCreationService:
                     user_data["last_name"] = name_parts[1]
                 else:
                     user_data["first_name"] = name_parts[0]
+            # Preparar el usuario pero NO hacer commit aún
             new_user = User(**user_data)
             self.db.add(new_user)
             self.db.flush()  # Para obtener el ID sin commit
-            email_sent = False
-            email_error = None
+            
+            # Intentar enviar el email PRIMERO, antes de hacer commit
             try:
+                self.logger.info(f"Enviando email con contraseña temporal a {email}")
                 await email_service.send_email(
                     to_email=email,
                     subject="Bienvenido a FarmaPlus - Tu cuenta ha sido creada",
@@ -137,10 +151,15 @@ class SourceSystemUserCreationService:
                         "year": get_ve_now().year,
                     }
                 )
-                email_sent = True
+                self.logger.info(f"Email enviado exitosamente a {email}")
             except Exception as e:
                 email_error = str(e)
                 self.logger.error(f"Error enviando email a {email}: {email_error}")
+                # Si el email falla, hacemos rollback y NO creamos el usuario
+                self.db.rollback()
+                raise ValueError(f"No se pudo enviar el email con la contraseña temporal. El usuario no fue creado. Error: {email_error}")
+            
+            # Solo si el email se envió exitosamente, hacemos commit
             self.db.commit()
             self.db.refresh(new_user)
             return {
@@ -149,8 +168,8 @@ class SourceSystemUserCreationService:
                 "email": email,
                 "customer_code": customer_code,
                 "customer_name": source_customer.get('customer_name'),
-                "email_sent": email_sent,
-                "email_error": email_error,
+                "email_sent": True,
+                "email_error": None,
                 "temporary_password": temp_password,
                 "error": None
             }

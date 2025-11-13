@@ -106,7 +106,7 @@ class EmailService:
                     }
                 )
         except (socket.timeout, socket.error, OSError) as e:
-            # Errores de red - fallar silenciosamente pero logear con más detalles
+            # Errores de red - logear con más detalles y relanzar el error
             error_details = {
                 'to_email': to_email,
                 'user_email': to_email,
@@ -126,7 +126,7 @@ class EmailService:
             if hasattr(e, 'strerror'):
                 error_details['error_strerror'] = e.strerror
             
-            self.email_logger.warning(
+            self.email_logger.error(
                 f"Network error sending email - {type(e).__name__}: {str(e)}",
                 extra=error_details
             )
@@ -138,7 +138,8 @@ class EmailService:
                 extra={'to_email': to_email, 'event': 'email_network_error_traceback'}
             )
             
-            # No relanzar el error para no interrumpir el flujo principal
+            # Relanzar el error para que el código que llama pueda manejarlo
+            raise
         except smtplib.SMTPException as e:
             # Errores SMTP específicos
             log_error(
@@ -164,6 +165,8 @@ class EmailService:
                     'event': 'email_send_smtp_error'
                 }
             )
+            # Relanzar el error para que el código que llama pueda manejarlo
+            raise
         except Exception as e:
             log_error(
                 self.error_logger,
@@ -187,6 +190,8 @@ class EmailService:
                     'event': 'email_send_failed'
                 }
             )
+            # Relanzar el error para que el código que llama pueda manejarlo
+            raise
 
     async def send_order_tracking_email(self, to_email: str, order_data: Dict[str, Any]):
         """

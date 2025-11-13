@@ -77,9 +77,14 @@ class QuoteService:
             if fec_venc.tzinfo is None:
                 fec_venc = fec_venc.replace(tzinfo=VENEZUELA_TZ)
         
-        print(f"saldo: {saldo}")
-        print(f"fec_venc: {fec_venc}")
-        print(f"now: {now}")
+        logger.debug(
+            "Determinando estado de cotización",
+            extra={
+                "saldo": str(saldo),
+                "fec_venc": fec_venc.isoformat() if isinstance(fec_venc, datetime) else str(fec_venc),
+                "now": now.isoformat(),
+            },
+        )
         
         if fec_venc and fec_venc < now and saldo > 0:
             return "expired"
@@ -95,7 +100,7 @@ class QuoteService:
         Obtiene el último doc_num numérico, lo incrementa y lo formatea.
         
         Returns:
-            Nuevo doc_num formateado como string de 20 caracteres
+            Nuevo doc_num formateado con la convención de Profit (10 dígitos con ceros a la izquierda)
         """
         # Obtener el último doc_num con bloqueo para evitar concurrencia
         query_last = """
@@ -120,14 +125,15 @@ class QuoteService:
             # Primera cotización, empezar desde 1
             new_num = 1
         
-        # Formatear a 20 caracteres con ceros a la izquierda
-        return str(new_num).zfill(20)
+        # Formatear a 10 caracteres con ceros a la izquierda (Profit maneja char(10) y rellena con espacios)
+        return str(new_num).zfill(10)
 
     def create_quote(
         self,
         user_id: int,
         payload: QuoteCreate,
         source_system: str,
+        user_email: Optional[str] = None,
     ) -> QuoteCreatedResponse:
         """
         Inserta cotización en Profit Plus (saCotizacionCliente y saCotizacionClienteReng)
@@ -161,9 +167,22 @@ class QuoteService:
             expires_at_dt = now + timedelta(days=30)
         
         currency_code = (payload.currency or "VES").strip()
-        co_cli = payload.customer.code.strip() if payload.customer and payload.customer.code else None
-        if not co_cli:
-            raise ValueError("Customer code (co_cli) es requerido para crear la cotización")
+        
+        # Obtener código de cliente: del payload o del usuario autenticado
+        co_cli = None
+        if payload.customer and payload.customer.code:
+            co_cli = payload.customer.code.strip()
+        elif user_email:
+            # Obtener código de cliente del usuario autenticado
+            customer_data = self._get_customer_code_by_email(user_email)
+            if customer_data:
+                co_cli = customer_data
+            else:
+                raise ValueError(f"No se encontró código de cliente para el usuario con email {user_email}")
+        else:
+            raise ValueError("Customer code (co_cli) es requerido. Proporciónelo en el payload o asegúrese de que el usuario esté autenticado.")
+        
+        logger.info(f"Usando código de cliente: {co_cli}")
 
         # Valores por defecto según el script
         co_ven = "003"  # Código de vendedor para E-Commerce (configurar aquí el código deseado)
@@ -199,9 +218,17 @@ class QuoteService:
             
             logger.info(f"Vendedor validado: {co_ven}")
             
-            # PASO 2: Obtener dirección de entrega desde la ficha del cliente
+            # PASO 2: Obtener datos del cliente y validar dirección de entrega
             query_cliente = """
-            SELECT direc1
+            SELECT 
+                RTRIM(co_cli) AS co_cli,
+                RTRIM(cli_des) AS cli_des,
+                RTRIM(email) AS email,
+                RTRIM(email_alterno) AS email_alterno,
+                RTRIM(telefonos) AS telefonos,
+                RTRIM(direc1) AS direc1,
+                RTRIM(dir_ent2) AS dir_ent2,
+                RTRIM(direc2) AS direc2
             FROM dbo.saCliente
             WHERE co_cli = %s
             """
@@ -210,12 +237,99 @@ class QuoteService:
             
             # Validar que el cliente existe
             if not cliente_row:
-                raise ValueError(f"Cliente con código '{co_cli}' no existe en la base de datos. Verifique el código de cliente.")
+                # Si el cliente no existe y se proporcionó en el payload, intentar obtenerlo del usuario autenticado
+                if payload.customer and payload.customer.code and user_email:
+                    logger.warning(
+                        f"Cliente con código '{co_cli}' no existe. Intentando obtener código del usuario autenticado (email: {user_email})"
+                    )
+                    # Intentar obtener el código de cliente del usuario autenticado
+                    customer_code_from_email = self._get_customer_code_by_email(user_email)
+                    if customer_code_from_email and customer_code_from_email != co_cli:
+                        logger.info(
+                            f"Usando código de cliente del usuario autenticado: {customer_code_from_email} "
+                            f"(en lugar del proporcionado: {co_cli})"
+                        )
+                        co_cli = customer_code_from_email
+                        # Reintentar la consulta con el nuevo código
+                        cursor.execute(query_cliente, (co_cli,))
+                        cliente_row = cursor.fetchone()
+                
+                # Si aún no existe, lanzar error descriptivo
+                if not cliente_row:
+                    error_msg = (
+                        f"Cliente con código '{co_cli}' no existe en la base de datos Profit Plus. "
+                    )
+                    if user_email:
+                        customer_code_from_email = self._get_customer_code_by_email(user_email)
+                        if customer_code_from_email:
+                            error_msg += (
+                                f"El código de cliente asociado a tu email ({user_email}) es '{customer_code_from_email}'. "
+                                f"Por favor, usa ese código o no envíes el campo 'customer.code' para que se use automáticamente."
+                            )
+                        else:
+                            error_msg += (
+                                f"No se encontró un código de cliente asociado a tu email ({user_email}) en Profit Plus. "
+                                f"Contacta al administrador para verificar tu cuenta."
+                            )
+                    else:
+                        error_msg += "Verifica el código de cliente o asegúrate de estar autenticado."
+                    
+                    logger.error(f"Error validando cliente: {error_msg}")
+                    raise ValueError(error_msg)
             
-            direccion_entrega = cliente_row.get('direc1') if cliente_row else None
+            # Obtener datos del cliente desde la BD (para logging y validación)
+            cliente_email_bd = (cliente_row.get('email') or cliente_row.get('email_alterno') or '').strip()
+            cliente_name_bd = (cliente_row.get('cli_des') or '').strip()
+            cliente_phone_bd = (cliente_row.get('telefonos') or '').strip()
             
-            if not direccion_entrega:
-                logger.warning(f"No se encontró dirección de entrega para cliente {co_cli}, usando NULL")
+            # Log de datos obtenidos de la BD (si no se proporcionaron en el payload)
+            if payload.customer:
+                if not payload.customer.email and cliente_email_bd:
+                    logger.info(f"Email del cliente obtenido desde BD: {cliente_email_bd}")
+                if not payload.customer.name and cliente_name_bd:
+                    logger.info(f"Nombre del cliente obtenido desde BD: {cliente_name_bd}")
+                if not payload.customer.phone and cliente_phone_bd:
+                    logger.info(f"Teléfono del cliente obtenido desde BD: {cliente_phone_bd}")
+            
+            # Obtener todas las direcciones del cliente
+            direc1 = (cliente_row.get('direc1') or '').strip() if cliente_row.get('direc1') else None
+            dir_ent2 = (cliente_row.get('dir_ent2') or '').strip() if cliente_row.get('dir_ent2') else None
+            direc2 = (cliente_row.get('direc2') or '').strip() if cliente_row.get('direc2') else None
+            
+            # Validar dirección si se proporciona
+            direccion_entrega = None
+            if payload.direc:
+                direc_provided = payload.direc.strip()
+                # Verificar que la dirección proporcionada existe en las direcciones del cliente
+                direcciones_validas = []
+                if direc1:
+                    direcciones_validas.append(direc1)
+                if dir_ent2:
+                    direcciones_validas.append(dir_ent2)
+                if direc2:
+                    direcciones_validas.append(direc2)
+                
+                # Validar que la dirección proporcionada coincida con alguna de las direcciones del cliente
+                direccion_encontrada = False
+                for direc_valida in direcciones_validas:
+                    if direc_provided == direc_valida:
+                        direccion_entrega = direc_provided
+                        direccion_encontrada = True
+                        logger.info(f"Dirección validada para cliente {co_cli}: {direc_provided}")
+                        break
+                
+                if not direccion_encontrada:
+                    raise ValueError(
+                        f"La dirección proporcionada '{direc_provided}' no coincide con ninguna dirección registrada "
+                        f"para el cliente '{co_cli}'. Direcciones disponibles: {', '.join(direcciones_validas) if direcciones_validas else 'Ninguna'}"
+                    )
+            else:
+                # Si no se proporciona dirección, usar la principal (direc1) por defecto
+                direccion_entrega = direc1
+                if not direccion_entrega:
+                    logger.warning(f"No se encontró dirección principal (direc1) para cliente {co_cli}, usando NULL")
+                else:
+                    logger.info(f"Usando dirección principal por defecto para cliente {co_cli}: {direccion_entrega}")
             
             # PASO 2.5: Validar y obtener código de transporte
             co_tran = None
@@ -654,17 +768,15 @@ class QuoteService:
             from app.models.user import User
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
-                print(f"Usuario {user_id} no encontrado")
                 logger.warning(f"Usuario {user_id} no encontrado")
                 return QuoteListResponse(
                     results=[],
                     pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
                 )
-            
             # Obtener código de cliente en DEMOA
             customer_code = self._get_customer_code_by_email(user.email)
             if not customer_code:
-                print(f"Cliente no encontrado en DEMOA para email {user.email}")
+                
                 return QuoteListResponse(
                     results=[],
                     pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
@@ -724,8 +836,16 @@ class QuoteService:
             # Transformar a QuoteListItem
             results = []
             for quote in quotes_data:
-                print(quote.get('saldo', 0))
-                print(quote.get('expires_at'))
+                logger.debug(
+                    "Procesando cotización para listado",
+                    extra={
+                        "saldo": str(quote.get('saldo', 0)),
+                        "expires_at": quote.get('expires_at').isoformat()
+                        if isinstance(quote.get('expires_at'), datetime)
+                        else str(quote.get('expires_at')),
+                        "profit_plus_id": str(quote.get('profit_plus_id')),
+                    },
+                )
                 status = self._determine_status(
                     Decimal(str(quote.get('saldo', 0))),
                     quote.get('expires_at')
@@ -754,7 +874,7 @@ class QuoteService:
                     total_gross=str(quote.get('total_neto', 0)),
                     currency=quote.get('currency_name', 'VES'),
                     items_count=quote.get('items_count', 0),
-                    email_sent_at=created_at or "",  # Asumimos que se envió al crear
+                    email_sent_at=created_at or "",
                 ))
             
             total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
@@ -777,9 +897,6 @@ class QuoteService:
                 results=[],
                 pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
             )
-            return response
-            print(f"Error listando cotizaciones para usuario {user_id}: {e}")
-            print(traceback.format_exc())
             return response
 
     def get_quote_detail(

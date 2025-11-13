@@ -126,7 +126,6 @@ class AuthService:
         """Authenticate user and return tokens."""
         auth_logger = get_logger("auth")
         error_logger = get_logger("errors")
-        print("LOGIN DATA: " + str(login_data))
         auth_logger.info(
             f"Authentication attempt for email: {login_data.email}",
             extra={
@@ -138,7 +137,13 @@ class AuthService:
         
         try:
             user = db.query(User).filter(User.email == login_data.email).first()
-            print("USER: " + str(user))
+            auth_logger.debug(
+                "Resultado de búsqueda de usuario para login",
+                extra={
+                    "email": login_data.email,
+                    "user_found": user is not None,
+                },
+            )
             if not user:
                 # Fallback: buscar en DEMOA por email y auto-provisionar
                 try:
@@ -275,9 +280,22 @@ class AuthService:
     @staticmethod
     async def verify_email(db: Session, token: str) -> dict:
         """Verify user email with token."""
-        print("TOKEN: " + str(token))
+        auth_logger = get_logger("auth")
+        auth_logger.debug(
+            "Verificando email con token",
+            extra={
+                "token_preview": token[:5] + "***" if token else None,
+                "token_length": len(token) if token else 0,
+            },
+        )
         user = db.query(User).filter(User.verification_token == token).first()
-        print("USER: " + str(user))
+        auth_logger.debug(
+            "Resultado de búsqueda de usuario para verificación de email",
+            extra={
+                "token_present": bool(token),
+                "user_found": user is not None,
+            },
+        )
         if not user:
             raise UserNotFoundException("Token de verificación inválido")
         

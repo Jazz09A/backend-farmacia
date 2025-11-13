@@ -25,6 +25,11 @@ from app.services.order_service import OrderService
 from app.services.discount_service import DiscountService
 from app.services.user_service import UserService
 from app.services.demoa_invoice_service import DEMOAInvoiceService
+from app.services.source_system_service import source_system_service
+from app.schemas.customer_address import CustomerAddressesResponse
+from app.config.logging_config import get_logger, log_error
+
+logger = get_logger("orders")
 
 router = APIRouter(prefix="/user", tags=["User Protected"])
 
@@ -71,14 +76,29 @@ async def add_to_cart(
 ):
     """➕ **Agregar al carrito**: Agrega un producto al carrito del usuario."""
     cart_service = CartService(db)
-    print(f"Adding item to cart: {item}")
+    logger.info(
+        "Agregando producto al carrito",
+        extra={
+            "user_id": current_user.id,
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+            "selected_presentation": item.selected_presentation,
+        },
+    )
     cart_service.add_item(
         user_id=current_user.id,
         product_id=item.product_id,
         quantity=item.quantity,
         selected_presentation=item.selected_presentation
     )
-    print(f"Item added to cart: {item}")
+    logger.info(
+        "Producto agregado correctamente al carrito",
+        extra={
+            "user_id": current_user.id,
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+        },
+    )
     return cart_service.get_user_cart(current_user.id)
 
 @router.put("/cart/item/{item_id}", summary="Update cart item quantity", response_model=CartResponse)
@@ -204,11 +224,25 @@ async def create_order(
             cart_service.clear_cart(user_id)  # Usar user_id almacenado
         except Exception as cart_error:
             # Log pero no fallar si no se puede limpiar el carrito
-            print(f"Warning: Failed to clear cart after order creation: {cart_error}")
+            logger.warning(
+                "No se pudo limpiar el carrito tras crear la orden",
+                extra={
+                    "user_id": current_user.id,
+                    "order_id": order_response.id if hasattr(order_response, "id") else None,
+                    "error": str(cart_error),
+                },
+            )
         
         return order_response
     except Exception as e:
-        print(f"Error al crear la orden: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "endpoint": "create_order",
+            },
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/checkout/preview", response_model=CheckoutPreviewResponse, summary="Preview checkout totals")
@@ -230,7 +264,14 @@ async def preview_checkout(
         )
         return CheckoutPreviewResponse(**totals)
     except Exception as e:
-        print(f"Error al calcular preview de checkout: {e}")
+        log_error(
+            logger,
+            e,
+            context={
+                "user_id": current_user.id,
+                "endpoint": "preview_checkout",
+            },
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/orders", response_model=List[OrderSummary], summary="Get user's order history")
@@ -823,3 +864,36 @@ async def get_payment_history(
     
     payments = demoa_service.get_payment_history(customer_code)
     return [DEMOAPaymentResponse(**payment) for payment in payments]
+
+
+@router.get("/customer-addresses", response_model=CustomerAddressesResponse)
+async def get_customer_addresses(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    📍 **Direcciones del Cliente**: Obtiene las direcciones del cliente desde Profit Plus
+    usando su código de cliente (co_cli).
+    
+    Retorna las direcciones almacenadas en Profit Plus:
+    - direc1: Dirección principal
+    - dir_ent2: Dirección de entrega
+    - direc2: Dirección secundaria
+    """
+    # Obtener código de cliente por email
+    customer = source_system_service.get_customer_by_email(current_user.email)
+    
+    if not customer or not customer.get('customer_code'):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cliente no encontrado en Profit Plus"
+        )
+    
+    customer_code = customer.get('customer_code')
+    
+    # Obtener direcciones desde Profit Plus
+    addresses = source_system_service.get_customer_addresses(customer_code)
+    
+    return CustomerAddressesResponse(
+        customer_code=customer_code,
+        addresses=addresses
+    )

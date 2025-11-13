@@ -1,7 +1,6 @@
 """
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
-import logging
 from datetime import timedelta
 from app.utils.timezone import get_ve_now
 from typing import List, Optional
@@ -33,6 +32,7 @@ from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
 from app.services.imges_service import ImageService
 from app.services.product_bulk_service import ProductBulkService
+from app.config.logging_config import get_logger, log_error
 
 # SourceSystem imports y endpoints
 from app.services.source_system_service import source_system_service
@@ -80,7 +80,7 @@ class CreateUsersResponse(BaseModel):
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 image_service = ImageService()
-logger = logging.getLogger(__name__)
+logger = get_logger("app")
 # =============================================================================
 # INDEX ADMIN PAGE
 # =============================================================================
@@ -579,7 +579,14 @@ async def update_product(
     try:
         update_data = product_data.model_dump(exclude_unset=True)
     except Exception as e:
-        print(e)
+        log_error(
+            logger,
+            e,
+            context={
+                "operation": "update_product",
+                "product_id": product_id,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Error al actualizar el producto"
@@ -1265,7 +1272,7 @@ async def delete_product_images(
 
 @router.put("/payments/status")
 async def update_payment_status(
-    status: UpdatePaymentStatus,
+    payload: UpdatePaymentStatus,
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
@@ -1276,17 +1283,24 @@ async def update_payment_status(
     - order_id: ID de la orden
     - status: Nuevo estado del pago (pending, completed, failed, refunded)
     """
-    print("STATUS", status)
+    logger.info(
+        "Actualizando estado de pago",
+        extra={
+            "order_id": payload.order_id,
+            "new_status": payload.status,
+            "user_id": current_user.id,
+        },
+    )
     try:
         # Actualizar el estado del pago
-        updated_order = dashboard_service.update_payment_status(db, status.order_id, status.status)
+        updated_order = dashboard_service.update_payment_status(db, payload.order_id, payload.status)
         
         return {
             "success": True,
-            "message": f"Estado de pago actualizado a '{status.status}'",
+            "message": f"Estado de pago actualizado a '{payload.status}'",
             "data": {
-                "order_id": status.order_id,
-                "payment_status": status.status,
+                "order_id": payload.order_id,
+                "payment_status": payload.status,
                 "order_number": updated_order.order_number
             }
         }
@@ -1294,7 +1308,14 @@ async def update_payment_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating payment status: {str(e)}")
+        log_error(
+            logger,
+            e,
+            context={
+                "order_id": payload.order_id,
+                "new_status": payload.status,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Error interno al actualizar el estado del pago"
@@ -1381,12 +1402,34 @@ async def create_users_from_source_system(
             "emails_failed": emails_failed_count,
             "success_rate": round((total_successful / total_attempted * 100) if total_attempted > 0 else 0, 2)
         }
+        
+        # Si todos los usuarios fallaron, devolver error HTTP
+        if total_successful == 0 and total_attempted > 0:
+            error_messages = [f.error for f in failed if f.error]
+            if not error_messages:
+                error_messages = ["Error desconocido"]
+            
+            error_detail = f"No se pudieron crear/actualizar usuarios. Errores: {'; '.join(error_messages[:3])}"
+            if len(error_messages) > 3:
+                error_detail += f" y {len(error_messages) - 3} más..."
+            
+            logger.error(f"Todos los usuarios fallaron al crear: {error_detail}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_detail
+            )
+        
+        # Si algunos usuarios fallaron pero otros tuvieron éxito, devolver 200 con información
+        # Si todos tuvieron éxito, devolver 200 OK
         return CreateUsersResponse(
             total=total_attempted,
             successful=successful,
             failed=failed,
             summary=summary
         )
+    except HTTPException:
+        # Re-lanzar HTTPException sin modificar
+        raise
     except Exception as e:
         logger.error(f"Error creando usuarios desde SourceSystem: {str(e)}")
         raise HTTPException(

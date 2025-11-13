@@ -13,10 +13,10 @@ class QuoteItem(BaseModel):
 
 
 class QuoteCustomer(BaseModel):
-    code: str
-    email: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
+    code: Optional[str] = None  # Si no se envía, se obtiene del usuario autenticado
+    email: Optional[str] = None  # Si no se envía, se obtiene de la BD
+    name: Optional[str] = None  # Si no se envía, se obtiene de la BD
+    phone: Optional[str] = None  # Si no se envía, se obtiene de la BD
 
 
 class QuoteDelivery(BaseModel):
@@ -26,12 +26,13 @@ class QuoteDelivery(BaseModel):
     co_tran: Optional[str] = None  # Código de transporte (001, 002, 003, etc.)
 
 class QuoteCreate(BaseModel):
-    customer: QuoteCustomer
+    customer: Optional[QuoteCustomer] = None  # Si no se envía, se obtiene del usuario autenticado
     channel: Optional[str] = "web_b2b"
     valid_until: Optional[str] = None  # ISO 8601 string
     currency: Optional[str] = "VES"
     payment_terms: Optional[str] = "CON"  # Código de condición de pago (CON, 3D, 5D, 7D, 10D, 12D, 14D, 15D, 16D, 20D, 21D, 30D, 360D)
     delivery: Optional[QuoteDelivery] = None
+    direc: Optional[str] = None  # Dirección de entrega. Si no se envía, se usa la dirección principal (direc1) del cliente
     notes: Optional[str] = None
     items: List[QuoteItem]
 

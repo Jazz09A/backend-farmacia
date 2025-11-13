@@ -329,12 +329,25 @@ class OrderService:
                             )
                     except RuntimeError:
                         # If no event loop is available, we'll skip the email
-                        print("No event loop available, skipping email sending")
+                        self.orders_logger.warning(
+                            "No event loop available, se omite envío de email de tracking",
+                            extra={
+                                "user_email": user.email if user else None,
+                                "order_id": new_order.id,
+                            },
+                        )
                         pass
                         
             except Exception as email_error:
                 # Don't fail the order creation if email fails
-                print(f"Failed to send tracking email: {email_error}")
+                self.orders_logger.warning(
+                    "Error enviando email de tracking",
+                    extra={
+                        "user_email": user.email if user else None,
+                        "order_id": new_order.id,
+                        "error": str(email_error),
+                    },
+                )
             
             return new_order
 
