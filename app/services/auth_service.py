@@ -14,7 +14,9 @@ from app.core.security import (
     create_refresh_token,
     verify_token,
     generate_verification_token,
-    generate_reset_token
+    generate_reset_token,
+    create_url_safe_token,
+    verify_url_safe_token
 )
 from app.core.exceptions import (
     InvalidCredentialsException,
@@ -310,33 +312,124 @@ class AuthService:
     
     @staticmethod
     async def send_reset_password_email(db: Session, email: str) -> dict:
-        """Send password reset email."""
+        """Send password reset email with JWT token."""
+        auth_logger = get_logger("auth")
+        auth_logger.info(
+            f"Password reset requested for email: {email}",
+            extra={
+                'email': email,
+                'user_email': email,
+                'event': 'password_reset_requested'
+            }
+        )
+        
         user = db.query(User).filter(User.email == email).first()
         
         if not user:
             # Don't reveal if email exists or not for security
+            auth_logger.warning(
+                f"Password reset requested for non-existent email: {email}",
+                extra={
+                    'email': email,
+                    'user_email': email,
+                    'event': 'password_reset_email_not_found'
+                }
+            )
             return {"message": "Si el email existe, se enviará un enlace de recuperación", "success": True}
         
-        # Generate reset token
-        reset_token = generate_reset_token()
+        # Generate JWT reset token (more secure than UUID)
+        reset_token = create_url_safe_token(
+            {"email": user.email, "type": "password_reset"},
+            expires_hours=1
+        )
+        
+        # Store token in database for additional validation
         user.reset_token = reset_token
         user.reset_token_expires = get_ve_now() + timedelta(hours=1)
         db.commit()
         
-        # TODO: Send reset email
-        # await EmailService.send_password_reset_email(user.email, reset_token)
+        # Send reset email
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+        try:
+            await email_service.send_password_reset_email(
+                to_email=user.email,
+                reset_link=reset_link,
+                user_name=user.full_name
+            )
+            auth_logger.info(
+                f"Password reset email sent successfully to: {email}",
+                extra={
+                    'email': email,
+                    'user_email': email,
+                    'user_id': user.id,
+                    'event': 'password_reset_email_sent'
+                }
+            )
+        except Exception as e:
+            auth_logger.error(
+                f"Failed to send password reset email to: {email}",
+                extra={
+                    'email': email,
+                    'user_email': email,
+                    'user_id': user.id,
+                    'error': str(e),
+                    'event': 'password_reset_email_failed'
+                }
+            )
+            # Don't fail the request, just log the error
+            # The user will still see the success message for security
         
         return {"message": "Si el email existe, se enviará un enlace de recuperación", "success": True}
     
     @staticmethod
     async def reset_password(db: Session, token: str, new_password: str) -> dict:
-        """Reset user password with token."""
+        """Reset user password with JWT token validation."""
+        auth_logger = get_logger("auth")
+        auth_logger.info(
+            "Password reset attempt with token",
+            extra={
+                'token_preview': token[:10] + "***" if token else None,
+                'event': 'password_reset_attempt'
+            }
+        )
+        
+        # First verify the JWT token
+        payload = verify_url_safe_token(token)
+        if not payload or payload.get("type") != "password_reset":
+            auth_logger.warning(
+                "Invalid password reset token (JWT validation failed)",
+                extra={
+                    'event': 'password_reset_token_invalid'
+                }
+            )
+            raise UserNotFoundException("Token de recuperación inválido o expirado")
+        
+        email = payload.get("email")
+        if not email:
+            auth_logger.warning(
+                "Password reset token missing email",
+                extra={
+                    'event': 'password_reset_token_missing_email'
+                }
+            )
+            raise UserNotFoundException("Token de recuperación inválido o expirado")
+        
+        # Find user by email and verify token matches database (double validation)
         user = db.query(User).filter(
-            User.reset_token == token,
+            User.email == email,
+            User.reset_token == token,  # Additional check against database
             User.reset_token_expires > get_ve_now()
         ).first()
         
         if not user:
+            auth_logger.warning(
+                f"Password reset failed - token not found or expired for email: {email}",
+                extra={
+                    'email': email,
+                    'user_email': email,
+                    'event': 'password_reset_token_not_found'
+                }
+            )
             raise UserNotFoundException("Token de recuperación inválido o expirado")
         
         # Update password
@@ -344,6 +437,16 @@ class AuthService:
         user.reset_token = None
         user.reset_token_expires = None
         db.commit()
+        
+        auth_logger.info(
+            f"Password reset successful for email: {email}",
+            extra={
+                'email': email,
+                'user_email': email,
+                'user_id': user.id,
+                'event': 'password_reset_success'
+            }
+        )
         
         return {"message": "Contraseña actualizada exitosamente", "success": True}
     

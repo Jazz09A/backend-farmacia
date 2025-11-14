@@ -309,5 +309,22 @@ class EmailService:
             context=context
         )
 
+    async def send_password_reset_email(self, to_email: str, reset_link: str, user_name: str = "Usuario"):
+        """Enviar email de recuperación de contraseña"""
+        context = {
+            "reset_link": reset_link,
+            "user_name": user_name,
+            "year": get_ve_now().year
+        }
+        
+        subject = "Recuperación de contraseña - Grupo Drozainka"
+        
+        await self.send_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="password_reset.html",
+            context=context
+        )
+
 # Singleton instance
 email_service = EmailService()
