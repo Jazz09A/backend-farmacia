@@ -3,11 +3,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from decimal import Decimal
 from app.schemas.dashboard import DashboardData
-from app.services.dashboard_service import get_dashboard_data, get_order_by_id, update_order_status, get_all_customers
-from app.core.dependencies import get_db, get_current_user
+from app.services.dashboard_service import (
+    get_dashboard_data, 
+    get_order_by_id, 
+    update_order_status, 
+    get_all_customers,
+    get_all_quotes_paginated,
+    get_quote_detail_for_admin
+)
+from app.core.dependencies import get_db, get_current_user, get_admin_user
 from app.models.user import User
 from app.schemas.user import UserResponse
 from app.schemas.order import OrderResponse, OrderStatusUpdate, OrderDashboardResponse
+from app.schemas.quote import QuoteListResponse, QuoteDetailResponse
 from app.services.dashboard_service import get_all_orders as get_all_orders_service
 
 router = APIRouter()
@@ -109,4 +117,32 @@ def get_all_orders_endpoint(
 @router.get("/customers", response_model=List[UserResponse])
 def get_all_customers_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     customers = get_all_customers(db)
-    return list(customers)  
+    return list(customers)
+
+@router.get("/quotes", response_model=QuoteListResponse)
+def get_all_quotes_endpoint(
+    page: int = Query(1, ge=1, description="Número de página (empezando en 1)"),
+    page_size: int = Query(20, ge=1, le=100, description="Tamaño de página (máximo 100)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene todas las cotizaciones desde el sistema fuente con paginación.
+    Ordenadas por fecha de emisión descendente (más reciente primero).
+    """
+    return get_all_quotes_paginated(page=page, page_size=page_size, db=db)
+
+@router.get("/quotes/{quote_id}", response_model=QuoteDetailResponse)
+def get_quote_detail_endpoint(
+    quote_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    Obtiene los detalles completos de una cotización específica desde el sistema fuente.
+    Solo disponible para administradores autenticados.
+    """
+    detail = get_quote_detail_for_admin(quote_id=quote_id, db=db)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    return detail  
