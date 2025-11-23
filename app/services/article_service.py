@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 from decimal import Decimal
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 
 from app.config.logging_config import get_logger
 from app.schemas.article import (
@@ -13,7 +15,10 @@ from app.schemas.article import (
     ArticleSummary,
     ImageUploadResponse,
 )
+from app.schemas.product import FlashOfferInfo
+from app.models.promotion import FlashOffer, DiscountType
 from app.services.source_system_service import source_system_service
+from app.utils.timezone import get_ve_now
 
 from app.config.settings import Settings
 settings = Settings()
@@ -23,6 +28,88 @@ class ArticleService:
     def __init__(self):
         self.logger = get_logger("articles")
         self._source_service = source_system_service
+    
+    def _get_active_flash_offers_by_article_codes(
+        self, 
+        db: Optional[Session], 
+        article_codes: List[str]
+    ) -> Dict[str, FlashOffer]:
+        """
+        Obtiene flash offers activas para una lista de códigos de artículo de manera optimizada.
+        
+        Returns:
+            Dict[str, FlashOffer]: Mapa de article_code -> FlashOffer
+        """
+        if not db or not article_codes:
+            return {}
+        
+        now = get_ve_now()
+        
+        # Normalizar códigos de artículo
+        normalized_codes = [code.upper().strip() for code in article_codes if code]
+        if not normalized_codes:
+            return {}
+        
+        # Obtener flash offers activas por article_code (una sola consulta optimizada)
+        flash_offers = db.query(FlashOffer).filter(
+            and_(
+                FlashOffer.article_code.in_(normalized_codes),
+                FlashOffer.is_active == True,
+                FlashOffer.start_time <= now,
+                FlashOffer.end_time >= now,
+                or_(
+                    FlashOffer.max_quantity.is_(None),
+                    FlashOffer.used_quantity < FlashOffer.max_quantity
+                )
+            )
+        ).all()
+        
+        # Crear mapa article_code -> FlashOffer
+        result = {}
+        for offer in flash_offers:
+            normalized_code = (offer.article_code or "").upper().strip()
+            if normalized_code and normalized_code not in result:
+                result[normalized_code] = offer
+        
+        return result
+    
+    def _build_flash_offer_info(
+        self, 
+        flash_offer: FlashOffer, 
+        original_price: Decimal
+    ) -> FlashOfferInfo:
+        """Construye la información de flash offer para incluir en la respuesta del artículo."""
+        original_price_float = float(original_price)
+        
+        # Determinar el tipo de descuento
+        discount_type_value = flash_offer.discount_type
+        if hasattr(discount_type_value, 'value'):
+            discount_type_value = discount_type_value.value
+        
+        # Calcular precio con descuento
+        if discount_type_value == 'percentage' or discount_type_value == DiscountType.PERCENTAGE.value:
+            discount_amount = original_price_float * (flash_offer.discount_value / 100)
+            discount_percentage = flash_offer.discount_value
+        else:  # fixed
+            discount_amount = min(flash_offer.discount_value, original_price_float)
+            discount_percentage = (discount_amount / original_price_float * 100) if original_price_float > 0 else 0
+        
+        offer_price = original_price_float - discount_amount
+        
+        return FlashOfferInfo(
+            id=flash_offer.id,
+            discount_type=discount_type_value,
+            discount_value=flash_offer.discount_value,
+            original_price=original_price_float,
+            offer_price=round(offer_price, 2),
+            discount_percentage=round(discount_percentage, 2),
+            end_time=flash_offer.end_time.isoformat() if flash_offer.end_time else None,
+            max_quantity=flash_offer.max_quantity,
+            remaining_quantity=(
+                (flash_offer.max_quantity - flash_offer.used_quantity) 
+                if flash_offer.max_quantity else None
+            )
+        )
 
     @staticmethod
     def _build_image_url(rowguid: Optional[str]) -> Optional[str]:
@@ -65,6 +152,7 @@ class ArticleService:
         sort_by: str = "art_des",
         price_code: str = "01",
         warehouse_code: str = "001",
+        db: Optional[Session] = None,
     ) -> ArticleListResponse:
         """Obtiene el catálogo paginado directamente desde Profit Plus."""
         result = self._source_service.get_articles_catalog(
@@ -79,6 +167,10 @@ class ArticleService:
             price_code=price_code,
             warehouse_code=warehouse_code,
         )
+
+        # Obtener flash offers activas de manera optimizada (una sola consulta)
+        article_codes = [(row.get("co_art") or "").strip() for row in result["items"]]
+        flash_offers_map = self._get_active_flash_offers_by_article_codes(db, article_codes)
 
         summaries: List[ArticleSummary] = []
         for row in result["items"]:
@@ -99,6 +191,13 @@ class ArticleService:
             
             image_url = self._build_image_url(image_guid_normalized)
             
+            # Obtener flash offer si existe
+            flash_offer = None
+            normalized_co_art = co_art.upper().strip()
+            flash_offer_obj = flash_offers_map.get(normalized_co_art)
+            if flash_offer_obj and price:
+                flash_offer = self._build_flash_offer_info(flash_offer_obj, price)
+            
             summaries.append(
                 ArticleSummary(
                     co_art=co_art,
@@ -111,6 +210,7 @@ class ArticleService:
                     warehouse_code=warehouse,
                     image_url=image_url,
                     has_image=bool(image_guid_normalized),
+                    flash_offer=flash_offer,
                 )
             )
 
@@ -143,7 +243,7 @@ class ArticleService:
             filters_applied=filters_applied,
         )
 
-    def get_article_detail(self, co_art: str) -> ArticleDetail:
+    def get_article_detail(self, co_art: str, db: Optional[Session] = None) -> ArticleDetail:
         """Obtiene el detalle de un artículo y lo transforma a schema."""
         detail = self._source_service.get_article_detail(co_art)
         if not detail:
@@ -186,6 +286,26 @@ class ArticleService:
         if header.get("fecha_reg"):
             additional_data["fecha_reg"] = str(header.get("fecha_reg"))
 
+        # Obtener flash offer activa para este artículo
+        flash_offer = None
+        if db:
+            normalized_co_art = (co_art or "").upper().strip()
+            flash_offers_map = self._get_active_flash_offers_by_article_codes(db, [normalized_co_art])
+            flash_offer_obj = flash_offers_map.get(normalized_co_art)
+            
+            # Obtener precio de referencia (lista 01 o primera disponible)
+            reference_price = None
+            if prices:
+                # Buscar precio de lista 01
+                price_01 = next((p for p in prices if p.price_code == "01"), None)
+                if price_01:
+                    reference_price = price_01.amount
+                else:
+                    reference_price = prices[0].amount
+            
+            if flash_offer_obj and reference_price:
+                flash_offer = self._build_flash_offer_info(flash_offer_obj, reference_price)
+
         return ArticleDetail(
             co_art=(header.get("co_art") or "").strip(),
             art_des=header.get("art_des") or "",
@@ -200,6 +320,7 @@ class ArticleService:
             prices=prices,
             stock_by_warehouse=stock,
             images=images,
+            flash_offer=flash_offer,
         )
 
     def upload_image(

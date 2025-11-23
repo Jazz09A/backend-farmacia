@@ -194,21 +194,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             average_discount_per_order=average_discount_per_order,
         )
         
-        # 5. Order Status Summary from saCotizacionCliente
-        status_summary_query = """
-        SELECT 
-            status,
-            anulado,
-            COUNT(DISTINCT doc_num) AS count
-        FROM dbo.saCotizacionCliente
-        WHERE fec_emis >= %s
-          AND fec_emis <= %s
-        GROUP BY status, anulado
-        """
-        cursor.execute(status_summary_query, (start_datetime, end_datetime))
-        status_results = cursor.fetchall()
-        
-        # Initialize status counts
+        # 5. Order Status Summary combining Cotizaciones, Notas de Despacho y Notas de Entrega
         status_counts = {
             'pending': 0,
             'confirmed': 0,
@@ -218,14 +204,76 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             'cancelled': 0
         }
         
-        # Map Profit Plus states to dashboard states
-        for row in status_results:
+        # 5.1 Cotizaciones (saCotizacionCliente)
+        quotes_status_query = """
+        SELECT 
+            status,
+            anulado,
+            COUNT(DISTINCT doc_num) AS count
+        FROM dbo.saCotizacionCliente
+        WHERE fec_emis >= %s
+          AND fec_emis <= %s
+        GROUP BY status, anulado
+        """
+        cursor.execute(quotes_status_query, (start_datetime, end_datetime))
+        quote_status_results = cursor.fetchall()
+        
+        for row in quote_status_results:
+            status = str(row.get('status', '0')).strip()
+            anulado = row.get('anulado', 0)
+            count = row.get('count', 0) or 0
+            dashboard_status = _map_quote_status_to_dashboard_status(status, anulado)
+            status_counts[dashboard_status] = status_counts.get(dashboard_status, 0) + count
+        
+        # 5.2 Notas de Despacho (saNotaDespachoVenta) -> shipped (status '1')
+        dispatch_status_query = """
+        SELECT 
+            status,
+            anulado,
+            COUNT(DISTINCT doc_num) AS count
+        FROM dbo.saNotaDespachoVenta
+        WHERE fec_emis >= %s
+          AND fec_emis <= %s
+        GROUP BY status, anulado
+        """
+        cursor.execute(dispatch_status_query, (start_datetime, end_datetime))
+        dispatch_status_results = cursor.fetchall()
+        
+        for row in dispatch_status_results:
             status = str(row.get('status', '0')).strip()
             anulado = row.get('anulado', 0)
             count = row.get('count', 0) or 0
             
-            dashboard_status = _map_quote_status_to_dashboard_status(status, anulado)
-            status_counts[dashboard_status] = status_counts.get(dashboard_status, 0) + count
+            if anulado == 1:
+                status_counts['cancelled'] += count
+            elif status == '1':
+                status_counts['shipped'] += count
+            # status '0' (pendiente/no despachado) no suma shipped, ya está cubierto por pending de cotizaciones
+        
+        # 5.3 Notas de Entrega (saNotaEntregaVenta) -> delivered (status '2')
+        delivery_status_query = """
+        SELECT 
+            status,
+            anulado,
+            COUNT(DISTINCT doc_num) AS count
+        FROM dbo.saNotaEntregaVenta
+        WHERE fec_emis >= %s
+          AND fec_emis <= %s
+        GROUP BY status, anulado
+        """
+        cursor.execute(delivery_status_query, (start_datetime, end_datetime))
+        delivery_status_results = cursor.fetchall()
+        
+        for row in delivery_status_results:
+            status = str(row.get('status', '0')).strip()
+            anulado = row.get('anulado', 0)
+            count = row.get('count', 0) or 0
+            
+            if anulado == 1:
+                status_counts['cancelled'] += count
+            elif status == '2':
+                status_counts['delivered'] += count
+            # status '0' (en tránsito) se mantiene dentro de processing/pending en función de las cotizaciones
         
         order_status_summary = OrderStatusSummary(
             pending=status_counts['pending'],

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from decimal import Decimal
 
 class DiscountTypeEnum(str, Enum):
     PERCENTAGE = "percentage"
@@ -9,7 +10,10 @@ class DiscountTypeEnum(str, Enum):
 
 # Flash Offer Schemas
 class FlashOfferBase(BaseModel):
-    product_id: str
+    product_id: Optional[str] = Field(
+        None, description="ID del producto local (opcional, para referencia cruzada)"
+    )
+    article_code: str = Field(..., min_length=1, description="Código del artículo (co_art) en Profit Plus")
     discount_type: DiscountTypeEnum = DiscountTypeEnum.PERCENTAGE
     discount_value: float = Field(..., gt=0)
     start_time: datetime
@@ -30,7 +34,27 @@ class FlashOfferBase(BaseModel):
         return v
 
 class FlashOfferCreate(FlashOfferBase):
-    pass
+    discount_type: Optional[DiscountTypeEnum] = None
+    discount_value: Optional[float] = Field(None, gt=0)
+    fixed_price: Optional[float] = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_discount_input(cls, values: "FlashOfferCreate"):
+        if values.fixed_price is None and values.discount_value is None:
+            raise ValueError(
+                "Debes proporcionar un descuento porcentual (discount_value) "
+                "o un precio objetivo (fixed_price)"
+            )
+
+        if values.fixed_price is not None and values.discount_value is not None:
+            raise ValueError(
+                "Solo se permite proporcionar fixed_price o discount_value, no ambos"
+            )
+
+        if values.discount_value is not None and values.discount_type is None:
+            values.discount_type = DiscountTypeEnum.PERCENTAGE
+
+        return values
 
 class FlashOfferUpdate(BaseModel):
     discount_type: Optional[DiscountTypeEnum] = None
@@ -39,6 +63,20 @@ class FlashOfferUpdate(BaseModel):
     end_time: Optional[datetime] = None
     max_quantity: Optional[int] = None
     is_active: Optional[bool] = None
+    article_code: Optional[str] = Field(None, min_length=1)
+
+
+class FlashOfferArticleData(BaseModel):
+    article_code: str
+    description: str
+    original_price: Decimal
+    offer_price: Decimal
+    currency: str
+    discount_percentage: float
+    stock: Optional[Decimal] = None
+    image_url: Optional[str] = None
+    gallery: List[str] = Field(default_factory=list)
+
 
 class FlashOfferResponse(FlashOfferBase):
     id: str
@@ -46,6 +84,7 @@ class FlashOfferResponse(FlashOfferBase):
     created_at: datetime
     updated_at: datetime
     is_valid: bool
+    article_details: Optional[FlashOfferArticleData] = None
     
     class Config:
         from_attributes = True

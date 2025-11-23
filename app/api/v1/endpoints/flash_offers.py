@@ -34,7 +34,7 @@ async def create_flash_offer(
     """
     service = FlashOffersService(db)
     flash_offer = service.create_flash_offer(flash_offer_data)
-    return flash_offer
+    return service.build_flash_offer_response(flash_offer)
 
 
 @router.get("/flash-offers", response_model=FlashOfferListResponse)
@@ -42,7 +42,8 @@ async def get_flash_offers(
     pagination: PaginationParams = Depends(get_pagination_params),
     active_only: bool = Query(False, description="Solo ofertas activas"),
     valid_only: bool = Query(False, description="Solo ofertas válidas (activas y en tiempo)"),
-    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto"),
+    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto local"),
+    article_code: Optional[str] = Query(None, description="Filtrar por código de artículo (co_art)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -57,11 +58,13 @@ async def get_flash_offers(
         limit=pagination.limit,
         active_only=active_only,
         valid_only=valid_only,
-        product_id=product_id
+        product_id=product_id,
+        article_code=article_code,
     )
     
+    offers = service.serialize_flash_offers(flash_offers)
     return FlashOfferListResponse(
-        offers=flash_offers,
+        offers=offers,
         total=total,
         page=pagination.page,
         pages=(total + pagination.limit - 1) // pagination.limit
@@ -71,7 +74,8 @@ async def get_flash_offers(
 @router.get("/flash-offers/public", response_model=FlashOfferListResponse)
 async def get_public_flash_offers(
     pagination: PaginationParams = Depends(get_pagination_params),
-    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto"),
+    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto local"),
+    article_code: Optional[str] = Query(None, description="Filtrar por código de artículo (co_art)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -85,11 +89,13 @@ async def get_public_flash_offers(
         limit=pagination.limit,
         active_only=True,
         valid_only=True,
-        product_id=product_id
+        product_id=product_id,
+        article_code=article_code,
     )
     
+    offers = service.serialize_flash_offers(flash_offers)
     return FlashOfferListResponse(
-        offers=flash_offers,
+        offers=offers,
         total=total,
         page=pagination.page,
         pages=(total + pagination.limit - 1) // pagination.limit
@@ -116,7 +122,7 @@ async def get_flash_offer(
             detail="Flash offer no encontrada"
         )
     
-    return flash_offer
+    return service.build_flash_offer_response(flash_offer)
 
 
 @router.put("/flash-offers/{offer_id}", response_model=FlashOfferResponse)
@@ -140,7 +146,7 @@ async def update_flash_offer(
             detail="Flash offer no encontrada"
         )
     
-    return flash_offer
+    return service.build_flash_offer_response(flash_offer)
 
 
 @router.delete("/flash-offers/{offer_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -184,22 +190,22 @@ async def toggle_flash_offer_status(
             detail="Flash offer no encontrada"
         )
     
-    return flash_offer
+    return service.build_flash_offer_response(flash_offer)
 
 
-@router.get("/flash-offers/product/{product_id}/active", response_model=List[FlashOfferResponse])
-async def get_active_flash_offers_for_product(
-    product_id: str,
+@router.get("/flash-offers/article/{article_code}/active", response_model=List[FlashOfferResponse])
+async def get_active_flash_offers_for_article(
+    article_code: str,
     db: Session = Depends(get_db)
 ):
     """
-    Obtener todas las flash offers activas y válidas para un producto específico.
+    Obtener todas las flash offers activas y válidas para un artículo (co_art) específico.
     
     **Endpoint público** - No requiere autenticación.
     """
     service = FlashOffersService(db)
-    flash_offers = service.get_active_flash_offers_for_product(product_id)
-    return flash_offers
+    flash_offers = service.get_active_flash_offers_for_article(article_code)
+    return service.serialize_flash_offers(flash_offers)
 
 
 @router.post("/flash-offers/{offer_id}/increment-usage")
@@ -265,4 +271,4 @@ async def get_expired_flash_offers(
     """
     service = FlashOffersService(db)
     expired_offers = service.get_expired_flash_offers()
-    return expired_offers
+    return service.serialize_flash_offers(expired_offers)

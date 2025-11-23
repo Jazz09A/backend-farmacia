@@ -1,20 +1,136 @@
 """
 Endpoints públicos que no requieren autenticación.
 """
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, asc
+from decimal import Decimal
 from app.config.database import get_db
 from app.models.product import Product
 from app.models.user import User
+from app.models.promotion import FlashOffer, DiscountType
 from app.core.dependencies import PaginationParams, get_pagination_params
-from app.schemas.product import ProductResponse, ProductListResponse, ProductSummary
+from app.schemas.product import ProductResponse, ProductListResponse, ProductSummary, FlashOfferInfo
 from app.schemas.promotion import QuantityDiscountResponse
 from app.core.dependencies import get_optional_current_user
 from app.services.discount_service import DiscountService
+from app.utils.timezone import get_ve_now
 
 router = APIRouter(prefix="/public")
+
+
+def get_active_flash_offers_for_products(
+    db: Session, 
+    product_ids: List[str], 
+    product_skus: Dict[str, Optional[str]]
+) -> Dict[str, FlashOffer]:
+    """
+    Obtiene flash offers activas para una lista de productos de manera optimizada.
+    Busca tanto por product_id como por article_code (sku).
+    
+    Returns:
+        Dict[str, FlashOffer]: Mapa de product_id -> FlashOffer (la más prioritaria si hay múltiples)
+    """
+    if not product_ids:
+        return {}
+    
+    now = get_ve_now()
+    
+    # Obtener flash offers activas por product_id (una sola consulta)
+    flash_offers_by_product_id = db.query(FlashOffer).filter(
+        and_(
+            FlashOffer.product_id.in_(product_ids),
+            FlashOffer.is_active == True,
+            FlashOffer.start_time <= now,
+            FlashOffer.end_time >= now,
+            or_(
+                FlashOffer.max_quantity.is_(None),
+                FlashOffer.used_quantity < FlashOffer.max_quantity
+            )
+        )
+    ).all()
+    
+    # Crear mapa product_id -> FlashOffer
+    result = {}
+    for offer in flash_offers_by_product_id:
+        if offer.product_id and offer.product_id not in result:
+            result[offer.product_id] = offer
+    
+    # Obtener flash offers por article_code (sku) para productos que no tienen oferta por product_id
+    # Solo buscar para productos que aún no tienen oferta
+    products_without_offer = [pid for pid in product_ids if pid not in result]
+    if products_without_offer:
+        # Obtener SKUs de productos sin oferta
+        article_codes = [
+            sku.upper().strip() 
+            for pid in products_without_offer 
+            if product_skus.get(pid) and product_skus[pid]
+        ]
+        
+        if article_codes:
+            flash_offers_by_code = db.query(FlashOffer).filter(
+                and_(
+                    FlashOffer.article_code.in_(article_codes),
+                    FlashOffer.is_active == True,
+                    FlashOffer.start_time <= now,
+                    FlashOffer.end_time >= now,
+                    or_(
+                        FlashOffer.max_quantity.is_(None),
+                        FlashOffer.used_quantity < FlashOffer.max_quantity
+                    )
+                )
+            ).all()
+            
+            # Mapear por product_id usando el sku
+            sku_to_product_id = {
+                sku.upper().strip(): pid 
+                for pid, sku in product_skus.items() 
+                if sku and pid in products_without_offer
+            }
+            
+            for offer in flash_offers_by_code:
+                normalized_code = (offer.article_code or "").upper().strip()
+                product_id = sku_to_product_id.get(normalized_code)
+                if product_id and product_id not in result:
+                    result[product_id] = offer
+    
+    return result
+
+
+def build_flash_offer_info(flash_offer: FlashOffer, product_price: Decimal) -> FlashOfferInfo:
+    """Construye la información de flash offer para incluir en la respuesta del producto."""
+    original_price = float(product_price)
+    
+    # Determinar el tipo de descuento
+    discount_type_value = flash_offer.discount_type
+    if hasattr(discount_type_value, 'value'):
+        discount_type_value = discount_type_value.value
+    
+    # Calcular precio con descuento
+    if discount_type_value == 'percentage' or discount_type_value == DiscountType.PERCENTAGE.value:
+        discount_amount = original_price * (flash_offer.discount_value / 100)
+        discount_percentage = flash_offer.discount_value
+    else:  # fixed
+        discount_amount = min(flash_offer.discount_value, original_price)
+        discount_percentage = (discount_amount / original_price * 100) if original_price > 0 else 0
+    
+    offer_price = original_price - discount_amount
+    
+    return FlashOfferInfo(
+        id=flash_offer.id,
+        discount_type=discount_type_value,
+        discount_value=flash_offer.discount_value,
+        original_price=original_price,
+        offer_price=round(offer_price, 2),
+        discount_percentage=round(discount_percentage, 2),
+        end_time=flash_offer.end_time.isoformat() if flash_offer.end_time else None,
+        max_quantity=flash_offer.max_quantity,
+        remaining_quantity=(
+            (flash_offer.max_quantity - flash_offer.used_quantity) 
+            if flash_offer.max_quantity else None
+        )
+    )
 
 @router.get("/products/{product_id}", response_model=ProductResponse)
 async def get_public_product(
@@ -35,6 +151,27 @@ async def get_public_product(
         'discount_percentage': product.discount_percentage,
         'is_available': product.is_available
     }
+    
+    # Obtener flash offer activa para este producto
+    flash_offers_map = get_active_flash_offers_for_products(
+        db, 
+        [product.id], 
+        {product.id: product.sku}
+    )
+    flash_offer = flash_offers_map.get(product.id)
+    
+    if flash_offer:
+        flash_offer_info = build_flash_offer_info(flash_offer, product.price)
+        product_dict['flash_offer'] = flash_offer_info
+        
+        # Actualizar precio y descuento con la oferta
+        product_dict['current_price'] = Decimal(str(flash_offer_info.offer_price))
+        product_dict['is_offer'] = True
+        product_dict['original_price'] = Decimal(str(flash_offer_info.original_price))
+        product_dict['discount_percentage'] = Decimal(str(flash_offer_info.discount_percentage))
+        if flash_offer.end_time:
+            product_dict['offer_end_time'] = flash_offer.end_time
+    
     # Handle empty strings for required fields
     if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
         product_dict['description'] = 'Sin descripción disponible'
@@ -162,6 +299,11 @@ async def get_public_products(
         if has_more:
             total += 1  # Indicar que hay más
     
+    # Obtener flash offers activas de manera optimizada (una sola consulta)
+    product_ids = [p.id for p in products]
+    product_skus = {p.id: p.sku for p in products}
+    flash_offers_map = get_active_flash_offers_for_products(db, product_ids, product_skus)
+    
     # Convert to response models
     product_responses = []
     for product in products:
@@ -171,6 +313,21 @@ async def get_public_products(
             'discount_percentage': product.discount_percentage,
             'is_available': product.in_stock and product.stock > 0
         }
+        
+        # Agregar información de flash offer si existe
+        flash_offer = flash_offers_map.get(product.id)
+        if flash_offer:
+            flash_offer_info = build_flash_offer_info(flash_offer, product.price)
+            product_dict['flash_offer'] = flash_offer_info
+            
+            # Actualizar precio y descuento con la oferta
+            product_dict['current_price'] = Decimal(str(flash_offer_info.offer_price))
+            product_dict['is_offer'] = True
+            product_dict['original_price'] = Decimal(str(flash_offer_info.original_price))
+            product_dict['discount_percentage'] = Decimal(str(flash_offer_info.discount_percentage))
+            if flash_offer.end_time:
+                product_dict['offer_end_time'] = flash_offer.end_time
+        
         # Handle empty strings for required fields
         if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
             product_dict['description'] = 'Sin descripción disponible'
@@ -231,6 +388,27 @@ async def get_public_product_detail(
         'discount_percentage': product.discount_percentage,
         'is_available': product.in_stock and product.stock > 0
     }
+    
+    # Obtener flash offer activa para este producto
+    flash_offers_map = get_active_flash_offers_for_products(
+        db, 
+        [product.id], 
+        {product.id: product.sku}
+    )
+    flash_offer = flash_offers_map.get(product.id)
+    
+    if flash_offer:
+        flash_offer_info = build_flash_offer_info(flash_offer, product.price)
+        product_dict['flash_offer'] = flash_offer_info
+        
+        # Actualizar precio y descuento con la oferta
+        product_dict['current_price'] = Decimal(str(flash_offer_info.offer_price))
+        product_dict['is_offer'] = True
+        product_dict['original_price'] = Decimal(str(flash_offer_info.original_price))
+        product_dict['discount_percentage'] = Decimal(str(flash_offer_info.discount_percentage))
+        if flash_offer.end_time:
+            product_dict['offer_end_time'] = flash_offer.end_time
+    
     # Handle empty strings for required fields
     if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
         product_dict['description'] = 'Sin descripción disponible'
@@ -313,6 +491,11 @@ async def search_public_products(
     # Apply pagination
     products = query.offset(pagination.skip).limit(pagination.limit).all()
     
+    # Obtener flash offers activas de manera optimizada (una sola consulta)
+    product_ids = [p.id for p in products]
+    product_skus = {p.id: p.sku for p in products}
+    flash_offers_map = get_active_flash_offers_for_products(db, product_ids, product_skus)
+    
     # Convert to response models
     product_responses = []
     for product in products:
@@ -322,6 +505,21 @@ async def search_public_products(
             'discount_percentage': product.discount_percentage,
             'is_available': product.in_stock and product.stock > 0
         }
+        
+        # Agregar información de flash offer si existe
+        flash_offer = flash_offers_map.get(product.id)
+        if flash_offer:
+            flash_offer_info = build_flash_offer_info(flash_offer, product.price)
+            product_dict['flash_offer'] = flash_offer_info
+            
+            # Actualizar precio y descuento con la oferta
+            product_dict['current_price'] = Decimal(str(flash_offer_info.offer_price))
+            product_dict['is_offer'] = True
+            product_dict['original_price'] = Decimal(str(flash_offer_info.original_price))
+            product_dict['discount_percentage'] = Decimal(str(flash_offer_info.discount_percentage))
+            if flash_offer.end_time:
+                product_dict['offer_end_time'] = flash_offer.end_time
+        
         # Handle empty strings for required fields
         if not product_dict.get('description') or len(product_dict.get('description', '').strip()) < 10:
             product_dict['description'] = 'Sin descripción disponible'

@@ -108,6 +108,21 @@ class ProductUpdate(BaseModel):
     original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD para ofertas")
     offer_end_time: Optional[datetime] = None
 
+class FlashOfferInfo(BaseModel):
+    """Información de flash offer aplicable a un producto"""
+    id: str
+    discount_type: str
+    discount_value: float
+    original_price: float
+    offer_price: float
+    discount_percentage: float
+    end_time: Optional[str] = None
+    max_quantity: Optional[int] = None
+    remaining_quantity: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
 class ProductResponse(ProductBase):
     id: str
     rating: Decimal
@@ -122,6 +137,7 @@ class ProductResponse(ProductBase):
     is_available: bool
     created_at: datetime
     updated_at: datetime
+    flash_offer: Optional[FlashOfferInfo] = None
     
     class Config:
         from_attributes = True

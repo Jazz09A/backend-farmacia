@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.product import FlashOfferInfo
 
 
 class ArticleImageResponse(BaseModel):
@@ -70,6 +71,9 @@ class ArticleSummary(BaseModel):
     has_image: bool = Field(
         False, description="Indica si el artículo tiene al menos una imagen"
     )
+    flash_offer: Optional[FlashOfferInfo] = Field(
+        None, description="Información de flash offer activa para este artículo"
+    )
 
 
 class ArticleDetail(BaseModel):
@@ -99,6 +103,9 @@ class ArticleDetail(BaseModel):
     )
     images: List[ArticleImageResponse] = Field(
         default_factory=list, description="Galería de imágenes del artículo"
+    )
+    flash_offer: Optional[FlashOfferInfo] = Field(
+        None, description="Información de flash offer activa para este artículo"
     )
 
 

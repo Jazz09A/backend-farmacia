@@ -20,7 +20,9 @@ from app.core.dependencies import (
     get_optional_current_user,  # Agregar esto
     get_pagination_params,
 )
+from app.config.database import get_db
 from app.models.user import User
+from sqlalchemy.orm import Session
 from app.schemas.article import ArticleDetail, ArticleListResponse, ImageUploadResponse, ArticleRecommendations, ArticleSummary
 from app.services.article_service import article_service
 from app.services.recommendation_service import RecommendationService
@@ -50,6 +52,7 @@ async def list_articles(
     price_code: str = Query("01", description="Lista de precio de referencia"),
     warehouse_code: str = Query("001", description="Almacén principal para stock"),
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Catálogo paginado de artículos directamente desde Profit Plus.
@@ -69,6 +72,7 @@ async def list_articles(
         sort_by=sort_by,
         price_code=price_code,
         warehouse_code=warehouse_code,
+        db=db,
     )
 
 
@@ -76,12 +80,13 @@ async def list_articles(
 async def get_article_detail(
     co_art: str,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
     """
     Obtiene el detalle completo de un artículo específico.
     Requiere autenticación (token JWT).
     """
-    return article_service.get_article_detail(co_art)
+    return article_service.get_article_detail(co_art, db=db)
 
 
 @router.get("/{co_art}/recommendations", response_model=ArticleRecommendations)
