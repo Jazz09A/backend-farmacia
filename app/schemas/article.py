@@ -82,6 +82,7 @@ class ArticleSummary(BaseModel):
 class ArticleDetail(BaseModel):
     """Detalle completo de un artículo para la vista pública."""
 
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     co_art: str = Field(..., description="Código del artículo (co_art)")
     art_des: str = Field(..., description="Descripción del artículo (art_des)")
     modelo: Optional[str] = Field(None, description="Modelo del artículo (modelo)")
@@ -118,6 +119,7 @@ class ArticleDetail(BaseModel):
 class ArticleListResponse(BaseModel):
     """Respuesta paginada para listados de artículos desde Profit Plus."""
 
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     articles: List[ArticleSummary]
     total: int
     page: int
@@ -141,6 +143,7 @@ class ImageUploadResponse(BaseModel):
 
 class ArticleRecommendations(BaseModel):
     """Respuesta con artículos relacionados y recomendados"""
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     related_articles: List[ArticleSummary] = Field(default_factory=list, description="Artículos relacionados")
     frequently_bought_together: List[ArticleSummary] = Field(default_factory=list, description="Artículos frecuentemente comprados juntos")
     you_may_also_like: List[ArticleSummary] = Field(default_factory=list, description="También te pueden interesar")

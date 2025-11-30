@@ -192,11 +192,19 @@ class QuoteService:
         tasa = Decimal('1.00')  # Tasa de cambio (1.00 para misma moneda, ajustar si es necesario)
         porc_imp_default = Decimal('16.00')  # 16% IVA por defecto
 
-        conn = source_system_service.get_connection()
-        cursor = conn.cursor()
-        
+        conn = None
+        cursor = None
         try:
-            # Iniciar transacción explícita
+            conn = source_system_service.get_pooled_connection()
+            cursor = conn.cursor()
+            
+            # Limpiar cualquier transacción pendiente de la conexión reutilizada
+            try:
+                cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+            except Exception:
+                pass  # Ignorar si no hay transacción pendiente
+            
+            # Iniciar transacción explícita (manejada por pymssql)
             cursor.execute("BEGIN TRANSACTION")
             
             # PASO 1: Generar doc_num de forma segura
@@ -376,7 +384,7 @@ class QuoteService:
             
             logger.info(f"Condición de pago validada: {co_cond} - {condicion_row.get('cond_des')}")
             
-            # PASO 3: Obtener datos de artículos (descripción, tipo de impuesto y unidad de medida)
+            # PASO 3: Obtener datos de artículos (descripción, tipo de impuesto, unidad de medida y PRECIO)
             co_arts = [item.product_code.strip() for item in payload.items if item.product_code]
             if not co_arts:
                 raise ValueError("No se proporcionaron artículos para la cotización")
@@ -387,9 +395,16 @@ class QuoteService:
                 a.co_art,
                 a.art_des,
                 ISNULL(a.tipo_imp, '1') AS tipo_imp,
-                ISNULL(au.co_uni, 'UND') AS co_uni
+                ISNULL(au.co_uni, 'UND') AS co_uni,
+                ISNULL(precio.monto, 0) AS precio_base
             FROM dbo.saArticulo a
             LEFT JOIN dbo.saArtUnidad au ON a.co_art = au.co_art AND au.uni_principal = 1
+            OUTER APPLY (
+                SELECT TOP 1 ap.monto
+                FROM dbo.saArtPrecio ap
+                WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = '01'
+                ORDER BY ap.desde DESC
+            ) precio
             WHERE a.co_art IN ({placeholders})
             """
             cursor.execute(query_articulos, tuple(co_arts))
@@ -398,7 +413,8 @@ class QuoteService:
                 (row.get('co_art') or '').strip(): {
                     'art_des': row.get('art_des'),
                     'tipo_imp': row.get('tipo_imp', '1'),
-                    'co_uni': (row.get('co_uni') or 'UND').strip()
+                    'co_uni': (row.get('co_uni') or 'UND').strip(),
+                    'precio_base': Decimal(str(row.get('precio_base') or 0))
                 }
                 for row in articulos_data
             }
@@ -497,6 +513,9 @@ class QuoteService:
             total_descuentos = Decimal('0.00')  # Acumulador de descuentos
             reng_num = 1
             
+            # Lista para guardar descuentos aplicados (se incrementarán después del COMMIT)
+            discounts_to_increment = []
+            
             # Valores por defecto para campos obligatorios de renglones
             porc_imp2 = Decimal('0.00')
             porc_imp3 = Decimal('0.00')
@@ -530,40 +549,90 @@ class QuoteService:
                  %s, %s, %s, %s, %s, %s, %s, %s, %s, GETDATE(), %s, GETDATE(), NEWID())
             """
             
-            for item in payload.items:
+            logger.debug(f"[DEBUG] Iniciando procesamiento de {len(payload.items)} items...")
+            for idx, item in enumerate(payload.items, 1):
+                logger.debug(f"[DEBUG] Procesando item {idx}/{len(payload.items)}: {item.product_code}")
                 co_art = item.product_code.strip()
                 cantidad = Decimal(str(item.quantity))
-                precio_unit = Decimal(str(item.unit_price))
                 
-                # Obtener datos del artículo
+                # Verificar conexión antes de procesar cada item
+                try:
+                    cursor.execute("SELECT 1 AS test")
+                    cursor.fetchone()
+                    logger.debug(f"[DEBUG] Conexión OK antes de procesar item {idx}")
+                except Exception as conn_check:
+                    logger.error(f"[DEBUG] Conexión MUERTA antes de procesar item {idx}: {conn_check}")
+                    raise ConnectionError(f"Conexión perdida al procesar item {idx}: {conn_check}") from conn_check
+                
+                # Obtener datos del artículo desde la BD
                 art_data = articulos_map.get(co_art)
                 if not art_data:
                     raise ValueError(f"Artículo {co_art} no encontrado en la base de datos")
                 
-                des_art = art_data.get('art_des') or item.product_name or ''
+                # Usar precio de la BD (ignorar el del payload)
+                precio_unit = art_data.get('precio_base', Decimal('0.00'))
+                if precio_unit <= 0:
+                    raise ValueError(f"Artículo {co_art} no tiene precio configurado en la lista de precios '01'")
+                
+                # Usar descripción de la BD
+                des_art = art_data.get('art_des') or ''
                 tipo_imp = art_data.get('tipo_imp', '1')
-                co_uni = art_data.get('co_uni', 'UND')  # Obtener unidad de medida del artículo
+                co_uni = art_data.get('co_uni', 'UND')
                 
                 # Calcular descuento desde saDescArticulo si no se proporciona en el payload
                 monto_desc = Decimal(str(item.discount_amount or "0.00"))
                 
                 # Si no hay descuento en el payload, consultar desde saDescArticulo
                 if monto_desc == 0:
+                    logger.debug(f"[DEBUG] Buscando descuento para artículo {co_art}, cantidad {cantidad}...")
                     try:
+                        # Verificar estado de conexión antes de buscar descuento
+                        try:
+                            cursor.execute("SELECT 1 AS test")
+                            cursor.fetchone()
+                            logger.debug(f"[DEBUG] Conexión verificada ANTES de get_article_discount - OK")
+                        except Exception as conn_check:
+                            logger.error(f"[DEBUG] Conexión MUERTA antes de get_article_discount: {conn_check}")
+                            raise ConnectionError(f"Conexión no disponible: {conn_check}") from conn_check
+                        
+                        logger.debug(f"[DEBUG] Llamando a get_article_discount para {co_art}...")
                         discount_info = source_system_service.get_article_discount(
                             article_code=co_art,
-                            customer_code=co_cli,
-                            quantity=cantidad
+                            quantity=cantidad,
+                            existing_cursor=cursor  # Reutilizar cursor existente
                         )
+                        logger.debug(f"[DEBUG] get_article_discount retornó: {discount_info is not None}")
                         
-                        if discount_info and discount_info.get('discount_percentage', 0) > 0:
+                        if discount_info and discount_info.get('disponibles', 0) > 0:
                             discount_percentage = discount_info['discount_percentage']
                             subtotal_bruto_temp = (cantidad * precio_unit)
                             monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
-                            logger.info(f"Descuento aplicado a {co_art}: {discount_percentage}% = {monto_desc}")
+                            
+                            logger.debug(f"[DEBUG] Descuento encontrado: {discount_percentage}%, monto: {monto_desc}")
+                            
+                            # Guardar información del descuento para incrementar DESPUÉS del COMMIT
+                            # (evita bloquear la transacción principal)
+                            field_to_increment = discount_info.get('field_to_increment', 'campo1')
+                            discounts_to_increment.append({
+                                'co_desc': discount_info['co_desc'],
+                                'quantity_used': int(cantidad),
+                                'field_name': field_to_increment,
+                                'co_art': co_art,
+                                'disponibles_antes': discount_info.get('disponibles', 0)
+                            })
+                            logger.debug(f"[DEBUG] Descuento {discount_info['co_desc']} agregado a cola para incrementar después del COMMIT")
+                            logger.info(
+                                f"Descuento aplicado a {co_art}: {discount_percentage}% = {monto_desc}. "
+                                f"Se incrementará {field_to_increment} después de crear la cotización. "
+                                f"Disp restante: {discount_info.get('disponibles', 0) - int(cantidad)}"
+                            )
+                    except ConnectionError as conn_err:
+                        # Error de conexión - NO crear cotización
+                        logger.error(f"Error de conexión al obtener descuento para {co_art}: {conn_err}")
+                        raise ValueError(f"No se puede crear la cotización: error de conexión con la base de datos") from conn_err
                     except Exception as e:
                         logger.warning(f"Error obteniendo descuento para artículo {co_art} en cotización: {e}")
-                        # Continuar sin descuento si hay error
+                        # Continuar sin descuento si hay error (no es de conexión)
                         monto_desc = Decimal('0.00')
                 
                 # Calcular subtotal bruto (sin descuento)
@@ -573,17 +642,18 @@ class QuoteService:
                 subtotal_neto = subtotal_bruto - monto_desc
                 
                 # Calcular impuestos sobre el subtotal después de descuento
-                # Usar el porcentaje del payload si viene, sino usar el default
-                if item.tax_amount:
-                    # Si viene monto de impuesto, calcular el porcentaje sobre subtotal después de descuento
+                # Usar el porcentaje del payload si viene y es mayor que 0, sino usar el default
+                tax_amount_decimal = Decimal(str(item.tax_amount or '0.00'))
+                if tax_amount_decimal > 0:
+                    # Si viene monto de impuesto válido, calcular el porcentaje sobre subtotal después de descuento
                     if subtotal_neto > 0:
-                        monto_imp = Decimal(str(item.tax_amount))
+                        monto_imp = tax_amount_decimal
                         porc_imp = (monto_imp / subtotal_neto * 100).quantize(Decimal('0.01'))
                     else:
                         monto_imp = Decimal('0.00')
                         porc_imp = Decimal('0.00')
                 else:
-                    # Calcular impuesto usando porcentaje por defecto sobre subtotal después de descuento
+                    # Calcular impuesto usando porcentaje por defecto (16% IVA) sobre subtotal después de descuento
                     porc_imp = porc_imp_default
                     monto_imp = (subtotal_neto * porc_imp / 100).quantize(Decimal('0.01'))
                 
@@ -597,7 +667,17 @@ class QuoteService:
                 co_art_value = co_art[:30] if len(co_art) > 30 else co_art.ljust(30) if len(co_art) < 30 else co_art
                 co_uni_value = co_uni[:6] if len(co_uni) > 6 else co_uni.ljust(6) if len(co_uni) < 6 else co_uni
                 
+                # Verificar conexión antes de INSERT
+                try:
+                    cursor.execute("SELECT 1 AS test")
+                    cursor.fetchone()
+                    logger.debug(f"[DEBUG] Conexión OK antes de INSERT renglón {reng_num}")
+                except Exception as conn_check:
+                    logger.error(f"[DEBUG] Conexión MUERTA antes de INSERT renglón {reng_num}: {conn_check}")
+                    raise ConnectionError(f"Conexión perdida antes de INSERT renglón {reng_num}: {conn_check}") from conn_check
+                
                 # Insertar renglón
+                logger.debug(f"[DEBUG] Ejecutando INSERT para renglón {reng_num}, artículo {co_art}...")
                 cursor.execute(
                     insert_reng,
                     (
@@ -638,6 +718,8 @@ class QuoteService:
                     ),
                 )
                 
+                logger.debug(f"[DEBUG] INSERT renglón {reng_num} completado exitosamente")
+                
                 # Acumular totales
                 total_bruto += (cantidad * precio_unit)  # Bruto sin descuentos
                 total_descuentos += monto_desc  # Acumular descuentos
@@ -645,7 +727,17 @@ class QuoteService:
                 
                 reng_num += 1
             
+            logger.debug(f"[DEBUG] Todos los renglones procesados. Total bruto: {total_bruto}, Descuentos: {total_descuentos}, Impuestos: {total_impuestos}")
+            
             # PASO 6: Actualizar cabecera con totales calculados
+            logger.debug(f"[DEBUG] Verificando conexión antes de UPDATE de totales...")
+            try:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+                logger.debug(f"[DEBUG] Conexión OK antes de UPDATE totales")
+            except Exception as conn_check:
+                logger.error(f"[DEBUG] Conexión MUERTA antes de UPDATE totales: {conn_check}")
+                raise ConnectionError(f"Conexión perdida antes de UPDATE totales: {conn_check}") from conn_check
             # total_bruto ya incluye todos los precios sin descuento
             # monto_desc_glob debe ser la suma de todos los descuentos de los renglones
             total_neto = total_bruto - total_descuentos + total_impuestos
@@ -660,14 +752,60 @@ class QuoteService:
                 saldo = %s
             WHERE doc_num = %s
             """
+            logger.debug(f"[DEBUG] Ejecutando UPDATE de totales...")
             cursor.execute(
                 update_totals,
                 (total_bruto, total_descuentos, total_impuestos, total_neto, total_neto, doc_num)
             )
+            logger.debug(f"[DEBUG] UPDATE de totales completado")
+            
+            # Verificar conexión antes de COMMIT
+            try:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+                logger.debug(f"[DEBUG] Conexión OK antes de COMMIT")
+            except Exception as conn_check:
+                logger.error(f"[DEBUG] Conexión MUERTA antes de COMMIT: {conn_check}")
+                raise ConnectionError(f"Conexión perdida antes de COMMIT: {conn_check}") from conn_check
             
             # Confirmar transacción
-            cursor.execute("COMMIT TRANSACTION")
+            logger.debug(f"[DEBUG] Ejecutando conn.commit()...")
             conn.commit()
+            logger.debug(f"[DEBUG] conn.commit() completado - Transacción confirmada")
+            
+            # Cerrar cursor de la transacción principal
+            cursor.close()
+            logger.debug(f"[DEBUG] Cursor principal cerrado")
+            
+            # INCREMENTAR descuentos DESPUÉS del COMMIT (en transacciones separadas)
+            # Esto evita bloquear la transacción principal si hay locks en saDescArticulo
+            if discounts_to_increment:
+                logger.debug(f"[DEBUG] Incrementando {len(discounts_to_increment)} descuento(s) en transacciones separadas...")
+                for discount_info in discounts_to_increment:
+                    try:
+                        logger.debug(
+                            f"[DEBUG] Incrementando descuento {discount_info['co_desc']} "
+                            f"(campo: {discount_info['field_name']}, cantidad: {discount_info['quantity_used']})"
+                        )
+                        source_system_service.increment_discount_usage(
+                            co_desc=discount_info['co_desc'],
+                            quantity_used=discount_info['quantity_used'],
+                            field_name=discount_info['field_name'],
+                            existing_cursor=None  # Nueva conexión separada
+                        )
+                        logger.info(
+                            f"Descuento {discount_info['co_desc']} incrementado exitosamente para artículo {discount_info['co_art']}"
+                        )
+                    except Exception as inc_error:
+                        # No fallar la cotización si falla el incremento (ya está creada)
+                        logger.error(
+                            f"Error incrementando descuento {discount_info['co_desc']} para {discount_info['co_art']}: {inc_error}",
+                            exc_info=True
+                        )
+                        logger.warning(
+                            f"La cotización fue creada pero el contador de descuento no se actualizó. "
+                            f"Descuento: {discount_info['co_desc']}, Artículo: {discount_info['co_art']}"
+                        )
             
             logger.info(
                 f"Cotización creada exitosamente: doc_num={doc_num}, "
@@ -690,16 +828,32 @@ class QuoteService:
         except Exception as e:
             # Revertir transacción en caso de error
             try:
-                cursor.execute("ROLLBACK TRANSACTION")
-                conn.rollback()
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
             except Exception as rollback_error:
                 logger.error(f"Error al hacer rollback: {rollback_error}")
             
             logger.error(f"Error creando cotización: {str(e)}", exc_info=True)
             raise
         finally:
-            cursor.close()
-            conn.close()
+            # Cerrar recursos solo si no se cerraron antes (en caso de éxito)
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception:
+                pass
+            # Limpiar cualquier transacción pendiente antes de devolver al pool
+            if conn:
+                try:
+                    temp_cursor = conn.cursor()
+                    temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                    temp_cursor.close()
+                except Exception:
+                    pass  # Ignorar errores al limpiar
+                source_system_service.return_connection(conn)
 
     def verify_quote_payload(
         self,
@@ -725,13 +879,17 @@ class QuoteService:
             FROM dbo.saArticulo a
             WHERE a.co_art IN ({placeholders})
         """
-        conn = source_system_service.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(query_art, tuple(co_arts))
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        art_map = {r.get("co_art"): r.get("art_des") for r in rows} if rows else {}
+        conn = None
+        try:
+            conn = source_system_service.get_pooled_connection()
+            cursor = conn.cursor()
+            cursor.execute(query_art, tuple(co_arts))
+            rows = cursor.fetchall()
+            cursor.close()
+            art_map = {r.get("co_art"): r.get("art_des") for r in rows} if rows else {}
+        finally:
+            if conn:
+                source_system_service.return_connection(conn)
 
         # Calcular totales (estimados) con IVA 16% sobre precio 0.00 al no tener pricing aquí
         items_out: List[QuoteVerifyItemResult] = []
@@ -813,55 +971,59 @@ class QuoteService:
                 )
             
             # Verificar si la tabla existe primero
-            conn = source_system_service.get_connection()
-            cursor = conn.cursor()
-            
-            # Query simplificada sin filtros adicionales por ahora
-            # Solo filtramos por cliente y saldo > 0
-            offset = (page - 1) * page_size
-            
-            # Contar total de cotizaciones
-            count_query = """
-            SELECT COUNT(DISTINCT c.doc_num) as total
-            FROM dbo.saCotizacionCliente c
-            WHERE c.co_cli = %s AND c.saldo > 0
-            """
-            cursor.execute(count_query, (customer_code,))
-            total_count = cursor.fetchone().get('total', 0)
-            
-            # Obtener cotizaciones con paginación y conteo de items
-            # Query exacta que funciona en la base de datos
-            query = """
-            SELECT 
-                c.co_cli AS Codigo_Cliente,
-                c.doc_num AS profit_plus_id,
-                c.fec_emis AS created_at,
-                c.fec_emis AS emission_date,
-                c.fec_venc AS expires_at,
-                c.total_neto AS total_neto,
-                c.saldo AS saldo,
-                c.co_mone AS codigo_moneda,
-                ISNULL(m.mone_des, 'Bolívares') AS currency_name,
-                ISNULL(item_counts.items_count, 0) AS items_count
-            FROM dbo.saCotizacionCliente c
-            LEFT JOIN dbo.saMoneda m ON c.co_mone = m.co_mone
-            LEFT JOIN (
-                SELECT doc_num, COUNT(*) as items_count
-                FROM dbo.saCotizacionClienteReng
-                GROUP BY doc_num
-            ) item_counts ON c.doc_num = item_counts.doc_num
-            WHERE c.co_cli = %s 
-            AND c.saldo > 0 
-            ORDER BY c.fec_emis DESC
-            OFFSET %s ROWS
-            FETCH NEXT %s ROWS ONLY
-            """
-            
-            cursor.execute(query, (customer_code, offset, page_size))
-            quotes_data = cursor.fetchall()
-            
-            cursor.close()
-            conn.close()
+            conn = None
+            try:
+                conn = source_system_service.get_pooled_connection()
+                cursor = conn.cursor()
+                
+                # Query simplificada sin filtros adicionales por ahora
+                # Solo filtramos por cliente y saldo > 0
+                offset = (page - 1) * page_size
+                
+                # Contar total de cotizaciones
+                count_query = """
+                SELECT COUNT(DISTINCT c.doc_num) as total
+                FROM dbo.saCotizacionCliente c
+                WHERE c.co_cli = %s AND c.saldo > 0
+                """
+                cursor.execute(count_query, (customer_code,))
+                total_count = cursor.fetchone().get('total', 0)
+                
+                # Obtener cotizaciones con paginación y conteo de items
+                # Query exacta que funciona en la base de datos
+                query = """
+                SELECT 
+                    c.co_cli AS Codigo_Cliente,
+                    c.doc_num AS profit_plus_id,
+                    c.fec_emis AS created_at,
+                    c.fec_emis AS emission_date,
+                    c.fec_venc AS expires_at,
+                    c.total_neto AS total_neto,
+                    c.saldo AS saldo,
+                    c.co_mone AS codigo_moneda,
+                    ISNULL(m.mone_des, 'Bolívares') AS currency_name,
+                    ISNULL(item_counts.items_count, 0) AS items_count
+                FROM dbo.saCotizacionCliente c
+                LEFT JOIN dbo.saMoneda m ON c.co_mone = m.co_mone
+                LEFT JOIN (
+                    SELECT doc_num, COUNT(*) as items_count
+                    FROM dbo.saCotizacionClienteReng
+                    GROUP BY doc_num
+                ) item_counts ON c.doc_num = item_counts.doc_num
+                WHERE c.co_cli = %s 
+                AND c.saldo > 0 
+                ORDER BY c.fec_emis DESC
+                OFFSET %s ROWS
+                FETCH NEXT %s ROWS ONLY
+                """
+                
+                cursor.execute(query, (customer_code, offset, page_size))
+                quotes_data = cursor.fetchall()
+                
+                cursor.close()
+            finally:
+                if conn:
+                    source_system_service.return_connection(conn)
             
             # Transformar a QuoteListItem
             results = []
@@ -968,83 +1130,86 @@ class QuoteService:
             
             # Consulta para obtener los detalles de las cotizaciones
             # Utiliza saCotizacionCliente (encabezado) y saCotizacionClienteReng (renglones)
-            conn = source_system_service.get_connection()
-            cursor = conn.cursor()
-            
-            # Query exacta proporcionada para obtener detalles de cotización
-            query = """
-            SELECT 
-                c.doc_num AS profit_plus_id,
-                c.fec_emis AS created_at,
-                c.fec_emis AS emission_date,
-                c.fec_venc AS expires_at,
-                c.total_neto AS total_neto,
-                c.saldo AS saldo,
-                c.co_mone AS codigo_moneda,
-                ISNULL(m.mone_des, 'Bolívares') AS currency_name,
-                c.co_ven AS codigo_vendedor,
-                r.reng_num AS line_number,
-                r.co_art AS product_code,
-                ISNULL(a.art_des, r.des_art) AS product_name,
-                r.total_art AS quantity,
-                r.prec_vta AS unit_price,
-                r.monto_desc AS discount_amount,
-                r.monto_imp AS tax_amount,
-                r.reng_neto AS line_total,
-                r.des_art AS description
-            FROM dbo.saCotizacionCliente c
-            LEFT JOIN dbo.saMoneda m ON c.co_mone = m.co_mone
-            LEFT JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
-            LEFT JOIN dbo.saArticulo a ON r.co_art = a.co_art
-            WHERE c.doc_num = %s
-              AND c.co_cli = %s
-              AND c.anulado = 0
-            ORDER BY r.reng_num
-            """
-            
-            # Ejecutar consulta pasando doc_num (profit_plus_id) y código del cliente
-            # Los espacios ya fueron eliminados anteriormente
-            cursor.execute(query, (profit_plus_id, customer_code))
-            all_data = cursor.fetchall()
-            
-            if not all_data:
+            conn = None
+            try:
+                conn = source_system_service.get_pooled_connection()
+                cursor = conn.cursor()
+                
+                # Query exacta proporcionada para obtener detalles de cotización
+                query = """
+                SELECT 
+                    c.doc_num AS profit_plus_id,
+                    c.fec_emis AS created_at,
+                    c.fec_emis AS emission_date,
+                    c.fec_venc AS expires_at,
+                    c.total_neto AS total_neto,
+                    c.saldo AS saldo,
+                    c.co_mone AS codigo_moneda,
+                    ISNULL(m.mone_des, 'Bolívares') AS currency_name,
+                    c.co_ven AS codigo_vendedor,
+                    r.reng_num AS line_number,
+                    r.co_art AS product_code,
+                    ISNULL(a.art_des, r.des_art) AS product_name,
+                    r.total_art AS quantity,
+                    r.prec_vta AS unit_price,
+                    r.monto_desc AS discount_amount,
+                    r.monto_imp AS tax_amount,
+                    r.reng_neto AS line_total,
+                    r.des_art AS description
+                FROM dbo.saCotizacionCliente c
+                LEFT JOIN dbo.saMoneda m ON c.co_mone = m.co_mone
+                LEFT JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
+                LEFT JOIN dbo.saArticulo a ON r.co_art = a.co_art
+                WHERE c.doc_num = %s
+                  AND c.co_cli = %s
+                  AND c.anulado = 0
+                ORDER BY r.reng_num
+                """
+                
+                # Ejecutar consulta pasando doc_num (profit_plus_id) y código del cliente
+                # Los espacios ya fueron eliminados anteriormente
+                cursor.execute(query, (profit_plus_id, customer_code))
+                all_data = cursor.fetchall()
+                
+                if not all_data:
+                    cursor.close()
+                    logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
+                    return None
+                
+                # El primer registro contiene la información del encabezado
+                first_row = all_data[0]
+                header = {
+                    'profit_plus_id': first_row.get('profit_plus_id'),
+                    'created_at': first_row.get('created_at'),
+                    'emission_date': first_row.get('emission_date'),
+                    'expires_at': first_row.get('expires_at'),
+                    'total_neto': first_row.get('total_neto'),
+                    'saldo': first_row.get('saldo'),
+                    'codigo_moneda': first_row.get('codigo_moneda'),
+                    'currency_name': first_row.get('currency_name'),
+                    'codigo_vendedor': first_row.get('codigo_vendedor'),
+                }
+                
+                # Todos los registros contienen los items (puede haber múltiples renglones)
+                items_data = []
+                for row in all_data:
+                    if row.get('product_code'):  # Solo agregar si tiene artículo
+                        items_data.append({
+                            'line_number': row.get('line_number'),
+                            'product_code': row.get('product_code'),
+                            'product_name': row.get('product_name'),
+                            'quantity': row.get('quantity'),
+                            'unit_price': row.get('unit_price'),
+                            'discount_amount': row.get('discount_amount'),
+                            'tax_amount': row.get('tax_amount'),
+                            'line_total': row.get('line_total'),
+                            'description': row.get('description'),
+                        })
+                
                 cursor.close()
-                conn.close()
-                logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
-                return None
-            
-            # El primer registro contiene la información del encabezado
-            first_row = all_data[0]
-            header = {
-                'profit_plus_id': first_row.get('profit_plus_id'),
-                'created_at': first_row.get('created_at'),
-                'emission_date': first_row.get('emission_date'),
-                'expires_at': first_row.get('expires_at'),
-                'total_neto': first_row.get('total_neto'),
-                'saldo': first_row.get('saldo'),
-                'codigo_moneda': first_row.get('codigo_moneda'),
-                'currency_name': first_row.get('currency_name'),
-                'codigo_vendedor': first_row.get('codigo_vendedor'),
-            }
-            
-            # Todos los registros contienen los items (puede haber múltiples renglones)
-            items_data = []
-            for row in all_data:
-                if row.get('product_code'):  # Solo agregar si tiene artículo
-                    items_data.append({
-                        'line_number': row.get('line_number'),
-                        'product_code': row.get('product_code'),
-                        'product_name': row.get('product_name'),
-                        'quantity': row.get('quantity'),
-                        'unit_price': row.get('unit_price'),
-                        'discount_amount': row.get('discount_amount'),
-                        'tax_amount': row.get('tax_amount'),
-                        'line_total': row.get('line_total'),
-                        'description': row.get('description'),
-                    })
-            
-            cursor.close()
-            conn.close()
+            finally:
+                if conn:
+                    source_system_service.return_connection(conn)
             
             # Transformar items
             items = []
@@ -1158,11 +1323,19 @@ class QuoteService:
             customer_code = customer_code.strip() if customer_code else None
             
             # Verificar que la cotización existe y pertenece al cliente
-            conn = source_system_service.get_connection()
-            cursor = conn.cursor()
-            
+            conn = None
+            cursor = None
             try:
-                # Iniciar transacción
+                conn = source_system_service.get_pooled_connection()
+                cursor = conn.cursor()
+                
+                # Limpiar cualquier transacción pendiente de la conexión reutilizada
+                try:
+                    cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                except Exception:
+                    pass  # Ignorar si no hay transacción pendiente
+                
+                # Iniciar transacción (manejada por pymssql)
                 cursor.execute("BEGIN TRANSACTION")
                 
                 # Verificar que la cotización existe y pertenece al cliente
@@ -1175,14 +1348,14 @@ class QuoteService:
                 quote_data = cursor.fetchone()
                 
                 if not quote_data:
-                    cursor.execute("ROLLBACK TRANSACTION")
+                    # cursor.execute("ROLLBACK TRANSACTION")
                     conn.rollback()
                     logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
                     return False
                 
                 # Verificar si ya está anulada
                 if quote_data.get('anulado', 0) == 1:
-                    cursor.execute("ROLLBACK TRANSACTION")
+                    # cursor.execute("ROLLBACK TRANSACTION")
                     conn.rollback()
                     logger.info(f"Cotización {profit_plus_id} ya está anulada")
                     return False
@@ -1199,7 +1372,6 @@ class QuoteService:
                 cursor.execute(update_query, (co_us_mo, profit_plus_id))
                 
                 # Confirmar transacción
-                cursor.execute("COMMIT TRANSACTION")
                 conn.commit()
                 
                 logger.info(f"Cotización {profit_plus_id} anulada exitosamente por usuario {user_id}")
@@ -1208,16 +1380,28 @@ class QuoteService:
             except Exception as e:
                 # Revertir transacción en caso de error
                 try:
-                    cursor.execute("ROLLBACK TRANSACTION")
-                    conn.rollback()
+                    if conn:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
                 except Exception as rollback_error:
                     logger.error(f"Error al hacer rollback: {rollback_error}")
                 
                 logger.error(f"Error anulando cotización {profit_plus_id}: {str(e)}", exc_info=True)
                 raise
             finally:
-                cursor.close()
-                conn.close()
+                if cursor:
+                    cursor.close()
+                # Limpiar cualquier transacción pendiente antes de devolver al pool
+                if conn:
+                    try:
+                        temp_cursor = conn.cursor()
+                        temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                        temp_cursor.close()
+                    except Exception:
+                        pass  # Ignorar errores al limpiar
+                    source_system_service.return_connection(conn)
                 
         except Exception as e:
             logger.error(f"Error en cancel_quote para cotización {quote_id}: {e}")
@@ -1292,10 +1476,13 @@ class QuoteService:
             )
 
         # 2. Consulta masiva a la base de datos (evita problema N+1)
-        conn = source_system_service.get_connection()
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
         
         try:
+            conn = source_system_service.get_pooled_connection()
+            cursor = conn.cursor()
+            
             # Limpiar códigos de artículo (eliminar espacios)
             co_arts_clean = [co_art.strip() if co_art else "" for co_art in co_arts]
             co_arts_clean = [co_art for co_art in co_arts_clean if co_art]  # Eliminar vacíos
@@ -1357,8 +1544,13 @@ class QuoteService:
                     }
             
         finally:
-            cursor.close()
-            conn.close()
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+            if conn:
+                source_system_service.return_connection(conn)
 
         # 3. Obtener código de cliente para consultar descuentos
         co_cli = None
@@ -1419,20 +1611,34 @@ class QuoteService:
                     subtotal_bruto = (precio_unitario * cantidad).quantize(Decimal('0.01'))
                     
                     # Consultar descuento desde saDescArticulo
+                    descuento_info_dict = None
                     try:
                         discount_info = source_system_service.get_article_discount(
                             article_code=co_art,
-                            customer_code=co_cli,
                             quantity=cantidad
                         )
                         
-                        if discount_info and discount_info.get('discount_percentage', 0) > 0:
+                        if discount_info and discount_info.get('disponibles', 0) > 0:
                             discount_percentage = discount_info['discount_percentage']
                             # Calcular monto de descuento
                             descuento = (subtotal_bruto * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+                            
+                            # Preparar información del descuento para la respuesta
+                            descuento_info_dict = {
+                                "co_desc": discount_info.get('co_desc', ''),
+                                "porcentaje": float(discount_percentage),
+                                "disponibles": discount_info.get('disponibles', 0),
+                                "limite_total": discount_info.get('limite_total', 0)
+                            }
+                    except ConnectionError as conn_err:
+                        # Error de conexión - marcar item como inválido
+                        logger.error(f"Error de conexión al validar descuento para {co_art}: {conn_err}")
+                        error_msg = "Error de conexión con la base de datos"
+                        all_valid = False
+                        descuento = Decimal('0.00')
                     except Exception as e:
                         logger.warning(f"Error obteniendo descuento para artículo {co_art}: {e}")
-                        # Continuar sin descuento si hay error
+                        # Continuar sin descuento si hay error (no es de conexión)
                         descuento = Decimal('0.00')
                     
                     # Calcular subtotal después de descuento
@@ -1460,6 +1666,7 @@ class QuoteService:
                     subtotal=str(subtotal.quantize(Decimal('0.01'))),
                     impuestos=str(impuestos.quantize(Decimal('0.01'))),
                     descuento=str(descuento.quantize(Decimal('0.01'))),
+                    descuento_info=descuento_info_dict,
                     stock_ok=stock_ok,
                     error=error_msg,
                 )

@@ -26,11 +26,14 @@ class ArticleDiscountCreate(BaseModel):
     porc5: Optional[Decimal] = Field(None, ge=0, le=100)
     porc6: Optional[Decimal] = Field(None, ge=0, le=100, description="Porcentaje adicional (porc6)")
 
-    campo1: Optional[str] = Field(None, max_length=60)
-    campo2: Optional[str] = Field(None, max_length=60)
-    campo3: Optional[str] = Field(None, max_length=60)
-    campo4: Optional[str] = Field(None, max_length=60)
-    campo5: Optional[str] = Field(None, max_length=60)
+    # Campos de contadores de uso (campo1...campo5 corresponden a hasta1...hasta5)
+    campo1: int = Field(0, ge=0, description="Contador de uso para rango 1")
+    campo2: int = Field(0, ge=0, description="Contador de uso para rango 2")
+    campo3: int = Field(0, ge=0, description="Contador de uso para rango 3")
+    campo4: int = Field(0, ge=0, description="Contador de uso para rango 4")
+    campo5: int = Field(0, ge=0, description="Contador de uso para rango 5")
+    
+    # Campos adicionales
     campo6: Optional[str] = Field(None, max_length=60)
     campo7: Optional[str] = Field(None, max_length=60)
     campo8: Optional[str] = Field(None, max_length=60)
@@ -53,6 +56,7 @@ class ArticleDiscountResponse(ArticleDiscountCreate):
 
 class ArticleDiscountDetail(BaseModel):
     """Detalle completo de un descuento de artículo"""
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     co_desc: str = Field(..., description="Código del descuento")
     co_art: str = Field(..., description="Código del artículo")
     art_des: Optional[str] = Field(None, description="Descripción del artículo")
@@ -75,6 +79,13 @@ class ArticleDiscountDetail(BaseModel):
     porc5: Optional[Decimal] = Field(None, description="Porcentaje rango 5")
     porc6: Optional[Decimal] = Field(None, description="Porcentaje adicional")
     
+    # Campos de control de disponibilidad
+    campo1: Optional[int] = Field(None, description="Uso rango 1")
+    campo2: Optional[int] = Field(None, description="Uso rango 2")
+    campo3: Optional[int] = Field(None, description="Uso rango 3")
+    campo4: Optional[int] = Field(None, description="Uso rango 4")
+    campo5: Optional[int] = Field(None, description="Uso rango 5")
+    
     # Metadatos
     is_active: bool = Field(..., description="Si el descuento está activo (basado en fechas)")
     fe_us_in: Optional[datetime] = Field(None, description="Fecha de creación")
@@ -83,6 +94,7 @@ class ArticleDiscountDetail(BaseModel):
 
 class ArticleDiscountListResponse(BaseModel):
     """Respuesta paginada de descuentos"""
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     items: List[ArticleDiscountDetail] = Field(default_factory=list)
     total: int = Field(..., description="Total de registros")
     page: int = Field(..., description="Página actual")

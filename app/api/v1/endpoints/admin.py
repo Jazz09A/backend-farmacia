@@ -53,6 +53,7 @@ class SourceSystemCustomerResponse(BaseModel):
     is_juridico: bool
 
 class SourceSystemCustomerListResponse(BaseModel):
+    success: bool = True  # Nuevo campo
     customers: List[SourceSystemCustomerResponse]
     total: int
     page: int
@@ -73,6 +74,7 @@ class UserCreationResult(BaseModel):
     email_error: Optional[str]
 
 class CreateUsersResponse(BaseModel):
+    success: bool = True  # Nuevo campo
     total: int
     successful: List[UserCreationResult]
     failed: List[UserCreationResult]

@@ -17,6 +17,7 @@ from app.schemas.promotion import (
 )
 from app.utils.timezone import get_ve_now
 from app.services.article_service import ArticleService
+from app.services.source_system_service import source_system_service
 
 
 class FlashOffersService:
@@ -124,34 +125,56 @@ class FlashOffersService:
         product_id: Optional[str] = None,
         article_code: Optional[str] = None,
     ) -> tuple[List[FlashOffer], int]:
-        """Obtener lista de flash offers con filtros."""
-        query = self.db.query(FlashOffer)
+        """Obtener lista de flash offers desde Source System (saDescArticulo)."""
         
-        # Aplicar filtros
-        if active_only:
-            query = query.filter(FlashOffer.is_active == True)
+        # Obtener datos crudos de Profit Plus
+        raw_offers, total = source_system_service.get_all_active_flash_offers(
+            skip=skip, 
+            limit=limit,
+            article_code=article_code
+        )
         
-        if valid_only:
-            now = get_ve_now()
-            query = query.filter(
-                and_(
-                    FlashOffer.is_active == True,
-                    FlashOffer.start_time <= now,
-                    FlashOffer.end_time >= now
-                )
-            )
+        flash_offers = []
+        from app.utils.timezone import VE_TIMEZONE, get_ve_now
         
-        if product_id:
-            query = query.filter(FlashOffer.product_id == product_id)
+        for item in raw_offers:
+            # Procesar fechas para asegurar que tengan zona horaria (Venezuela)
+            start_time = item.get('start_time')
+            if start_time:
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=VE_TIMEZONE)
+            else:
+                # Si es NULL, asumir inicio en el pasado
+                start_time = get_ve_now().replace(year=2020, month=1, day=1)
+                
+            end_time = item.get('end_time')
+            if end_time:
+                if end_time.tzinfo is None:
+                    end_time = end_time.replace(tzinfo=VE_TIMEZONE)
+            else:
+                # Si es NULL, asumir fin en el futuro lejano
+                end_time = get_ve_now().replace(year=2099, month=12, day=31)
 
-        if article_code:
-            query = query.filter(FlashOffer.article_code == article_code.strip().upper())
-        
-        # Contar total
-        total = query.count()
-        
-        # Aplicar paginación y ordenar por fecha de creación (más recientes primero)
-        flash_offers = query.order_by(FlashOffer.created_at.desc()).offset(skip).limit(limit).all()
+            # Convertir dict a objeto FlashOffer para compatibilidad
+            # Usamos DiscountType.PERCENTAGE directamente ya que Profit solo maneja porcentajes
+            offer = FlashOffer(
+                id=item['id'],
+                article_code=item['article_code'],
+                discount_type=DiscountType.PERCENTAGE,
+                discount_value=float(item['discount_value'] or 0),
+                start_time=start_time,
+                end_time=end_time,
+                max_quantity=item.get('max_quantity'),
+                used_quantity=int(item.get('campo2') or 0),
+                is_active=item['is_active'],
+                created_at=item.get('created_at') or get_ve_now(),
+                updated_at=item.get('updated_at') or get_ve_now()
+            )
+            # Atributos adicionales que no están en el modelo ORM pero son útiles para el response
+            # Se asignan dinámicamente al objeto
+            offer.remaining_quantity = item.get('remaining_quantity')
+            
+            flash_offers.append(offer)
         
         return flash_offers, total
     

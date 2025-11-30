@@ -1,13 +1,22 @@
 import pymssql
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import uuid4
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from queue import Queue, Empty
+from threading import Lock
 from app.config.settings import Settings
 from app.config.logging_config import get_logger
 
 settings = Settings()
 class SourceSystemService:
     """Servicio para conectar y consultar la base de datos SourceSystem"""
+    
+    # Pool de conexiones compartido (clase-nivel)
+    _connection_pool: Queue = None
+    _pool_lock = Lock()
+    _pool_size = 5  # Máximo de conexiones en el pool
+    _pool_initialized = False
+    
     def __init__(self):
         self.logger = get_logger("source_system")
         # Limpiar espacios en blanco de todos los parámetros
@@ -19,11 +28,71 @@ class SourceSystemService:
         self.user = settings.SOURCE_SYSTEM_USER.strip() if settings.SOURCE_SYSTEM_USER else None
         self.password = settings.SOURCE_SYSTEM_PASSWORD.strip() if settings.SOURCE_SYSTEM_PASSWORD else None
         
+        # Inicializar pool si no está inicializado
+        self._init_pool()
+        
         # Log de configuración (sin mostrar contraseña completa)
         if self.user:
             self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: {self.user[:3]}***")
         else:
             self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: (sin autenticación)")
+    
+    def _init_pool(self):
+        """Inicializa el pool de conexiones si no está inicializado"""
+        with SourceSystemService._pool_lock:
+            if not SourceSystemService._pool_initialized:
+                SourceSystemService._connection_pool = Queue(maxsize=self._pool_size)
+                SourceSystemService._pool_initialized = True
+                self.logger.info(f"Pool de conexiones inicializado (tamaño máximo: {self._pool_size})")
+    
+    def get_pooled_connection(self):
+        """
+        Obtiene una conexión del pool o crea una nueva.
+        La conexión debe ser devuelta al pool con return_connection().
+        """
+        try:
+            # Intentar obtener una conexión del pool (sin esperar)
+            conn = SourceSystemService._connection_pool.get_nowait()
+            # Verificar si la conexión sigue viva
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+                cursor.close()
+                self.logger.debug("Conexión reutilizada del pool")
+                return conn
+            except Exception:
+                # Conexión muerta, cerrarla y crear una nueva
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                self.logger.debug("Conexión del pool estaba muerta, creando nueva")
+                return self._create_connection()
+        except Empty:
+            # Pool vacío, crear nueva conexión
+            self.logger.debug("Pool vacío, creando nueva conexión")
+            return self._create_connection()
+    
+    def return_connection(self, conn):
+        """Devuelve una conexión al pool para reutilizarla"""
+        if conn is None:
+            return
+        try:
+            # Intentar poner la conexión en el pool
+            SourceSystemService._connection_pool.put_nowait(conn)
+            self.logger.debug("Conexión devuelta al pool")
+        except Exception:
+            # Pool lleno, cerrar la conexión
+            try:
+                conn.close()
+                self.logger.debug("Pool lleno, conexión cerrada")
+            except Exception:
+                pass
+    
+    def _create_connection(self):
+        """Crea una nueva conexión a la base de datos"""
+        return self.get_connection()
 
     def get_connection(self):
         try:
@@ -50,8 +119,8 @@ class SourceSystemService:
                 "port": self.port,
                 "database": database_clean,
                 "as_dict": True,
-                "login_timeout": 15,  # Segundos para establecer conexión
-                "timeout": 30,        # Segundos para queries
+                "login_timeout": 30,  # Segundos para establecer conexión
+                "timeout": 90,        # Segundos para queries (aumentado para tablas sin índices)
             }
             
             # Solo agregar credenciales si están configuradas
@@ -93,8 +162,9 @@ class SourceSystemService:
         limit: int = None,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
+        conn = None
         try:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
 
             query = """
@@ -129,16 +199,18 @@ class SourceSystemService:
             customers = cursor.fetchall()
 
             cursor.close()
-            conn.close()
-
             return customers
         except Exception as e:
             self.logger.error(f"Error obteniendo clientes de SourceSystem: {str(e)}")
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_customer_by_code(self, customer_code: str) -> Optional[Dict[str, Any]]:
+        conn = None
         try:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
             SELECT 
@@ -160,15 +232,18 @@ class SourceSystemService:
             cursor.execute(query, (customer_code,))
             customer = cursor.fetchone()
             cursor.close()
-            conn.close()
             return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente {customer_code}: {str(e)}")
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_customer_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        conn = None
         try:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
             SELECT 
@@ -189,11 +264,13 @@ class SourceSystemService:
             cursor.execute(query, (email, email))
             customer = cursor.fetchone()
             cursor.close()
-            conn.close()
             return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente por email {email}: {str(e)}")
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_profit_customer_profile(self, email: str) -> Dict[str, Any]:
         """
@@ -257,9 +334,10 @@ class SourceSystemService:
         if numeric_width <= 0:
             raise ValueError("El prefijo para co_desc no puede exceder 6 caracteres")
 
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
             like_pattern = f"{prefix_clean}%"
             query = """
                 SELECT TOP 1 RTRIM(co_desc) AS co_desc
@@ -281,10 +359,11 @@ class SourceSystemService:
                 next_number = 1
 
             new_code = f"{prefix_clean}{str(next_number).zfill(numeric_width)}"
+            cursor.close()
             return new_code[:max_length]
         finally:
-            cursor.close()
-            conn.close()
+            if conn:
+                self.return_connection(conn)
     
     def get_customer_addresses(self, customer_code: str) -> List[Dict[str, Any]]:
         """
@@ -296,8 +375,9 @@ class SourceSystemService:
         Returns:
             Lista de direcciones del cliente
         """
+        conn = None
         try:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
             SELECT 
@@ -315,7 +395,6 @@ class SourceSystemService:
             cursor.execute(query, (customer_code.strip(),))
             result = cursor.fetchone()
             cursor.close()
-            conn.close()
             
             if not result:
                 return []
@@ -363,6 +442,9 @@ class SourceSystemService:
         except Exception as e:
             self.logger.error(f"Error obteniendo direcciones para cliente {customer_code}: {str(e)}")
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
     
     # =========================================================================
     # Artículos e Imágenes (Profit Plus)
@@ -477,8 +559,9 @@ class SourceSystemService:
             {base_query}
         """
 
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             cursor.execute(count_query, tuple(params))
             total_row = cursor.fetchone()
@@ -487,7 +570,6 @@ class SourceSystemService:
             cursor.execute(data_query, tuple(params + [offset, limit]))
             items = cursor.fetchall()
             cursor.close()
-            conn.close()
 
             return {
                 "items": items or [],
@@ -496,17 +578,19 @@ class SourceSystemService:
                 "limit": limit,
             }
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_article_detail(self, article_code: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene el detalle completo de un artículo, incluyendo precios,
         stock e imágenes.
         """
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             header_query = """
                 SELECT 
@@ -528,7 +612,6 @@ class SourceSystemService:
             header = cursor.fetchone()
             if not header:
                 cursor.close()
-                conn.close()
                 return None
 
             price_query = """
@@ -561,7 +644,6 @@ class SourceSystemService:
             images = self.get_article_images(article_code, connection=(conn, cursor))
 
             cursor.close()
-            conn.close()
 
             return {
                 "header": header,
@@ -570,9 +652,10 @@ class SourceSystemService:
                 "images": images,
             }
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_article_images(
         self,
@@ -584,10 +667,11 @@ class SourceSystemService:
         Puede reutilizar una conexión existente para optimizar consultas.
         """
         own_connection = False
+        conn = None
         if connection:
             conn, cursor = connection
         else:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             own_connection = True
 
@@ -608,14 +692,13 @@ class SourceSystemService:
 
             if own_connection:
                 cursor.close()
-                conn.close()
 
             return rows
         except Exception:
-            if own_connection:
-                cursor.close()
-                conn.close()
             raise
+        finally:
+            if own_connection and conn:
+                self.return_connection(conn)
 
     def _check_tip_exists(self, tip: str, article_code: str, cursor) -> bool:
         """
@@ -731,9 +814,11 @@ class SourceSystemService:
         sucursal_code = "CCS"
         
         new_guid = str(uuid4())
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
         try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
             # Determinar el código tip a usar
             if tip is None:
                 # Si NO se proporciona tip, generar automáticamente (IMG001, IMG002, etc.)
@@ -788,25 +873,16 @@ class SourceSystemService:
             )
             conn.commit()
             cursor.close()
-            conn.close()
             return new_guid
         except ValueError:
             # Re-lanzar ValueError sin modificar (ya tienen mensajes claros)
             if conn:
                 conn.rollback()
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
             raise
         except Exception as e:
             # Capturar otros errores y proporcionar contexto
             if conn:
                 conn.rollback()
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
             # Si es un error de truncamiento, proporcionar más contexto
             error_msg = str(e)
             if "truncated" in error_msg.lower() or "8152" in error_msg:
@@ -819,14 +895,18 @@ class SourceSystemService:
                     f"Error original: {error_msg}"
                 )
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_image_by_guid(self, image_guid: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene los datos binarios de una imagen almacenada en saArtImagen.
         """
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
             # Normalizar el GUID: quitar espacios, convertir a mayúsculas, remover llaves
             image_guid_clean = (image_guid or "").strip().upper().replace('{', '').replace('}', '')
             if not image_guid_clean:
@@ -855,15 +935,13 @@ class SourceSystemService:
                 self.logger.warning(f"No se encontró imagen con GUID: {image_guid_clean}")
             
             cursor.close()
-            conn.close()
             return row
         except Exception as e:
             self.logger.error(f"Error obteniendo imagen por GUID {image_guid}: {str(e)}")
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def update_customer_password(self, customer_code: str, hashed_password: str) -> bool:
         """
@@ -876,8 +954,9 @@ class SourceSystemService:
         Returns:
             bool: True si se actualizó correctamente
         """
+        conn = None
         try:
-            conn = self.get_connection()
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             
             query = """
@@ -891,7 +970,6 @@ class SourceSystemService:
             
             rows_affected = cursor.rowcount
             cursor.close()
-            conn.close()
             
             if rows_affected > 0:
                 self.logger.info(f"Contraseña actualizada para cliente {customer_code}")
@@ -903,137 +981,386 @@ class SourceSystemService:
         except Exception as e:
             self.logger.error(f"Error actualizando contraseña para cliente {customer_code}: {str(e)}")
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_article_discount(
         self,
         article_code: str,
-        customer_code: Optional[str] = None,
-        quantity: Decimal = Decimal('1.00')
+        quantity: Decimal = Decimal('1.00'),
+        existing_cursor=None
     ) -> Optional[Dict[str, Any]]:
         """
         Obtiene el descuento aplicable para un artículo desde saDescArticulo.
         
+        Nueva Lógica:
+        - Selecciona el rango de descuento basado en cantidad (quantity <= hastaX).
+        - Valida disponibilidad específica del rango seleccionado:
+          - Disponibles = hastaX (límite global) - campoX (usados).
+          - Si Disponibles < quantity, NO aplica el descuento.
+        
         Args:
             article_code: Código del artículo (co_art)
-            customer_code: Código del cliente (co_cli). Si es None, busca descuentos generales
             quantity: Cantidad del artículo para determinar el rango de descuento
+            existing_cursor: Cursor existente para reutilizar (evita crear nueva conexión)
             
         Returns:
             Dict con información del descuento aplicable:
             {
-                'discount_percentage': Decimal,  # Porcentaje de descuento
-                'range_applied': str,  # Rango aplicado (hasta1, hasta2, etc.)
-                'co_cli': str or None  # Cliente específico o None si es general
+                'co_desc': str,
+                'discount_percentage': Decimal,
+                'range_applied': str,  # 'hasta1', 'hasta2', etc.
+                'field_to_increment': str, # 'campo1', 'campo2', etc.
+                'disponibles': int,
+                'limite_total': int,
+                'ya_usados': int,
             }
-            None si no hay descuento aplicable
+            None si no hay descuento aplicable o disponible
         """
+        conn = None
+        cursor = None
+        use_existing = existing_cursor is not None
+        
+        self.logger.debug(f"[DEBUG] get_article_discount INICIO - artículo: {article_code}, cantidad: {quantity}, use_existing: {use_existing}")
+        
         try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Primero intentar buscar descuento específico para el cliente
-            discount = None
-            if customer_code:
-                query = """
-                    SELECT 
-                        porc1, porc2, porc3, porc4, porc5,
-                        hasta1, hasta2, hasta3, hasta4, hasta5,
-                        co_cli
-                    FROM dbo.saDescArticulo
-                    WHERE RTRIM(co_art) = %s 
-                        AND RTRIM(co_cli) = %s
-                """
-                cursor.execute(query, (article_code.strip(), customer_code.strip()))
-                discount = cursor.fetchone()
-            
-            # Si no hay descuento específico, buscar descuento general (co_cli IS NULL)
-            if not discount:
-                query = """
-                    SELECT 
-                        porc1, porc2, porc3, porc4, porc5,
-                        hasta1, hasta2, hasta3, hasta4, hasta5,
-                        co_cli
-                    FROM dbo.saDescArticulo
-                    WHERE RTRIM(co_art) = %s 
-                        AND co_cli IS NULL
-                """
-                cursor.execute(query, (article_code.strip(),))
-                discount = cursor.fetchone()
-            
-            cursor.close()
-            conn.close()
-            
-            if not discount:
-                return None
-            
-            # Determinar qué rango de descuento aplicar según la cantidad
-            discount_percentage = Decimal('0.00')
-            range_applied = None
-            
-            # Evaluar rangos en orden: hasta1, hasta2, hasta3, hasta4, hasta5
-            hasta1 = Decimal(str(discount.get('hasta1') or 0))
-            hasta2 = Decimal(str(discount.get('hasta2') or 0))
-            hasta3 = Decimal(str(discount.get('hasta3') or 0))
-            hasta4 = Decimal(str(discount.get('hasta4') or 0))
-            hasta5 = Decimal(str(discount.get('hasta5') or 0))
-            
-            porc1 = Decimal(str(discount.get('porc1') or 0))
-            porc2 = Decimal(str(discount.get('porc2') or 0))
-            porc3 = Decimal(str(discount.get('porc3') or 0))
-            porc4 = Decimal(str(discount.get('porc4') or 0))
-            porc5 = Decimal(str(discount.get('porc5') or 0))
-            
-            # Determinar el rango aplicable
-            if hasta5 > 0 and quantity <= hasta5:
-                discount_percentage = porc5
-                range_applied = 'hasta5'
-            elif hasta4 > 0 and quantity <= hasta4:
-                discount_percentage = porc4
-                range_applied = 'hasta4'
-            elif hasta3 > 0 and quantity <= hasta3:
-                discount_percentage = porc3
-                range_applied = 'hasta3'
-            elif hasta2 > 0 and quantity <= hasta2:
-                discount_percentage = porc2
-                range_applied = 'hasta2'
-            elif hasta1 > 0 and quantity <= hasta1:
-                discount_percentage = porc1
-                range_applied = 'hasta1'
-            elif porc1 > 0:  # Si hay un porcentaje base sin rango específico
-                discount_percentage = porc1
-                range_applied = 'base'
+            if use_existing:
+                cursor = existing_cursor
+                # Verificar que el cursor esté vivo
+                try:
+                    cursor.execute("SELECT 1 AS test")
+                    cursor.fetchone()
+                    self.logger.debug("[DEBUG] Cursor existente verificado - está VIVO")
+                except Exception as check_err:
+                    self.logger.error(f"[DEBUG] Cursor existente está MUERTO: {check_err}")
+                    raise ConnectionError(f"Cursor existente no está conectado: {check_err}") from check_err
             else:
-                return None  # No hay descuento aplicable
+                self.logger.debug("[DEBUG] Obteniendo conexión del pool...")
+                conn = self.get_pooled_connection()
+                cursor = conn.cursor()
+                self.logger.debug("[DEBUG] Conexión del pool obtenida")
             
-            if discount_percentage <= 0:
+            # Query simplificada
+            query = """
+                SELECT TOP 1 co_desc, porc1, porc2, porc3, porc4, porc5,
+                        hasta1, hasta2, hasta3, hasta4, hasta5,
+                       campo1, campo2, campo3, campo4, campo5
+                FROM dbo.saDescArticulo WITH (NOLOCK)
+                WHERE co_art = %s
+                    AND (fecha_ini IS NULL OR fecha_ini <= GETDATE())
+                    AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
+            """
+            # Nota: No filtramos por campo1 > campo2 en SQL para poder diagnosticar "sin disponibilidad" vs "no existe"
+            
+            self.logger.debug(f"[DEBUG] Ejecutando query para obtener descuento de {article_code}...")
+            cursor.execute(query, (article_code.strip(),))
+            self.logger.debug("[DEBUG] Query ejecutada, obteniendo resultado...")
+            discount = cursor.fetchone()
+            self.logger.debug(f"[DEBUG] Resultado obtenido: {discount is not None}")
+            
+            if not discount:
                 return None
             
-            return {
-                'discount_percentage': discount_percentage,
-                'range_applied': range_applied,
-                'co_cli': discount.get('co_cli'),
-                'hasta': hasta1 if range_applied == 'hasta1' else (
-                    hasta2 if range_applied == 'hasta2' else (
-                        hasta3 if range_applied == 'hasta3' else (
-                            hasta4 if range_applied == 'hasta4' else (
-                                hasta5 if range_applied == 'hasta5' else None
-                            )
-                        )
-                    )
-                )
+            # Evaluar rangos para encontrar el aplicable
+            # Lógica revisada: Se aplica el descuento si la cantidad SUPERA el valor de hastaX
+            # Buscamos el mayor rango k tal que quantity > hasta[k]
+            
+            def safe_decimal(val):
+                try:
+                    if val is None:
+                        return Decimal('0')
+                    s_val = str(val).strip()
+                    if not s_val:
+                        return Decimal('0')
+                    return Decimal(s_val)
+                except (ValueError, TypeError, InvalidOperation):
+                    self.logger.warning(f"[DEBUG] Valor no decimal encontrado en campo de descuento: '{val}'. Se asume 0.")
+                    return Decimal('0')
+
+            hasta_vals = {
+                1: safe_decimal(discount.get('hasta1')),
+                2: safe_decimal(discount.get('hasta2')),
+                3: safe_decimal(discount.get('hasta3')),
+                4: safe_decimal(discount.get('hasta4')),
+                5: safe_decimal(discount.get('hasta5')),
             }
+            
+            porc_vals = {
+                1: safe_decimal(discount.get('porc1')),
+                2: safe_decimal(discount.get('porc2')),
+                3: safe_decimal(discount.get('porc3')),
+                4: safe_decimal(discount.get('porc4')),
+                5: safe_decimal(discount.get('porc5')),
+            }
+            
+            def safe_int(val):
+                try:
+                    if val is None:
+                        return 0
+                    # Limpiar espacios
+                    s_val = str(val).strip()
+                    if not s_val:
+                        return 0
+                    # Intentar convertir directamente
+                    return int(float(s_val))
+                except (ValueError, TypeError):
+                    # Si falla (ej: "Observación interna"), retornar 0
+                    self.logger.warning(f"[DEBUG] Valor no numérico encontrado en campo de descuento: '{val}'. Se asume 0.")
+                    return 0
+
+            campo_vals = {
+                1: safe_int(discount.get('campo1')),
+                2: safe_int(discount.get('campo2')),
+                3: safe_int(discount.get('campo3')),
+                4: safe_int(discount.get('campo4')),
+                5: safe_int(discount.get('campo5')),
+            }
+
+            selected_tier = None
+            
+            # Iteramos desde el rango más alto (5) hasta el más bajo (1)
+            # Si la cantidad supera el umbral, aplicamos ese descuento
+            for i in range(5, 0, -1):
+                if hasta_vals[i] > 0 and quantity > hasta_vals[i]:
+                    # Encontramos un candidato. Verificamos si tiene porcentaje configurado.
+                    if porc_vals[i] > 0:
+                        selected_tier = i
+                        break
+            
+            if selected_tier is None:
+                self.logger.debug(f"[DEBUG] No se encontró tier aplicable para {article_code} (cantidad {quantity} no supera ningún umbral)")
+                return None
+            
+            # Validar disponibilidad si se requiere (por ahora solo incrementamos uso)
+            # Nota: campo1 ya no es límite, es contador de uso si hasta1 es umbral
+            # Si se requiere límite global, se debe definir cuál campo lo representa.
+            # Asumimos disponibilidad siempre positiva si cumple el umbral.
+            
+            limit_total = int(hasta_vals[selected_tier]) # hastaX es el umbral
+            used_total = campo_vals[selected_tier]       # campoX es el contador de uso
+            
+            # Para evitar romper la estructura de respuesta, available simula ser alto
+            available = 999999 
+            
+            self.logger.debug(f"[DEBUG] Tier {selected_tier} seleccionado - Umbral: {limit_total}, Usados: {used_total}")
+
+            result = {
+                'co_desc': str(discount.get('co_desc', '')).strip(),
+                'discount_percentage': porc_vals[selected_tier],
+                'range_applied': f'hasta{selected_tier}',
+                'field_to_increment': f'campo{selected_tier}',
+                'disponibles': available,
+                'limite_total': limit_total,
+                'ya_usados': used_total,
+            }
+            self.logger.debug(f"[DEBUG] get_article_discount FIN - Retornando descuento: {result}")
+            return result
             
         except Exception as e:
+            error_code = getattr(e, 'args', [None])[0] if hasattr(e, 'args') and e.args else None
             self.logger.error(f"Error obteniendo descuento para artículo {article_code}: {str(e)}")
+            
+            # Si es error de conexión (20002, 20003, 20047), propagar el error
+            # para que la cotización NO se cree sin conexión a la BD
+            if error_code in (20002, 20003, 20047):
+                raise ConnectionError(f"Error de conexión a SQL Server: {str(e)}") from e
+            
+            # Para otros errores (ej: artículo no encontrado), continuar sin descuento
+            return None
+        finally:
+            # Solo cerrar recursos si los creamos nosotros (no si usamos cursor existente)
+            if not use_existing:
+                try:
+                    if cursor:
+                        cursor.close()
+                except Exception as e:
+                    self.logger.warning(f"Error cerrando cursor al obtener descuento para {article_code}: {e}")
+                
+                # Devolver conexión al pool para reutilización
+                self.return_connection(conn)
+
+    def increment_discount_usage(
+        self,
+        co_desc: str,
+        quantity_used: int,
+        field_name: str = "campo1",
+        existing_cursor=None
+    ) -> None:
+        """
+        Incrementa el contador de uso (campoX) cuando se aplica un descuento.
+        
+        Args:
+            co_desc: Código del descuento aplicado
+            quantity_used: Cantidad de productos con descuento aplicado
+            field_name: Nombre del campo a incrementar (campo1, campo2, etc.)
+            existing_cursor: Cursor existente para reutilizar (evita crear nueva conexión)
+        """
+        # Validar nombre de campo para seguridad (evitar inyección SQL)
+        valid_fields = ["campo1", "campo2", "campo3", "campo4", "campo5"]
+        if field_name not in valid_fields:
+            raise ValueError(f"Nombre de campo inválido para incremento: {field_name}")
+        
+        import time
+        
+        conn = None
+        cursor = None
+        use_existing = existing_cursor is not None
+        
+        self.logger.debug(f"[DEBUG] increment_discount_usage INICIO - co_desc: {co_desc}, quantity: {quantity_used}, field: {field_name}, use_existing: {use_existing}")
+        
+        start_time = time.time()
+        
+        try:
+            if use_existing:
+                cursor = existing_cursor
+                # Verificar que el cursor esté vivo ANTES de usarlo
+                try:
+                    self.logger.debug("[DEBUG] Verificando cursor existente antes de UPDATE...")
+                    cursor.execute("SELECT 1 AS test")
+                    cursor.fetchone()
+                    self.logger.debug("[DEBUG] Cursor existente verificado - está VIVO antes de UPDATE")
+                except Exception as check_err:
+                    self.logger.error(f"[DEBUG] Cursor existente está MUERTO antes de UPDATE: {check_err}")
+                    raise ConnectionError(f"Cursor existente no está conectado antes de UPDATE: {check_err}") from check_err
+            else:
+                self.logger.debug("[DEBUG] Obteniendo conexión del pool para increment...")
+                conn = self.get_pooled_connection()
+                cursor = conn.cursor()
+                self.logger.debug("[DEBUG] Conexión del pool obtenida para increment")
+            
+            # Primero, obtener el valor actual del campo para debug
+            self.logger.debug(f"[DEBUG] Obteniendo valor actual de {field_name} para {co_desc}...")
+            select_query = f"""
+                SELECT {field_name}, co_desc, co_art
+                FROM dbo.saDescArticulo WITH (NOLOCK)
+                WHERE co_desc = %s
+            """
+            cursor.execute(select_query, (co_desc.strip(),))
+            current_row = cursor.fetchone()
+            
+            if current_row:
+                current_value = current_row.get(field_name)
+                current_type = type(current_value).__name__
+                self.logger.debug(
+                    f"[DEBUG] Valor actual de {field_name}: '{current_value}' (tipo: {current_type}, "
+                    f"co_art: {current_row.get('co_art', 'N/A')})"
+                )
+            else:
+                self.logger.warning(f"[DEBUG] No se encontró registro con co_desc = {co_desc}")
+            
+            # Verificar si hay locks en la tabla antes del UPDATE
+            self.logger.debug(f"[DEBUG] Verificando locks en saDescArticulo para co_desc={co_desc}...")
+            try:
+                lock_check_query = """
+                    SELECT 
+                        request_session_id,
+                        resource_type,
+                        request_mode,
+                        request_status,
+                        resource_database_id
+                    FROM sys.dm_tran_locks
+                    WHERE resource_associated_entity_id = OBJECT_ID('dbo.saDescArticulo')
+                        AND request_status = 'WAIT'
+                """
+                cursor.execute(lock_check_query)
+                locks = cursor.fetchall()
+                if locks:
+                    self.logger.warning(f"[DEBUG] Se encontraron {len(locks)} locks esperando en saDescArticulo: {locks}")
+                else:
+                    self.logger.debug("[DEBUG] No se encontraron locks esperando en saDescArticulo")
+            except Exception as lock_check_err:
+                self.logger.warning(f"[DEBUG] Error verificando locks: {lock_check_err}")
+            
+            # Iniciar transacción explícita si usamos nuestra propia conexión
+            if not use_existing and conn:
+                self.logger.debug("[DEBUG] Iniciando transacción explícita (BEGIN TRANSACTION)...")
+                cursor.execute("BEGIN TRANSACTION")
+
+            # Configurar timeout corto para el UPDATE (5 segundos)
+            self.logger.debug("[DEBUG] Configurando LOCK_TIMEOUT a 5000ms (5 segundos)...")
+            cursor.execute("SET LOCK_TIMEOUT 5000")
+            
+            update_query = f"""
+                UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK)
+                SET {field_name} = CAST(
+                    ISNULL(TRY_CAST({field_name} AS INT), 0) + %s AS VARCHAR(60)
+                ),
+                    fe_us_mo = GETDATE()
+                WHERE co_desc = %s
+            """
+            
+            self.logger.debug(f"[DEBUG] Ejecutando UPDATE para incrementar {field_name} de {co_desc}...")
+            update_start = time.time()
+            try:
+                cursor.execute(update_query, (quantity_used, co_desc.strip()))
+                update_elapsed = time.time() - update_start
+                self.logger.debug(f"[DEBUG] UPDATE ejecutado exitosamente en {update_elapsed:.2f} segundos")
+            except Exception as update_err:
+                update_elapsed = time.time() - update_start
+                self.logger.error(f"[DEBUG] UPDATE falló después de {update_elapsed:.2f} segundos: {update_err}")
+                
+                # Si falla el update, intentar rollback de la transacción explícita
+                if not use_existing and conn:
+                    try:
+                        cursor.execute("ROLLBACK TRANSACTION")
+                    except Exception:
+                        pass
+                
+                # Restaurar LOCK_TIMEOUT
+                try:
+                    cursor.execute("SET LOCK_TIMEOUT -1")
+                except Exception:
+                    pass
             raise
+            
+            # Verificar cuántas filas se actualizaron
+            rows_affected = cursor.rowcount
+            self.logger.debug(f"[DEBUG] Filas afectadas por el UPDATE: {rows_affected}")
+            
+            # Restaurar LOCK_TIMEOUT a su valor por defecto
+            try:
+                cursor.execute("SET LOCK_TIMEOUT -1")
+            except Exception:
+                pass
+            
+            # Solo hacer commit si creamos nuestra propia conexión
+            if not use_existing and conn:
+                self.logger.debug("[DEBUG] Haciendo COMMIT TRANSACTION...")
+                commit_start = time.time()
+                cursor.execute("COMMIT TRANSACTION")
+                conn.commit()
+                commit_elapsed = time.time() - commit_start
+                self.logger.debug(f"[DEBUG] Commit realizado en {commit_elapsed:.2f} segundos")
+            
+            total_elapsed = time.time() - start_time
+            self.logger.debug(f"[DEBUG] increment_discount_usage FIN - Exitoso (tiempo total: {total_elapsed:.2f} segundos)")
+        except Exception as e:
+            if not use_existing and conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            self.logger.error(f"Error incrementando uso de descuento {co_desc} en {field_name}: {str(e)}")
+            raise
+        finally:
+            if not use_existing:
+                if cursor:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+                self.return_connection(conn)
 
     def create_article_discount(self, discount_data: Dict[str, Any]) -> bool:
         """
         Crea o actualiza un registro de descuento en saDescArticulo usando co_desc como identificador.
         """
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
         try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
             co_desc = (discount_data.get("co_desc") or "").strip().upper()
             if not co_desc:
                 raise ValueError("co_desc es requerido para crear un descuento")
@@ -1041,6 +1368,9 @@ class SourceSystemService:
             co_art = (discount_data.get("co_art") or "").strip().upper()
             if not co_art:
                 raise ValueError("co_art es requerido para crear un descuento")
+
+            # Los campos campo1...campo5 son contadores, no requieren validación de "límite" aquí
+            # ya que el límite es hastaX.
 
             tip_cli = (discount_data.get("tip_cli") or "GENERA").strip().upper()
             if not tip_cli:
@@ -1155,23 +1485,31 @@ class SourceSystemService:
                 cursor.execute(insert_sql, tuple(params))
 
             conn.commit()
-            cursor.close()
-            conn.close()
             return True
 
         except Exception as e:
             if conn:
-                conn.rollback()
-                conn.close()
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             self.logger.error(f"Error creating article discount: {str(e)}")
             raise
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            self.return_connection(conn)
 
     def validate_tip_cli(self, tip_cli: str) -> bool:
         """
         Valida que el tip_cli exista en la tabla saTipoCliente.
         """
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
                 SELECT COUNT(*) AS count
@@ -1181,19 +1519,20 @@ class SourceSystemService:
             cursor.execute(query, (tip_cli.strip().upper(),))
             result = cursor.fetchone()
             cursor.close()
-            conn.close()
             return result["count"] > 0 if result else False
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_valid_tip_cli_codes(self) -> list:
         """
         Obtiene todos los códigos de tipo de cliente válidos.
         """
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
                 SELECT tip_cli, des_tipo
@@ -1203,12 +1542,12 @@ class SourceSystemService:
             cursor.execute(query)
             results = cursor.fetchall()
             cursor.close()
-            conn.close()
             return results or []
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_active_discounts_for_articles(
         self,
@@ -1228,8 +1567,9 @@ class SourceSystemService:
         if not article_codes:
             return {}
         
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             
             # Normalizar códigos
@@ -1278,7 +1618,6 @@ class SourceSystemService:
             cursor.execute(query, tuple(params))
             results = cursor.fetchall() or []
             cursor.close()
-            conn.close()
             
             # Organizar por artículo (tomar el primer descuento por artículo)
             discounts_map = {}
@@ -1290,9 +1629,10 @@ class SourceSystemService:
             return discounts_map
             
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_article_discounts(
         self,
@@ -1315,8 +1655,9 @@ class SourceSystemService:
         Returns:
             Dict con items, total, page, limit, has_active, has_expired
         """
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_pooled_connection()
             cursor = conn.cursor()
             
             # Construir WHERE clause dinámicamente
@@ -1367,6 +1708,7 @@ class SourceSystemService:
                     d.porc6,
                     d.fe_us_in,
                     d.fe_us_mo,
+                    d.campo1, d.campo2,
                     CASE 
                         WHEN (d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())
                          AND (d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())
@@ -1404,7 +1746,6 @@ class SourceSystemService:
             has_expired = stats["expired_count"] if stats else 0
             
             cursor.close()
-            conn.close()
             
             return {
                 "items": items,
@@ -1416,9 +1757,103 @@ class SourceSystemService:
             }
             
         except Exception:
-            cursor.close()
-            conn.close()
             raise
+        finally:
+            if conn:
+                self.return_connection(conn)
+
+    def get_all_active_flash_offers(
+        self,
+        skip: int = 0,
+        limit: int = 10,
+        article_code: Optional[str] = None
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Obtiene ofertas flash activas y disponibles desde saDescArticulo.
+        Equivalente a Flash Offers pero usando datos reales de Profit Plus.
+        
+        Filtros aplicados:
+        1. Fechas vigentes (fecha_ini <= NOW <= fecha_fin)
+        2. Disponibilidad (campo1 - campo2 > 0)
+        """
+        conn = self.get_pooled_connection()
+        try:
+            cursor = conn.cursor()
+            
+            where_conditions = [
+                "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
+                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
+            ]
+            params = []
+            
+            if article_code:
+                where_conditions.append("RTRIM(d.co_art) = %s")
+                params.append(article_code.strip().upper())
+                
+            where_clause = " AND ".join(where_conditions)
+            
+            # Query para contar total
+            count_query = f"""
+                SELECT COUNT(*) AS total
+                FROM dbo.saDescArticulo d
+                WHERE {where_clause}
+            """
+            cursor.execute(count_query, tuple(params))
+            total = cursor.fetchone()['total']
+            
+            # Query de datos
+            query = f"""
+                SELECT 
+                    d.co_desc AS id,
+                    RTRIM(d.co_art) AS article_code,
+                    a.art_des,
+                    d.fecha_ini AS start_time,
+                    d.fecha_fin AS end_time,
+                    d.porc1 AS discount_value,
+                    d.campo1, d.campo2,
+                    d.fe_us_in AS created_at,
+                    d.fe_us_mo AS updated_at
+                FROM dbo.saDescArticulo d
+                LEFT JOIN dbo.saArticulo a ON RTRIM(d.co_art) = RTRIM(a.co_art)
+                WHERE {where_clause}
+                ORDER BY d.fe_us_in DESC
+                OFFSET %s ROWS FETCH NEXT %s ROWS ONLY
+            """
+            cursor.execute(query, tuple(params + [skip, limit]))
+            items = cursor.fetchall() or []
+            
+            # Post-procesamiento para asegurar tipos correctos
+            results = []
+            for item in items:
+                item['discount_type'] = 'percentage' # Siempre es porcentaje en Profit
+                item['is_active'] = True
+                # Calcular disponibilidad real
+                try:
+                    c1 = int(item.get('campo1') or 0)
+                    c2 = int(item.get('campo2') or 0)
+                    item['max_quantity'] = c1
+                    item['remaining_quantity'] = c1 - c2
+                except:
+                    item['max_quantity'] = 0
+                    item['remaining_quantity'] = 0
+                
+                results.append(item)
+                
+            cursor.close()
+            
+            return results, total
+            
+        except Exception as e:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            self.logger.error(f"Error getting flash offers from source: {e}")
+            raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
 # Singleton instance
 source_system_service = SourceSystemService()

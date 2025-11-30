@@ -4,12 +4,12 @@ from pydantic import BaseModel, Field
 
 class QuoteItem(BaseModel):
     line_number: int = Field(..., ge=1)
-    product_code: str
-    product_name: Optional[str] = None
-    quantity: float = Field(..., gt=0)
-    unit_price: str
-    discount_amount: Optional[str] = "0.00"
-    tax_amount: Optional[str] = "0.00"
+    product_code: str = Field(..., description="Código del artículo (co_art)")
+    product_name: Optional[str] = Field(None, description="Opcional - Se obtiene de la BD si no se envía")
+    quantity: float = Field(..., gt=0, description="Cantidad a cotizar")
+    unit_price: Optional[str] = Field(None, description="Opcional - Se obtiene de la BD si no se envía")
+    discount_amount: Optional[str] = Field("0.00", description="Opcional - Se calcula automáticamente si no se envía")
+    tax_amount: Optional[str] = Field("0.00", description="Opcional - Se calcula automáticamente si no se envía")
 
 
 class QuoteCustomer(BaseModel):
@@ -38,6 +38,7 @@ class QuoteCreate(BaseModel):
 
 
 class QuoteCreatedResponse(BaseModel):
+    success: bool = Field(default=True, description="Indica si la operación fue exitosa")
     quote_id: str
     profit_plus_id: str
     status: Literal["pending", "accepted", "expired", "cancelled", "converted"]
@@ -77,6 +78,7 @@ class QuoteVerifyTotals(BaseModel):
 
 
 class QuoteVerifyResponse(BaseModel):
+    success: bool = Field(default=True, description="Indica si la verificación fue exitosa")
     valido: bool
     co_cli: str
     items_verificados: List[QuoteVerifyItemResult] = []
@@ -104,6 +106,7 @@ class Pagination(BaseModel):
 
 
 class QuoteListResponse(BaseModel):
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     results: List[QuoteListItem]
     pagination: Pagination
 
@@ -133,6 +136,7 @@ class QuoteTotals(BaseModel):
 
 
 class QuoteDetailResponse(BaseModel):
+    success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     quote_id: str
     profit_plus_id: str
     status: Literal["pending", "accepted", "expired", "cancelled", "converted"]
@@ -185,6 +189,7 @@ class CartValidationItemResult(BaseModel):
     subtotal: str = Field(..., description="Subtotal (precio_unitario_real * cantidad)")
     impuestos: str = Field(..., description="Impuestos calculados")
     descuento: str = Field(default="0.00", description="Monto del descuento aplicado a este artículo")
+    descuento_info: Optional[dict] = Field(None, description="Información del descuento aplicado (co_desc, porcentaje, disponibles, limite_total)")
     stock_ok: bool = Field(..., description="True si hay stock suficiente, False en caso contrario")
     error: Optional[str] = Field(None, description="Mensaje de error si la validación falló")
 
@@ -204,6 +209,7 @@ class CartValidationResponse(BaseModel):
     Respuesta autoritativa del backend con la validación completa del carrito.
     Este es el único objeto en el que el frontend debe confiar.
     """
+    success: bool = Field(default=True, description="Indica si la validación se completó exitosamente")
     valido: bool = Field(..., description="True si todos los artículos son válidos, False si hay errores")
     items_verificados: List[CartValidationItemResult] = Field(..., description="Lista de artículos verificados")
     totales: CartValidationTotals = Field(..., description="Totales calculados")
