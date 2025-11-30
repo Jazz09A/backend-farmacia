@@ -15,7 +15,7 @@ from app.schemas.article import (
     ArticleSummary,
     ImageUploadResponse,
 )
-from app.schemas.product import FlashOfferInfo
+from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
 from app.models.promotion import FlashOffer, DiscountType
 from app.services.source_system_service import source_system_service
 from app.utils.timezone import get_ve_now
@@ -110,6 +110,48 @@ class ArticleService:
                 if flash_offer.max_quantity else None
             )
         )
+    
+    def _build_profit_discount_info(self, discount_row: Dict[str, Any]) -> ProfitDiscountInfo:
+        """Construye la información de descuento de Profit Plus para incluir en la respuesta."""
+        from decimal import Decimal as D
+        
+        # Construir rangos de descuento
+        ranges = []
+        for i in range(1, 6):
+            hasta_key = f"hasta{i}"
+            porc_key = f"porc{i}"
+            hasta = discount_row.get(hasta_key)
+            porc = discount_row.get(porc_key)
+            
+            if hasta and porc and D(str(hasta)) > 0 and D(str(porc)) > 0:
+                ranges.append({
+                    "max_quantity": float(hasta),
+                    "discount_percentage": float(porc),
+                    "range_number": i
+                })
+        
+        # Determinar mejor descuento y cantidad mínima
+        best_discount = None
+        min_quantity = None
+        if ranges:
+            # El mejor descuento es el de mayor porcentaje
+            best_range = max(ranges, key=lambda x: x["discount_percentage"])
+            best_discount = D(str(best_range["discount_percentage"]))
+            # La cantidad mínima es la del primer rango
+            min_quantity = D(str(ranges[0]["max_quantity"]))
+        
+        return ProfitDiscountInfo(
+            co_desc=(discount_row.get("co_desc") or "").strip(),
+            des_des=discount_row.get("des_des"),
+            tip_cli=(discount_row.get("tip_cli") or "").strip(),
+            des_tipo=discount_row.get("des_tipo"),
+            ranges=ranges,
+            fecha_ini=discount_row.get("fecha_ini"),
+            fecha_fin=discount_row.get("fecha_fin"),
+            is_active=True,  # Ya viene filtrado como activo
+            best_discount_percentage=best_discount,
+            min_quantity_for_discount=min_quantity
+        )
 
     @staticmethod
     def _build_image_url(rowguid: Optional[str]) -> Optional[str]:
@@ -168,9 +210,12 @@ class ArticleService:
             warehouse_code=warehouse_code,
         )
 
-        # Obtener flash offers activas de manera optimizada (una sola consulta)
+        # Obtener descuentos de Profit Plus activos desde saDescArticulo (una sola consulta)
         article_codes = [(row.get("co_art") or "").strip() for row in result["items"]]
-        flash_offers_map = self._get_active_flash_offers_by_article_codes(db, article_codes)
+        profit_discounts_map = self._source_service.get_active_discounts_for_articles(
+            article_codes=article_codes,
+            tip_cli=None  # Por ahora sin filtrar por tipo de cliente
+        )
 
         summaries: List[ArticleSummary] = []
         for row in result["items"]:
@@ -191,12 +236,12 @@ class ArticleService:
             
             image_url = self._build_image_url(image_guid_normalized)
             
-            # Obtener flash offer si existe
-            flash_offer = None
+            # Obtener descuento de Profit Plus desde saDescArticulo si existe
+            profit_discount = None
             normalized_co_art = co_art.upper().strip()
-            flash_offer_obj = flash_offers_map.get(normalized_co_art)
-            if flash_offer_obj and price:
-                flash_offer = self._build_flash_offer_info(flash_offer_obj, price)
+            profit_discount_row = profit_discounts_map.get(normalized_co_art)
+            if profit_discount_row:
+                profit_discount = self._build_profit_discount_info(profit_discount_row)
             
             summaries.append(
                 ArticleSummary(
@@ -210,7 +255,8 @@ class ArticleService:
                     warehouse_code=warehouse,
                     image_url=image_url,
                     has_image=bool(image_guid_normalized),
-                    flash_offer=flash_offer,
+                    flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
+                    profit_discount=profit_discount,
                 )
             )
 
@@ -286,25 +332,17 @@ class ArticleService:
         if header.get("fecha_reg"):
             additional_data["fecha_reg"] = str(header.get("fecha_reg"))
 
-        # Obtener flash offer activa para este artículo
-        flash_offer = None
-        if db:
-            normalized_co_art = (co_art or "").upper().strip()
-            flash_offers_map = self._get_active_flash_offers_by_article_codes(db, [normalized_co_art])
-            flash_offer_obj = flash_offers_map.get(normalized_co_art)
-            
-            # Obtener precio de referencia (lista 01 o primera disponible)
-            reference_price = None
-            if prices:
-                # Buscar precio de lista 01
-                price_01 = next((p for p in prices if p.price_code == "01"), None)
-                if price_01:
-                    reference_price = price_01.amount
-                else:
-                    reference_price = prices[0].amount
-            
-            if flash_offer_obj and reference_price:
-                flash_offer = self._build_flash_offer_info(flash_offer_obj, reference_price)
+        # Obtener descuento de Profit Plus desde saDescArticulo
+        profit_discount = None
+        normalized_co_art = (co_art or "").upper().strip()
+        
+        profit_discounts_map = self._source_service.get_active_discounts_for_articles(
+            article_codes=[normalized_co_art],
+            tip_cli=None
+        )
+        profit_discount_row = profit_discounts_map.get(normalized_co_art)
+        if profit_discount_row:
+            profit_discount = self._build_profit_discount_info(profit_discount_row)
 
         return ArticleDetail(
             co_art=(header.get("co_art") or "").strip(),
@@ -320,7 +358,8 @@ class ArticleService:
             prices=prices,
             stock_by_warehouse=stock,
             images=images,
-            flash_offer=flash_offer,
+            flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
+            profit_discount=profit_discount,
         )
 
     def upload_image(

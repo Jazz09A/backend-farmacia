@@ -1,13 +1,12 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.types import TypeDecorator, JSON
-import sqlalchemy as sa
 from app.config.database import Base
 import uuid
 import json
 import enum
-from app.utils.timezone import get_ve_now, VE_TIMEZONE
+from app.utils.timezone import get_ve_now
 
 # Custom array type for SQLite compatibility
 class ArrayType(TypeDecorator):
@@ -47,9 +46,6 @@ class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
 
-# Alias para FlashOfferDiscountType (mismo enum, pero con nombre específico)
-FlashOfferDiscountType = DiscountType
-
 class FlashOffer(Base):
     __tablename__ = "flash_offers"
 
@@ -58,14 +54,12 @@ class FlashOffer(Base):
 
     # Product reference
     product_id = Column(String, ForeignKey("products.id"), nullable=True, index=True)
-    article_code = Column(String, nullable=False, index=True)  # co_art en Profit Plus
+    
+    # Article code from Profit Plus (co_art)
+    article_code = Column(String, nullable=False, index=True)
 
-    # Discount configuration - usando nuevo ENUM específico para flash offers
-    discount_type = Column(
-        sa.Enum('percentage', 'fixed', name='flash_offer_discount_type', create_type=True),
-        default='percentage',
-        nullable=False,
-    )
+    # Discount configuration
+    discount_type = Column(Enum(DiscountType), default=DiscountType.PERCENTAGE, nullable=False)
     discount_value = Column(Float, nullable=False)
 
     # Time constraints
@@ -93,27 +87,15 @@ class FlashOffer(Base):
     def is_valid(self):
         """Check if flash offer is currently valid."""
         now = get_ve_now()
-        
-        # Normalizar fechas: si son naive, agregar timezone; si son aware, mantenerlas
-        start = self.start_time
-        end = self.end_time
-        
-        # Si las fechas son naive (sin timezone), asumimos que están en timezone de Venezuela
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=VE_TIMEZONE)
-        if end.tzinfo is None:
-            end = end.replace(tzinfo=VE_TIMEZONE)
-        
         return (
             self.is_active and
-            start <= now <= end and
+            self.start_time <= now <= self.end_time and
             (self.max_quantity is None or self.used_quantity < self.max_quantity)
         )
 
     def calculate_discount_amount(self, original_price: float) -> float:
         """Calculate discount amount based on type."""
-        # Comparar con string ya que discount_type es un ENUM de PostgreSQL
-        if self.discount_type == 'percentage' or self.discount_type == DiscountType.PERCENTAGE.value:
+        if self.discount_type == DiscountType.PERCENTAGE:
             return original_price * (self.discount_value / 100)
         else:
             return min(self.discount_value, original_price)
@@ -129,7 +111,7 @@ class PromotionalCode(Base):
     description = Column(Text, nullable=True)
 
     # Discount configuration
-    discount_type = Column(sa.Enum('QUANTITY', 'FLASH', 'COUPON', 'PROMOTIONAL', name='discounttype'), default='COUPON', nullable=False)
+    discount_type = Column(Enum(DiscountType), default=DiscountType.PERCENTAGE, nullable=False)
     discount_value = Column(Float, nullable=False)
 
     # Constraints
@@ -240,7 +222,7 @@ class QuantityDiscount(Base):
     max_quantity = Column(Integer, nullable=True)  # None = sin límite superior
 
     # Discount configuration
-    discount_type = Column(sa.Enum('QUANTITY', 'FLASH', 'COUPON', 'PROMOTIONAL', name='discounttype'), default='COUPON', nullable=False)
+    discount_type = Column(Enum(DiscountType), default=DiscountType.PERCENTAGE, nullable=False)
     discount_value = Column(Float, nullable=False)
 
     # Status and priority

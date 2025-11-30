@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts
+from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts, article_discounts
 from app.api.v1.endpoints import quotes
 from app.api.v1.endpoints import exchange_rate
 from app.api.v1.endpoints import articles
@@ -132,6 +132,13 @@ api_router.include_router(
     quantity_discounts.router,
     prefix="/admin",
     tags=["💰 Descuentos por Cantidad"],
+)
+
+# Article Discounts (Profit Plus Native)
+api_router.include_router(
+    article_discounts.router,
+    prefix="/admin/article-discounts",
+    tags=["🏷️ Descuentos por Artículo (Profit Plus)"],
 )
 
 # Exchange Rate

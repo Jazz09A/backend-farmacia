@@ -494,6 +494,7 @@ class QuoteService:
             # PASO 5: Insertar renglones y calcular totales
             total_bruto = Decimal('0.00')
             total_impuestos = Decimal('0.00')
+            total_descuentos = Decimal('0.00')  # Acumulador de descuentos
             reng_num = 1
             
             # Valores por defecto para campos obligatorios de renglones
@@ -533,7 +534,6 @@ class QuoteService:
                 co_art = item.product_code.strip()
                 cantidad = Decimal(str(item.quantity))
                 precio_unit = Decimal(str(item.unit_price))
-                monto_desc = Decimal(str(item.discount_amount or "0.00"))
                 
                 # Obtener datos del artículo
                 art_data = articulos_map.get(co_art)
@@ -544,25 +544,51 @@ class QuoteService:
                 tipo_imp = art_data.get('tipo_imp', '1')
                 co_uni = art_data.get('co_uni', 'UND')  # Obtener unidad de medida del artículo
                 
-                # Calcular impuestos
+                # Calcular descuento desde saDescArticulo si no se proporciona en el payload
+                monto_desc = Decimal(str(item.discount_amount or "0.00"))
+                
+                # Si no hay descuento en el payload, consultar desde saDescArticulo
+                if monto_desc == 0:
+                    try:
+                        discount_info = source_system_service.get_article_discount(
+                            article_code=co_art,
+                            customer_code=co_cli,
+                            quantity=cantidad
+                        )
+                        
+                        if discount_info and discount_info.get('discount_percentage', 0) > 0:
+                            discount_percentage = discount_info['discount_percentage']
+                            subtotal_bruto_temp = (cantidad * precio_unit)
+                            monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+                            logger.info(f"Descuento aplicado a {co_art}: {discount_percentage}% = {monto_desc}")
+                    except Exception as e:
+                        logger.warning(f"Error obteniendo descuento para artículo {co_art} en cotización: {e}")
+                        # Continuar sin descuento si hay error
+                        monto_desc = Decimal('0.00')
+                
+                # Calcular subtotal bruto (sin descuento)
+                subtotal_bruto = (cantidad * precio_unit)
+                
+                # Calcular subtotal después de descuento
+                subtotal_neto = subtotal_bruto - monto_desc
+                
+                # Calcular impuestos sobre el subtotal después de descuento
                 # Usar el porcentaje del payload si viene, sino usar el default
                 if item.tax_amount:
-                    # Si viene monto de impuesto, calcular el porcentaje
-                    subtotal_bruto = (cantidad * precio_unit) - monto_desc
-                    if subtotal_bruto > 0:
+                    # Si viene monto de impuesto, calcular el porcentaje sobre subtotal después de descuento
+                    if subtotal_neto > 0:
                         monto_imp = Decimal(str(item.tax_amount))
-                        porc_imp = (monto_imp / subtotal_bruto * 100).quantize(Decimal('0.01'))
+                        porc_imp = (monto_imp / subtotal_neto * 100).quantize(Decimal('0.01'))
                     else:
                         monto_imp = Decimal('0.00')
                         porc_imp = Decimal('0.00')
                 else:
-                    # Calcular impuesto usando porcentaje por defecto
-                    subtotal_bruto = (cantidad * precio_unit) - monto_desc
+                    # Calcular impuesto usando porcentaje por defecto sobre subtotal después de descuento
                     porc_imp = porc_imp_default
-                    monto_imp = (subtotal_bruto * porc_imp / 100).quantize(Decimal('0.01'))
+                    monto_imp = (subtotal_neto * porc_imp / 100).quantize(Decimal('0.01'))
                 
-                # Calcular reng_neto (cantidad * precio + impuesto - descuento)
-                reng_neto = (cantidad * precio_unit) + monto_imp - monto_desc
+                # Calcular reng_neto (subtotal después de descuento + impuesto)
+                reng_neto = subtotal_neto + monto_imp
                 
                 # stotal_art es igual a total_art (cantidad) según el usuario
                 stotal_art = Decimal('0.00')
@@ -613,18 +639,22 @@ class QuoteService:
                 )
                 
                 # Acumular totales
-                total_bruto += (cantidad * precio_unit) - monto_desc
+                total_bruto += (cantidad * precio_unit)  # Bruto sin descuentos
+                total_descuentos += monto_desc  # Acumular descuentos
                 total_impuestos += monto_imp
                 
                 reng_num += 1
             
             # PASO 6: Actualizar cabecera con totales calculados
-            total_neto = total_bruto + total_impuestos
+            # total_bruto ya incluye todos los precios sin descuento
+            # monto_desc_glob debe ser la suma de todos los descuentos de los renglones
+            total_neto = total_bruto - total_descuentos + total_impuestos
             
             update_totals = """
             UPDATE dbo.saCotizacionCliente
             SET
                 total_bruto = %s,
+                monto_desc_glob = %s,
                 monto_imp = %s,
                 total_neto = %s,
                 saldo = %s
@@ -632,7 +662,7 @@ class QuoteService:
             """
             cursor.execute(
                 update_totals,
-                (total_bruto, total_impuestos, total_neto, total_neto, doc_num)
+                (total_bruto, total_descuentos, total_impuestos, total_neto, total_neto, doc_num)
             )
             
             # Confirmar transacción
@@ -1090,6 +1120,109 @@ class QuoteService:
             traceback.print_exc()
             return None
 
+    def cancel_quote(
+        self,
+        user_id: int,
+        quote_id: str,
+        source_system: str,
+    ) -> bool:
+        """
+        Anula una cotización (soft delete) actualizando el campo anulado = 1.
+        No elimina físicamente los registros para mantener integridad contable.
+        
+        Args:
+            user_id: ID del usuario en la BD local
+            quote_id: ID de la cotización (formato COT-XXXXX o solo el código)
+            source_system: Sistema fuente (profit_plus)
+            
+        Returns:
+            bool: True si se anuló exitosamente, False si no se encontró o ya estaba anulada
+        """
+        try:
+            # Extraer profit_plus_id del quote_id
+            profit_plus_id = quote_id.replace("COT-", "") if quote_id.startswith("COT-") else quote_id
+            profit_plus_id = profit_plus_id.strip()
+            
+            # Obtener email del usuario
+            from app.models.user import User
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                logger.warning(f"Usuario {user_id} no encontrado")
+                return False
+            
+            # Obtener código de cliente
+            customer_code = self._get_customer_code_by_email(user.email)
+            if not customer_code:
+                logger.warning(f"Cliente no encontrado en DEMOA para email {user.email}")
+                return False
+            customer_code = customer_code.strip() if customer_code else None
+            
+            # Verificar que la cotización existe y pertenece al cliente
+            conn = source_system_service.get_connection()
+            cursor = conn.cursor()
+            
+            try:
+                # Iniciar transacción
+                cursor.execute("BEGIN TRANSACTION")
+                
+                # Verificar que la cotización existe y pertenece al cliente
+                check_query = """
+                SELECT doc_num, anulado, co_cli
+                FROM dbo.saCotizacionCliente
+                WHERE doc_num = %s AND RTRIM(co_cli) = %s
+                """
+                cursor.execute(check_query, (profit_plus_id, customer_code))
+                quote_data = cursor.fetchone()
+                
+                if not quote_data:
+                    cursor.execute("ROLLBACK TRANSACTION")
+                    conn.rollback()
+                    logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
+                    return False
+                
+                # Verificar si ya está anulada
+                if quote_data.get('anulado', 0) == 1:
+                    cursor.execute("ROLLBACK TRANSACTION")
+                    conn.rollback()
+                    logger.info(f"Cotización {profit_plus_id} ya está anulada")
+                    return False
+                
+                # Anular la cotización (soft delete)
+                update_query = """
+                UPDATE dbo.saCotizacionCliente
+                SET anulado = 1,
+                    co_us_mo = %s,
+                    fe_us_mo = GETDATE()
+                WHERE doc_num = %s
+                """
+                co_us_mo = "SA"  # Usuario del sistema
+                cursor.execute(update_query, (co_us_mo, profit_plus_id))
+                
+                # Confirmar transacción
+                cursor.execute("COMMIT TRANSACTION")
+                conn.commit()
+                
+                logger.info(f"Cotización {profit_plus_id} anulada exitosamente por usuario {user_id}")
+                return True
+                
+            except Exception as e:
+                # Revertir transacción en caso de error
+                try:
+                    cursor.execute("ROLLBACK TRANSACTION")
+                    conn.rollback()
+                except Exception as rollback_error:
+                    logger.error(f"Error al hacer rollback: {rollback_error}")
+                
+                logger.error(f"Error anulando cotización {profit_plus_id}: {str(e)}", exc_info=True)
+                raise
+            finally:
+                cursor.close()
+                conn.close()
+                
+        except Exception as e:
+            logger.error(f"Error en cancel_quote para cotización {quote_id}: {e}")
+            return False
+
     def get_statuses(self) -> List[QuoteStatus]:
         return [
             QuoteStatus(
@@ -1227,10 +1360,18 @@ class QuoteService:
             cursor.close()
             conn.close()
 
-        # 3. Procesar y validar cada item
+        # 3. Obtener código de cliente para consultar descuentos
+        co_cli = None
+        if user_email:
+            customer_data = self._get_customer_code_by_email(user_email)
+            if customer_data:
+                co_cli = customer_data.strip()
+
+        # 4. Procesar y validar cada item
         items_verificados: List[CartValidationItemResult] = []
         total_bruto = Decimal('0.00')
         total_impuestos = Decimal('0.00')
+        total_descuentos = Decimal('0.00')
         all_valid = True
 
         for item in cart_request.items:
@@ -1246,6 +1387,7 @@ class QuoteService:
             precio_unitario = Decimal('0.00')
             subtotal = Decimal('0.00')
             impuestos = Decimal('0.00')
+            descuento = Decimal('0.00')
             stock_ok = False
             descripcion = None
             
@@ -1273,10 +1415,30 @@ class QuoteService:
                     # Calcular precio real (ignorar cualquier precio del frontend)
                     precio_unitario = article_data.get("precio_base", Decimal('0.00'))
                     
-                    # Calcular subtotal
-                    subtotal = (precio_unitario * cantidad).quantize(Decimal('0.01'))
+                    # Calcular subtotal bruto (antes de descuentos)
+                    subtotal_bruto = (precio_unitario * cantidad).quantize(Decimal('0.01'))
                     
-                    # Calcular impuestos usando 16% fijo (IVA estándar)
+                    # Consultar descuento desde saDescArticulo
+                    try:
+                        discount_info = source_system_service.get_article_discount(
+                            article_code=co_art,
+                            customer_code=co_cli,
+                            quantity=cantidad
+                        )
+                        
+                        if discount_info and discount_info.get('discount_percentage', 0) > 0:
+                            discount_percentage = discount_info['discount_percentage']
+                            # Calcular monto de descuento
+                            descuento = (subtotal_bruto * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+                    except Exception as e:
+                        logger.warning(f"Error obteniendo descuento para artículo {co_art}: {e}")
+                        # Continuar sin descuento si hay error
+                        descuento = Decimal('0.00')
+                    
+                    # Calcular subtotal después de descuento
+                    subtotal = (subtotal_bruto - descuento).quantize(Decimal('0.01'))
+                    
+                    # Calcular impuestos usando 16% fijo (IVA estándar) sobre el subtotal después de descuento
                     tasa_impuesto = Decimal('16.00')  # 16% IVA
                     if subtotal > 0:
                         impuestos = (subtotal * tasa_impuesto / Decimal('100')).quantize(Decimal('0.01'))
@@ -1284,7 +1446,8 @@ class QuoteService:
                         impuestos = Decimal('0.00')
                     
                     # Acumular totales solo si el artículo es válido
-                    total_bruto += subtotal
+                    total_bruto += subtotal_bruto
+                    total_descuentos += descuento
                     total_impuestos += impuestos
 
             # Construir resultado del item
@@ -1296,13 +1459,14 @@ class QuoteService:
                     precio_unitario_real=str(precio_unitario.quantize(Decimal('0.01'))),
                     subtotal=str(subtotal.quantize(Decimal('0.01'))),
                     impuestos=str(impuestos.quantize(Decimal('0.01'))),
+                    descuento=str(descuento.quantize(Decimal('0.01'))),
                     stock_ok=stock_ok,
                     error=error_msg,
                 )
             )
 
-        # 4. Calcular totales finales
-        total_neto = (total_bruto + total_impuestos).quantize(Decimal('0.01'))
+        # 5. Calcular totales finales (bruto - descuentos + impuestos)
+        total_neto = (total_bruto - total_descuentos + total_impuestos).quantize(Decimal('0.01'))
         
         return CartValidationResponse(
             valido=all_valid,
@@ -1310,6 +1474,7 @@ class QuoteService:
             totales=CartValidationTotals(
                 bruto=str(total_bruto.quantize(Decimal('0.01'))),
                 impuestos=str(total_impuestos.quantize(Decimal('0.01'))),
+                descuentos=str(total_descuentos.quantize(Decimal('0.01'))),
                 neto=str(total_neto),
             ),
         )

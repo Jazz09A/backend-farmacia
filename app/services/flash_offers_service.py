@@ -7,7 +7,7 @@ from sqlalchemy import and_, or_
 from fastapi import HTTPException, status
 from decimal import Decimal
 
-from app.models.promotion import FlashOffer, FlashOfferDiscountType
+from app.models.promotion import FlashOffer, DiscountType
 from app.models.product import Product
 from app.schemas.promotion import (
     FlashOfferCreate,
@@ -92,7 +92,7 @@ class FlashOffersService:
                     detail="El precio objetivo debe ser menor al precio del artículo en Profit Plus",
                 )
             discount_percentage = ((source_price - fixed_price_decimal) / source_price) * Decimal("100")
-            payload["discount_type"] = FlashOfferDiscountType.PERCENTAGE.value
+            payload["discount_type"] = DiscountType.PERCENTAGE.value
             payload["discount_value"] = float(discount_percentage.quantize(Decimal("0.01")))
         else:
             discount_value = payload.get("discount_value")
@@ -101,7 +101,7 @@ class FlashOffersService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No se pudo determinar el descuento a aplicar",
                 )
-            payload["discount_type"] = FlashOfferDiscountType.PERCENTAGE.value
+            payload["discount_type"] = DiscountType.PERCENTAGE.value
             payload["discount_value"] = float(Decimal(str(discount_value)).quantize(Decimal("0.01")))
 
         flash_offer = FlashOffer(**payload)

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 
@@ -119,6 +119,38 @@ class FlashOfferInfo(BaseModel):
     end_time: Optional[str] = None
     max_quantity: Optional[int] = None
     remaining_quantity: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ProfitDiscountInfo(BaseModel):
+    """Información de descuento por volumen desde Profit Plus (saDescArticulo)"""
+    co_desc: str = Field(..., description="Código del descuento")
+    des_des: Optional[str] = Field(None, description="Descripción del descuento")
+    tip_cli: str = Field(..., description="Tipo de cliente")
+    des_tipo: Optional[str] = Field(None, description="Descripción del tipo de cliente")
+    
+    # Rangos de descuento disponibles
+    ranges: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Rangos de cantidad y porcentaje de descuento"
+    )
+    
+    # Información de vigencia
+    fecha_ini: Optional[datetime] = Field(None, description="Fecha de inicio")
+    fecha_fin: Optional[datetime] = Field(None, description="Fecha de fin")
+    is_active: bool = Field(True, description="Si el descuento está vigente")
+    
+    # Mejor descuento aplicable (para cantidad 1)
+    best_discount_percentage: Optional[Decimal] = Field(
+        None,
+        description="Mejor porcentaje de descuento disponible"
+    )
+    min_quantity_for_discount: Optional[Decimal] = Field(
+        None,
+        description="Cantidad mínima para obtener descuento"
+    )
     
     class Config:
         from_attributes = True

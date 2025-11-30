@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, Field
-from app.schemas.product import FlashOfferInfo
+from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
 
 
 class ArticleImageResponse(BaseModel):
@@ -74,6 +74,9 @@ class ArticleSummary(BaseModel):
     flash_offer: Optional[FlashOfferInfo] = Field(
         None, description="Información de flash offer activa para este artículo"
     )
+    profit_discount: Optional[ProfitDiscountInfo] = Field(
+        None, description="Información de descuento por volumen desde Profit Plus"
+    )
 
 
 class ArticleDetail(BaseModel):
@@ -106,6 +109,9 @@ class ArticleDetail(BaseModel):
     )
     flash_offer: Optional[FlashOfferInfo] = Field(
         None, description="Información de flash offer activa para este artículo"
+    )
+    profit_discount: Optional[ProfitDiscountInfo] = Field(
+        None, description="Información de descuento por volumen desde Profit Plus"
     )
 
 

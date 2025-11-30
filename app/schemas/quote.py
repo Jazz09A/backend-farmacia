@@ -65,6 +65,7 @@ class QuoteVerifyItemResult(BaseModel):
     precio_unitario: str
     subtotal: str
     impuestos: str
+    descuento: str = Field(default="0.00", description="Monto del descuento aplicado")
     stock_ok: bool = True
     nombre_articulo: Optional[str] = None
 
@@ -183,6 +184,7 @@ class CartValidationItemResult(BaseModel):
     precio_unitario_real: str = Field(..., description="Precio unitario real calculado por el backend")
     subtotal: str = Field(..., description="Subtotal (precio_unitario_real * cantidad)")
     impuestos: str = Field(..., description="Impuestos calculados")
+    descuento: str = Field(default="0.00", description="Monto del descuento aplicado a este artículo")
     stock_ok: bool = Field(..., description="True si hay stock suficiente, False en caso contrario")
     error: Optional[str] = Field(None, description="Mensaje de error si la validación falló")
 
@@ -193,7 +195,8 @@ class CartValidationTotals(BaseModel):
     """
     bruto: str = Field(..., description="Total bruto (suma de subtotales)")
     impuestos: str = Field(..., description="Total de impuestos")
-    neto: str = Field(..., description="Total neto (bruto + impuestos)")
+    descuentos: str = Field(default="0.00", description="Total de descuentos aplicados")
+    neto: str = Field(..., description="Total neto (bruto + impuestos - descuentos)")
 
 
 class CartValidationResponse(BaseModel):
