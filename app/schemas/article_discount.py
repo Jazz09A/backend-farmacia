@@ -45,6 +45,33 @@ class ArticleDiscountCreate(BaseModel):
         return value
 
 
+class ArticleDiscountUpdate(BaseModel):
+    """Schema para actualizar un descuento existente"""
+    des_des: Optional[str] = Field(None, max_length=60)
+    fecha_ini: Optional[datetime] = None
+    fecha_fin: Optional[datetime] = None
+    tip_cli: Optional[str] = Field(None, max_length=6)
+    
+    # Rangos
+    hasta1: Optional[Decimal] = None
+    porc1: Optional[Decimal] = None
+    hasta2: Optional[Decimal] = None
+    porc2: Optional[Decimal] = None
+    hasta3: Optional[Decimal] = None
+    porc3: Optional[Decimal] = None
+    hasta4: Optional[Decimal] = None
+    porc4: Optional[Decimal] = None
+    hasta5: Optional[Decimal] = None
+    porc5: Optional[Decimal] = None
+    
+    # Contadores
+    campo1: Optional[int] = None
+    campo2: Optional[int] = None
+    campo3: Optional[int] = None
+    campo4: Optional[int] = None
+    campo5: Optional[int] = None
+
+
 class ArticleDiscountResponse(ArticleDiscountCreate):
     co_desc: str
     tip_cli: str

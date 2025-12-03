@@ -1855,5 +1855,114 @@ class SourceSystemService:
             if conn:
                 self.return_connection(conn)
 
+    def get_article_discount_by_code(self, co_desc: str) -> Optional[Dict[str, Any]]:
+        """Obtiene un descuento por su código único"""
+        conn = None
+        cursor = None
+        try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT 
+                    d.co_desc, d.des_des, d.co_art, 
+                    d.fecha_ini, d.fecha_fin, d.tip_cli,
+                    d.hasta1, d.porc1,
+                    d.hasta2, d.porc2,
+                    d.hasta3, d.porc3,
+                    d.hasta4, d.porc4,
+                    d.hasta5, d.porc5,
+                    d.campo1, d.campo2, d.campo3, d.campo4, d.campo5,
+                    d.co_us_in, d.fe_us_in, d.co_us_mo, d.fe_us_mo
+                FROM dbo.saDescArticulo d
+                WHERE d.co_desc = %s
+            """
+            cursor.execute(query, (co_desc,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+                
+            # Convertir fechas a isoformat si existen
+            if row.get('fecha_ini'):
+                # Si es datetime, convertir. Si es str, dejar igual.
+                if hasattr(row['fecha_ini'], 'isoformat'):
+                    row['fecha_ini'] = row['fecha_ini'].isoformat()
+            if row.get('fecha_fin'):
+                if hasattr(row['fecha_fin'], 'isoformat'):
+                    row['fecha_fin'] = row['fecha_fin'].isoformat()
+                
+            # Asegurar tipos numéricos
+            for i in range(1, 6):
+                if row.get(f'campo{i}'):
+                    try:
+                        row[f'campo{i}'] = int(str(row[f'campo{i}']))
+                    except:
+                        row[f'campo{i}'] = 0
+            
+            return row
+            
+        finally:
+            if cursor:
+                try: cursor.close()
+                except: pass
+            if conn:
+                self.return_connection(conn)
+
+    def update_article_discount(self, co_desc: str, data: Dict[str, Any]) -> bool:
+        """Actualiza un descuento existente"""
+        conn = None
+        cursor = None
+        try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
+            
+            # Construir query dinámica
+            set_clauses = []
+            params = []
+            
+            valid_fields = [
+                "des_des", "fecha_ini", "fecha_fin", "tip_cli",
+                "hasta1", "porc1", "hasta2", "porc2", "hasta3", "porc3",
+                "hasta4", "porc4", "hasta5", "porc5",
+                "campo1", "campo2"
+            ]
+            
+            for field in valid_fields:
+                if field in data:
+                    set_clauses.append(f"{field} = %s")
+                    params.append(data[field])
+            
+            set_clauses.append("fe_us_mo = GETDATE()")
+            # co_us_mo debería venir en data o usarse uno por defecto
+            
+            if not set_clauses:
+                return False
+                
+            query = f"""
+                UPDATE dbo.saDescArticulo
+                SET {', '.join(set_clauses)}
+                WHERE co_desc = %s
+            """
+            params.append(co_desc)
+            
+            cursor.execute(query, tuple(params))
+            conn.commit()
+            
+            return cursor.rowcount > 0
+            
+        except Exception as e:
+            if conn:
+                try: conn.rollback()
+                except: pass
+            self.logger.error(f"Error updating discount {co_desc}: {e}")
+            raise
+        finally:
+            if cursor:
+                try: cursor.close()
+                except: pass
+            if conn:
+                self.return_connection(conn)
+
 # Singleton instance
 source_system_service = SourceSystemService()

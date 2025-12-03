@@ -5,10 +5,12 @@ from app.schemas.article_discount import (
     ArticleDiscountCreate,
     ArticleDiscountResponse,
     ArticleDiscountListResponse,
-    ArticleDiscountDetail
+    ArticleDiscountDetail,
+    ArticleDiscountUpdate
 )
 from app.core.dependencies import get_admin_user
 from app.models.user import User
+from app.utils.timezone import get_ve_now
 
 router = APIRouter()
 
@@ -153,5 +155,114 @@ def get_article_discounts_by_code(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error obteniendo descuentos del artículo {co_art}: {str(e)}"
+        )
+
+
+@router.get("/code/{co_desc}", response_model=ArticleDiscountDetail)
+def get_article_discount_detail(
+    co_desc: str,
+    current_user: User = Depends(get_admin_user),
+) -> Any:
+    """
+    Obtiene el detalle de un descuento específico por su código (co_desc).
+    """
+    try:
+        discount = source_system_service.get_article_discount_by_code(co_desc)
+        
+        if not discount:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Descuento {co_desc} no encontrado"
+            )
+            
+        # Calcular estado activo
+        is_active = True
+        now = get_ve_now()
+        
+        start = discount.get('fecha_ini')
+        end = discount.get('fecha_fin')
+        
+        # Convertir strings ISO a datetime si es necesario para comparar
+        from datetime import datetime
+        
+        # Asegurarse de que now tenga tzinfo
+        if now.tzinfo is None:
+             from app.utils.timezone import VE_TIMEZONE
+             now = now.replace(tzinfo=VE_TIMEZONE)
+
+        if isinstance(start, str):
+            try: start = datetime.fromisoformat(start)
+            except: pass
+        
+        if isinstance(end, str):
+            try: end = datetime.fromisoformat(end)
+            except: pass
+            
+        # Normalizar start/end a timezone-aware si son naive
+        if start and isinstance(start, datetime) and start.tzinfo is None:
+             from app.utils.timezone import VE_TIMEZONE
+             start = start.replace(tzinfo=VE_TIMEZONE)
+             
+        if end and isinstance(end, datetime) and end.tzinfo is None:
+             from app.utils.timezone import VE_TIMEZONE
+             end = end.replace(tzinfo=VE_TIMEZONE)
+            
+        if start and start > now:
+            is_active = False
+        if end and end < now:
+            is_active = False
+            
+        discount['is_active'] = is_active
+        
+        return ArticleDiscountDetail(**discount)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error obteniendo detalle del descuento {co_desc}: {str(e)}"
+        )
+
+
+@router.put("/code/{co_desc}", response_model=dict)
+def update_article_discount(
+    co_desc: str,
+    discount_in: ArticleDiscountUpdate,
+    current_user: User = Depends(get_admin_user),
+) -> Any:
+    """
+    Actualiza un descuento existente.
+    """
+    try:
+        # Verificar existencia
+        existing = source_system_service.get_article_discount_by_code(co_desc)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Descuento {co_desc} no encontrado"
+            )
+            
+        update_data = discount_in.model_dump(exclude_unset=True)
+        
+        if not update_data:
+            return {"success": True, "message": "No hay cambios para aplicar"}
+            
+        success = source_system_service.update_article_discount(co_desc, update_data)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No se pudo actualizar el descuento"
+            )
+            
+        return {"success": True, "message": "Descuento actualizado exitosamente", "co_desc": co_desc}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error actualizando descuento {co_desc}: {str(e)}"
         )
 
