@@ -189,7 +189,9 @@ class PromotionUsage(Base):
     # References
     promotional_code_id = Column(String, ForeignKey("promotional_codes.id"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    order_id = Column(String, ForeignKey("orders.id"), nullable=True, index=True)
+    # order_id eliminado - Order no se usa con Profit Plus
+    # order_id = Column(String, ForeignKey("orders.id"), nullable=True, index=True)
+    order_id = Column(String, nullable=True, index=True)  # Temporal: mantener para migración (sin FK)
 
     # Usage details
     discount_amount = Column(Float, nullable=False)
@@ -201,7 +203,8 @@ class PromotionUsage(Base):
     # Relationships
     promotional_code = relationship("PromotionalCode", back_populates="usages")
     user = relationship("User", backref="promotion_usages")
-    order = relationship("Order", backref="promotion_usage")
+    # order relationship eliminado - Order no se usa con Profit Plus
+    # order = relationship("Order", backref="promotion_usage")
 
     def __repr__(self):
         return f"<PromotionUsage(id={self.id}, code_id={self.promotional_code_id}, user_id={self.user_id})>"

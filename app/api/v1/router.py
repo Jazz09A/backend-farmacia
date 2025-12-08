@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, categories, brands, favorites, shipping, dashboard, flash_offers, orders, credit, quantity_discounts, article_discounts
+from app.api.v1.endpoints import auth, admin, user, public, dashboard, flash_offers, quantity_discounts, article_discounts
 from app.api.v1.endpoints import quotes
 from app.api.v1.endpoints import exchange_rate
 from app.api.v1.endpoints import articles
+from app.api.v1.endpoints import blog_admin
 api_router = APIRouter()
 
 # =============================================================================
@@ -33,26 +34,10 @@ api_router.include_router(
     tags=["🔐 Usuario Autenticado"],
 )
 
-# Lista de favoritos
-api_router.include_router(
-    favorites.router,
-    prefix="/favorites",
-    tags=["❤️ Favoritos"],
-)
+
 
 # Órdenes del usuario
-api_router.include_router(
-    orders.router,
-    prefix="/orders",
-    tags=["📦 Órdenes"],
-)
 
-# Sistema de crédito
-api_router.include_router(
-    credit.router,
-    prefix="/credit",
-    tags=["💳 Crédito"],
-)
 
 # Cotizaciones - creación desde checkout
 api_router.include_router(
@@ -96,26 +81,6 @@ api_router.include_router(
 # 🛍️ RUTAS DE CATÁLOGO
 # =============================================================================
 
-# Categorías
-api_router.include_router(
-    categories.router,
-    prefix="/categories",
-    tags=["📂 Categorías"],
-)
-
-# Marcas
-api_router.include_router(
-    brands.router,
-    prefix="/brands",
-    tags=["🏷️ Marcas"],
-)
-
-# Zonas de Envío
-api_router.include_router(
-    shipping.router,
-    tags=["🚚 Zonas de Envío"],
-)
-
 # =============================================================================
 # ⚡ RUTAS DE PROMOCIONES
 # =============================================================================
@@ -146,4 +111,10 @@ api_router.include_router(
     exchange_rate.router,
     prefix="/exchange_rate",
     tags=["💰 Exchange Rate"],
+)
+
+# Blog Admin
+api_router.include_router(
+    blog_admin.router,
+    tags=["👑 Admin - Blog"],
 )

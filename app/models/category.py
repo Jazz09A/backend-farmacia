@@ -14,8 +14,6 @@ class Category(Base):
     name = Column(String(100), nullable=False)
     slug = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    icon = Column(String(50), nullable=True)
-    color = Column(String(20), nullable=True)
     
     # Hierarchy
     parent_id = Column(String, ForeignKey("categories.id"), nullable=True)
@@ -30,7 +28,6 @@ class Category(Base):
     
     # Relationships
     parent = relationship("Category", remote_side=[id], backref="subcategories")
-    products = relationship("Product", back_populates="category_obj")
     
     def __repr__(self):
         return f"<Category(id={self.id}, name={self.name}, slug={self.slug})>"
@@ -51,7 +48,6 @@ class Brand(Base):
     # Basic information
     name = Column(String(100), nullable=False)
     slug = Column(String(100), unique=True, nullable=False, index=True)
-    logo_url = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     
     # Status
@@ -62,8 +58,7 @@ class Brand(Base):
     created_at = Column(DateTime, default=get_ve_now)
     updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
-    # Relationships
-    products = relationship("Product", back_populates="brand_obj")
+    # Relationships - eliminadas porque Product ya no usa brand_obj
     
     def __repr__(self):
         return f"<Brand(id={self.id}, name={self.name}, slug={self.slug})>" 

@@ -1,8 +1,9 @@
 from pydantic import BaseModel, EmailStr, field_validator, Field
+# OrderResponse eliminado - Order no se usa con Profit Plus
+# from app.schemas.order import OrderResponse
 from typing import Optional, List, Literal, Dict, Any
 from datetime import datetime, date
 
-from app.schemas.order import OrderResponse
 
 # Base común para ambos tipos de usuarios
 class UserCommonBase(BaseModel):
@@ -185,8 +186,9 @@ class UserPreferencesResponse(UserPreferencesBase):
     
     class Config:
         from_attributes = True
-class UserDashboard(UserResponse):
-    orders: List[OrderResponse]
+# UserDashboard eliminado - Order no se usa con Profit Plus
+# class UserDashboard(UserResponse):
+#     orders: List[OrderResponse]
     
 
 # Alias para compatibilidad hacia atrás

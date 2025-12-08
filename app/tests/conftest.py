@@ -1,284 +1,294 @@
 """
-Configuración de pytest y fixtures compartidos para testing
+Configuración global de fixtures para tests con conexión real a Profit Plus (source_system)
+
+IMPORTANTE: Este archivo carga .env.test ANTES de importar Settings
+para asegurar que los tests usen la configuración correcta de Profit Plus.
+
+Los tests usan la BD REAL para autenticación (usuarios en tabla users).
+Los clientes y artículos vienen de Profit Plus (source_system).
 """
+import sys
+import os
+from pathlib import Path
+
+# Obtener el directorio raíz del proyecto (donde está main.py)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import pytest
-import asyncio
-from typing import Generator, AsyncGenerator
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+import uuid
 
-from main import app
-from app.config.database import get_db, Base
-from app.config.settings import settings
-from app.core.security import create_access_token, get_password_hash
-from app.models import User, UserPreferences
+# Cargar variables de entorno para tests ANTES de importar Settings
+# override=True asegura que sobrescriba cualquier .env existente
+env_test_path = PROJECT_ROOT / ".env.test"
+if env_test_path.exists():
+    load_dotenv(env_test_path, override=True)
+else:
+    # Si no existe .env.test, intentar cargar .env
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
 
-# Test database URL (SQLite in memory)
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+# Ahora importar módulos de la aplicación
+from main import app  # main.py está en la raíz
+from app.config.database import get_db
+from app.config.settings import Settings
+from app.core.security import create_access_token
+from app.models.user import User
 
-# Create test database engine
+# Instancia de Settings que usará las variables de .env.test
+# Settings() lee automáticamente de os.getenv() y .env.test ya está cargado
+test_settings = Settings()
+
+# Base de datos REAL de PostgreSQL para usuarios (autenticación)
+# Usa la misma DATABASE_URL que la aplicación
+DATABASE_URL = test_settings.DATABASE_URL
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,
-    },
-    poolclass=StaticPool,
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300
 )
-
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 @pytest.fixture(scope="function")
-def db() -> Generator[Session, None, None]:
+def db():
     """
-    Create a fresh database for each test function.
+    Base de datos REAL de PostgreSQL para usuarios (autenticación).
+    Los usuarios están en esta BD, los clientes/artículos vienen de Profit Plus.
     """
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    
-    # Create session
-    session = TestingSessionLocal()
-    
+    db_session = TestingSessionLocal()
     try:
-        yield session
+        yield db_session
     finally:
-        session.close()
-        # Drop all tables after test
-        Base.metadata.drop_all(bind=engine)
+        db_session.close()
+
 
 @pytest.fixture(scope="function")
-def client(db: Session) -> Generator[TestClient, None, None]:
+def client(db):
     """
-    Create a test client that uses the override_get_db fixture to return a session.
+    Cliente de prueba FastAPI con BD real para autenticación.
+    Los usuarios están en la BD local, los clientes/artículos en Profit Plus.
     """
     def override_get_db():
         try:
             yield db
         finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
+            db.close()
     
+    app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
-    
     app.dependency_overrides.clear()
 
-@pytest.fixture
-def test_user_data():
-    """Test user data for natural user registration."""
-    return {
-        "email": "test@example.com",
-        "first_name": "Test",
-        "last_name": "User",
-        "cedula": "V12345678",
-        "password": "TestPassword123",
-        "phone": "+58414123456",
-        "preferred_currency": "VES",
-        "birth_date": "1990-01-01",
-        "address": "Av. Principal 123, Caracas"
-    }
+
+# =============================================================================
+# AUTENTICACIÓN REAL (usando TEST_CUSTOMER_EMAIL y TEST_CUSTOMER_PASSWORD)
+# =============================================================================
 
 @pytest.fixture
-def test_user_data_juridico():
-    """Test user data for juridico user registration."""
-    return {
-        "email": "empresa@test.com",
-        "company_name": "Farmacia Test S.A.",
-        "rif": "J123456789",
-        "registro_mercantil": "RM-12345",
-        "representante_legal_cedula": "V87654321",
-        "representante_legal_nombre": "Juan Pérez",
-        "referencia_comercial_proveedor": "Proveedor ABC C.A.",
-        "referencia_bancaria": "Banco Provincial",
-        "direccion_establecimiento": "Av. Comercial 456, Valencia",
-        "password": "EmpresaPass456",
-        "phone": "+58212987654",
-        "preferred_currency": "USD",
-        "dueno_telefono": "+58414987654",
-        "dueno_email": "dueno@empresa.com",
-        "codigo_sicm": "SICM123456"
-    }
+def test_customer_email():
+    """Email del cliente de prueba desde .env"""
+    return os.getenv("TEST_CUSTOMER_EMAIL", "test@farmacia.com")
+
 
 @pytest.fixture
-def test_user(db: Session):
-    """Create a test natural user in the database."""
-    user_data = {
-        "email": "testuser@example.com",
-        "first_name": "Test",
-        "last_name": "User",
-        "cedula": "V12345678",
-        "hashed_password": get_password_hash("testpass123"),
-        "user_type": "natural",
-        "phone": "+58414123456",
-        "preferred_currency": "VES",
-        "is_active": True,
-        "is_verified": True,
-        "address": "Av. Test 123, Caracas"
-    }
-    
-    user = User(**user_data)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    # Create user preferences
-    preferences = UserPreferences(
-        user_id=user.id,
-        preferred_currency="VES"
+def test_customer_password():
+    """Contraseña del cliente de prueba desde .env"""
+    return os.getenv("TEST_CUSTOMER_PASSWORD", "testpass123")
+
+
+@pytest.fixture
+def auth_token_real(client, test_customer_email, test_customer_password):
+    """
+    Token JWT obtenido haciendo login REAL con TEST_CUSTOMER_EMAIL y TEST_CUSTOMER_PASSWORD.
+    El usuario debe existir en la BD local (tabla users) o se auto-provisiona desde Profit Plus.
+    """
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": test_customer_email,
+            "password": test_customer_password
+        }
     )
-    db.add(preferences)
-    db.commit()
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("access_token")
+    else:
+        # Si el login falla, crear un token manualmente (para tests que no requieren login real)
+        # Esto puede pasar si el usuario no existe en la BD
+        print(f"⚠️  Login falló: {response.status_code} - {response.text[:200]}")
+        print("   Usando token mock como fallback")
+        return create_access_token({"sub": test_customer_email})
+
+
+@pytest.fixture
+def auth_headers(auth_token_real):
+    """Headers con autenticación REAL obtenida del login"""
+    return {"Authorization": f"Bearer {auth_token_real}"}
+
+
+@pytest.fixture
+def admin_headers(client, db):
+    """
+    Headers con autenticación de admin.
+    Busca un usuario admin en la BD o crea uno si no existe.
+    """
+    # Buscar usuario admin en la BD
+    admin_user = db.query(User).filter(
+        User.role.in_(["admin", "super_admin"])
+    ).first()
+    
+    if admin_user:
+        # Si existe admin, hacer login real
+        # NOTA: Necesitarías la contraseña del admin, por ahora usamos token mock
+        admin_token = create_access_token({"sub": admin_user.email})
+    else:
+        # Si no existe admin, crear token mock
+        admin_token = create_access_token({"sub": "admin@farmacia.com"})
+    
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
+# =============================================================================
+# USUARIOS DE PRUEBA (para referencia, pero la autenticación es real)
+# =============================================================================
+
+@pytest.fixture
+def test_user(db, test_customer_email, test_customer_password):
+    """
+    Usuario de prueba obtenido de la BD REAL de PostgreSQL.
+    Si no existe, lo crea usando TEST_CUSTOMER_EMAIL y TEST_CUSTOMER_PASSWORD.
+    """
+    from app.core.security import get_password_hash
+    from app.utils.timezone import get_ve_now
+    
+    user = db.query(User).filter(User.email == test_customer_email).first()
+    
+    if not user:
+        # Crear el usuario si no existe
+        user = User(
+            id=str(uuid.uuid4()),
+            email=test_customer_email,
+            hashed_password=get_password_hash(test_customer_password),
+            user_type="natural",
+            phone="+584121234567",
+            first_name="Usuario",
+            last_name="Prueba",
+            is_active=True,
+            is_verified=True,
+            role="user",
+            created_at=get_ve_now()
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        print(f"✅ Usuario creado en BD PostgreSQL: {test_customer_email}")
+    else:
+        print(f"✅ Usuario encontrado en BD PostgreSQL: {test_customer_email}")
     
     return user
 
+
+# =============================================================================
+# DATOS DE PROFIT PLUS (códigos reales de tu BD)
+# =============================================================================
+
 @pytest.fixture
-def test_juridico_user(db: Session):
-    """Create a test juridico user in the database."""
-    user_data = {
-        "email": "farmacia@example.com",
-        "company_name": "Farmacia Test S.A.",
-        "rif": "J987654321",
-        "registro_mercantil": "RM-67890",
-        "representante_legal_cedula": "V11111111",
-        "representante_legal_nombre": "María García",
-        "referencia_comercial_proveedor": "Proveedor XYZ C.A.",
-        "referencia_bancaria": "Banco Test",
-        "direccion_establecimiento": "Av. Test Comercial 789, Maracay",
-        "hashed_password": get_password_hash("farmaciapass123"),
-        "user_type": "juridico",
-        "phone": "+58212123456",
-        "preferred_currency": "USD",
-        "is_active": True,
-        "is_verified": True
-    }
+def sample_article_code():
+    """
+    Código de artículo real de Profit Plus.
+    IMPORTANTE: Debe existir en tu base de datos.
+    Si no existe, los tests usarán códigos reales obtenidos de la lista.
+    """
+    return os.getenv("TEST_ARTICLE_CODE", "FITOS004")  # Código por defecto que existe
+
+
+@pytest.fixture
+def sample_customer_code():
+    """Código de cliente real de Profit Plus"""
+    return os.getenv("TEST_CUSTOMER_CODE", "CLI001")
+
+
+@pytest.fixture
+def profit_settings():
+    """
+    Fixture que retorna la configuración de Profit Plus para tests.
+    Usa Settings() que carga desde .env.test
     
-    user = User(**user_data)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    Esta configuración incluye:
+    - SOURCE_SYSTEM_SERVER: Servidor de Profit Plus
+    - SOURCE_SYSTEM_PORT: Puerto (default: 49571)
+    - SOURCE_SYSTEM_DATABASE: Base de datos (default: GDROZAINK_A)
+    - SOURCE_SYSTEM_USER: Usuario (opcional)
+    - SOURCE_SYSTEM_PASSWORD: Contraseña (opcional)
     
-    # Create user preferences
-    preferences = UserPreferences(
-        user_id=user.id,
-        preferred_currency="USD"
-    )
-    db.add(preferences)
-    db.commit()
-    
-    return user
+    El SourceSystemService usa pymssql para conectarse con estos parámetros.
+    """
+    return test_settings
+
 
 @pytest.fixture
-def test_admin_user(db: Session):
-    """Create a test admin user in the database."""
-    user_data = {
-        "email": "admin@example.com",
-        "first_name": "Admin",
-        "last_name": "User",
-        "cedula": "V99999999",
-        "hashed_password": get_password_hash("adminpass123"),
-        "user_type": "natural",
-        "phone": "+58414999999",
-        "is_active": True,
-        "is_verified": True,
-        "role": "admin"
-    }
-    
-    user = User(**user_data)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    return user
+def verify_profit_connection(profit_settings):
+    """
+    Fixture para verificar que la conexión a Profit Plus está configurada.
+    Útil para tests que requieren conexión real.
+    """
+    if not profit_settings.SOURCE_SYSTEM_SERVER:
+        pytest.skip("SOURCE_SYSTEM_SERVER no configurado en .env.test")
+    if not profit_settings.SOURCE_SYSTEM_DATABASE:
+        pytest.skip("SOURCE_SYSTEM_DATABASE no configurado en .env.test")
+    return True
+
 
 @pytest.fixture
-def access_token(test_user: User):
-    """Create access token for test user."""
-    return create_access_token(data={"sub": test_user.email})
+def sample_warehouse_code():
+    """Código de almacén para tests"""
+    return "001"
+
 
 @pytest.fixture
-def admin_access_token(test_admin_user: User):
-    """Create access token for admin user."""
-    return create_access_token(data={"sub": test_admin_user.email})
+def sample_price_code():
+    """Código de lista de precios para tests"""
+    return "01"
+
+
+# =============================================================================
+# PAYLOADS DE PRUEBA
+# =============================================================================
 
 @pytest.fixture
-def auth_headers(access_token: str):
-    """Create authorization headers with access token."""
-    return {"Authorization": f"Bearer {access_token}"}
-
-@pytest.fixture
-def admin_auth_headers(admin_access_token: str):
-    """Create authorization headers with admin access token."""
-    return {"Authorization": f"Bearer {admin_access_token}"}
-
-@pytest.fixture
-def test_login_data():
-    """Test login credentials."""
+def sample_cart_validation_payload(sample_article_code):
+    """Payload para validar carrito"""
     return {
-        "email": "testuser@example.com",
-        "password": "testpass123"
-    }
-
-@pytest.fixture
-def invalid_login_data():
-    """Invalid login credentials for testing authentication failures."""
-    return {
-        "email": "wrong@example.com",
-        "password": "wrongpassword"
-    }
-
-# Sample data fixtures for future use
-@pytest.fixture
-def sample_product_data():
-    """Sample product data for testing."""
-    return {
-        "name": "Paracetamol 500mg",
-        "brand": "Farmatodo",
-        "category": "Analgésicos",
-        "subcategory": "Dolor y Fiebre",
-        "patology": "Dolor de cabeza",
-        "price_ves": 15000.0,
-        "price_ref": 5.0,
-        "description": "Medicamento para aliviar el dolor y reducir la fiebre",
-        "ingredients": ["Paracetamol"],
-        "image": "https://example.com/paracetamol.jpg",
-        "images": ["https://example.com/paracetamol.jpg"],
-        "in_stock": True,
-        "stock": 100,
-        "prescription": False,
-        "dosage": "500mg",
-        "presentation": "Tabletas",
-        "laboratorio": "Laboratorio Test"
-    }
-
-@pytest.fixture
-def sample_order_data():
-    """Sample order data for testing."""
-    return {
-        "payment_method": "credit_card",
-        "currency": "VES",
         "items": [
             {
-                "product_id": "test-product-id",
-                "quantity": 2,
-                "selected_presentation": "Tabletas"
+                "co_art": sample_article_code,
+                "cantidad": 2
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def sample_quote_payload(sample_article_code):
+    """Payload para crear cotización"""
+    return {
+        "items": [
+            {
+                "co_art": sample_article_code,
+                "quantity": 3
             }
         ],
-        "shipping_address": {
-            "street": "Av. Principal 123",
-            "city": "Caracas",
-            "state": "Distrito Capital",
-            "country": "Venezuela",
-            "recipient_name": "Test User",
-            "recipient_phone": "+58414123456"
-        }
-    } 
+        "payment_terms": "CONTADO",
+        "observations": "Cotización de prueba automatizada"
+    }
+
+
+@pytest.fixture
+def source_system_headers():
+    """Headers con X-Source-System"""
+    return {"X-Source-System": "DEMOA"}

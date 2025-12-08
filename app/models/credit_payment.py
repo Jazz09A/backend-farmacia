@@ -9,7 +9,9 @@ class CreditPayment(Base):
     __tablename__ = "credit_payments"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id = Column(String, ForeignKey("orders.id"), nullable=False, index=True)
+    # order_id eliminado - Order no se usa con Profit Plus
+    # order_id = Column(String, ForeignKey("orders.id"), nullable=False, index=True)
+    order_id = Column(String, nullable=True, index=True)  # Temporal: mantener para migración
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     
     # Información del pago (TODO EN USD - sistema unificado)
@@ -31,7 +33,8 @@ class CreditPayment(Base):
     approved_by = Column(String, nullable=True)  # Admin que aprobó
     
     # Relationships
-    order = relationship("Order", back_populates="credit_payments")
+    # order relationship eliminado - Order no se usa con Profit Plus
+    # order = relationship("Order", back_populates="credit_payments")
     user = relationship("User", back_populates="credit_payments")
     
     def __repr__(self):

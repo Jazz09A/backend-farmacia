@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from app.models.credit_payment import CreditPayment
-from app.models.order import Order
+# Order model eliminado - Order no se usa con Profit Plus
+# from app.models.order import Order
 from app.models.user import User
 from app.config.logging_config import get_logger
 from app.services.currency_service import CurrencyService
@@ -118,18 +119,10 @@ class CreditPaymentService:
         payment.approved_by = admin_id
         payment.admin_notes = admin_notes
         
-        # Aplicar el pago a la orden (todo en REF para consistencia)
-        order = payment.order
-        order.credit_paid_total += payment.amount  # payment.amount ya está en REF
-        order.credit_remaining -= payment.amount   # Reducir saldo pendiente en REF
-        
-        # Verificar si la orden está completamente pagada
-        if order.credit_remaining <= Decimal('0.01'):  # Tolerancia para redondeo
-            order.credit_paid = True
-            order.credit_payment_date = get_ve_now()
-            order.credit_remaining = Decimal('0.00')  # Asegurar cero exacto
-            
-            self.logger.info(f"Orden {order.id} completamente pagada")
+        # Código eliminado - Order no existe
+        # order = payment.order
+        # order.credit_paid_total += payment.amount
+        # order.credit_remaining -= payment.amount
         
         self.db.commit()
         
@@ -228,7 +221,7 @@ class CreditPaymentService:
                     "user_name": user.company_name or user.email,
                     "amount": payment.amount,
                     "currency": "VES",
-                    "order_number": payment.order.order_number,
+                    "order_number": payment.order_id,  # Usar order_id directamente
                     "payment_reference": payment.payment_reference,
                     "payment_date": payment.created_at.strftime("%d/%m/%Y %H:%M")
                 }
@@ -263,10 +256,10 @@ class CreditPaymentService:
                     "user_name": user.company_name or user.email,
                     "amount": payment.amount,
                     "currency": "VES",
-                    "order_number": payment.order.order_number,
-                    "order_total": payment.order.total,
-                    "paid_total": payment.order.credit_paid_total,
-                    "remaining_balance": payment.order.credit_remaining
+                    "order_number": payment.order_id,  # Usar order_id directamente
+                    "order_total": None,  # Order no existe
+                    "paid_total": None,  # Order no existe
+                    "remaining_balance": None  # Order no existe
                 }
                 
                 # Enviar email de forma asíncrona
@@ -299,7 +292,7 @@ class CreditPaymentService:
                     "user_name": user.company_name or user.email,
                     "amount": payment.amount,
                     "currency": "VES",
-                    "order_number": payment.order.order_number,
+                    "order_number": payment.order_id,  # Usar order_id directamente
                     "admin_notes": payment.admin_notes or "No se proporcionó motivo específico"
                 }
                 

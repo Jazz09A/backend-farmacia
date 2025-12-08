@@ -35,7 +35,7 @@ class Address(Base):
     # Timestamps
     created_at = Column(DateTime, default=get_ve_now)
     updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
-    shipping_zone_id = Column(String, ForeignKey("shipping_zones.id"), nullable=True)
+    # shipping_zone_id eliminado - ShippingZone no se usa con Profit Plus
     
     # Relationships
     user = relationship("User", back_populates="addresses")

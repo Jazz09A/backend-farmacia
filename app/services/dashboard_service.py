@@ -3,19 +3,22 @@ from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.user import User
-from app.models.order import Order
-from app.models.order_discount import OrderDiscount
+# Order models eliminados - Order no se usa con Profit Plus
+# from app.models.order import Order
+# from app.models.order_discount import OrderDiscount
 from app.config.logging_config import get_logger
 from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData, DiscountBreakdown
-from app.schemas.order import OrderStatus  # Import from schema, not model
+# Order schemas eliminados - Order no se usa con Profit Plus
+# from app.schemas.order import OrderStatus
 from fastapi import HTTPException
-from app.schemas.order import PaymentStatusEnum
-from app.schemas.order import UpdatePaymentStatus
+# from app.schemas.order import PaymentStatusEnum
+# from app.schemas.order import UpdatePaymentStatus
 from decimal import Decimal
 from app.utils.timezone import get_ve_now, VENEZUELA_TZ
 from app.services.source_system_service import source_system_service
 
-from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
+# OrderDiscount schemas eliminados - Order no se usa con Profit Plus
+# from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
 
 orders_logger = get_logger("orders")
 
@@ -47,42 +50,7 @@ def _map_quote_status_to_dashboard_status(status: str, anulado: int) -> str:
         return 'pending'
 
 
-def _calculate_order_discount_info(order: Order) -> dict:
-    """
-    Calculates discount information for an order.
-    
-    Args:
-        order: Order with loaded discounts
-        
-    Returns:
-        dict with discount information
-    """
-    if not order.discounts:
-        return {
-            "total_discounts": 0,
-            "total_discount_amount": Decimal('0.00'),
-            "discount_breakdown": [],
-            "savings_percentage": 0.0,
-            "original_subtotal": order.subtotal,
-            "total_savings": Decimal('0.00')
-        }
-    
-    total_discount_amount = sum(discount.discount_amount for discount in order.discounts)
-    original_subtotal = order.subtotal + total_discount_amount
-    savings_percentage = (total_discount_amount / original_subtotal * 100) if original_subtotal > 0 else 0.0
-    
-    discount_breakdown = [
-        OrderDiscountResponse.model_validate(discount) for discount in order.discounts
-    ]
-    
-    return {
-        "total_discounts": len(order.discounts),
-        "total_discount_amount": total_discount_amount,
-        "discount_breakdown": discount_breakdown,
-        "savings_percentage": round(float(savings_percentage), 2),
-        "original_subtotal": original_subtotal,
-        "total_savings": total_discount_amount
-    }
+# _calculate_order_discount_info eliminado - Order no se usa con Profit Plus
 
 def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     """
@@ -766,81 +734,9 @@ def get_quote_detail_for_admin(
         return None
 
 
-def get_order_by_id(db: Session, id: str) -> Order:
-    return db.query(Order).filter(Order.id == id).first()
-
-
-def update_order_status(db: Session, id: str, status: str) -> Order:
-    order = db.query(Order).filter(Order.id == id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    # Validate status against the schema enum (English values)
-    valid_statuses = [status.value for status in OrderStatus]
-    if status not in valid_statuses:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid status. Valid statuses are: {valid_statuses}"
-        )
-    
-    order.status = status
-    db.commit()
-    db.refresh(order)
-    
-    # Manually construct the response to match OrderResponse schema
-    discount_info = _calculate_order_discount_info(order)
-    
-    response_data = order.__dict__
-    response_data['items'] = order.items
-    response_data['shipping_address'] = order.shipping_address
-    response_data['item_count'] = len(order.items)
-    # Formatear exchange_rate a 2 decimales
-    if response_data.get('exchange_rate'):
-        response_data['exchange_rate'] = response_data['exchange_rate'].quantize(Decimal('0.01'))
-    
-    if discount_info and discount_info["total_discounts"] > 0:
-        response_data['discounts'] = OrderDiscountSummary(
-            total_discounts=discount_info["total_discounts"],
-            total_discount_amount=discount_info["total_discount_amount"],
-            discount_breakdown=discount_info["discount_breakdown"],
-            savings_percentage=discount_info["savings_percentage"]
-        )
-    else:
-        response_data['discounts'] = None
-        
-    response_data['original_subtotal'] = discount_info.get("original_subtotal", order.subtotal)
-    response_data['total_savings'] = discount_info.get("total_savings", Decimal('0.00'))
-    
-    from app.schemas.order import OrderResponse
-    return OrderResponse.model_validate(response_data)
-
-def get_orders_by_status(db: Session, status: str) -> List[Order]:
-    orders = db.query(Order).filter(Order.status == status).all()
-    if not orders:
-        raise HTTPException(status_code=404, detail="No orders found")
-    return orders
-
-def get_orders_by_user(db: Session, user_id: str) -> List[Order]:
-    orders = db.query(Order).filter(Order.user_id == user_id).all()
-    if not orders:
-        raise HTTPException(status_code=404, detail="No orders found")
-    return orders
-
-def get_orders_by_date(db: Session, date: str) -> List[Order]:
-    orders = db.query(Order).filter(Order.created_at == date).all()
-    if not orders:
-        raise HTTPException(status_code=404, detail="No orders found")
-    return orders
-
-def get_all_orders(db: Session) -> List[Order]:
-    # Use eager loading to avoid N+1 queries when accessing user, items, and shipping address data
-    from sqlalchemy.orm import joinedload
-    orders = db.query(Order).options(
-        joinedload(Order.user),
-        joinedload(Order.items),
-        joinedload(Order.shipping_address)
-    ).all()
-    return orders
+# Funciones de Order eliminadas - Order no se usa con Profit Plus
+# get_order_by_id, update_order_status, get_orders_by_status, get_orders_by_user, 
+# get_orders_by_date, get_all_orders eliminadas
 
 def get_all_customers(db: Session) -> List[User]:
     customers_without_admin_users = []
@@ -852,39 +748,7 @@ def get_all_customers(db: Session) -> List[User]:
         return []
     return customers_without_admin_users
 
-def update_payment_status(db: Session, order_id: str, status: PaymentStatusEnum) -> Order:
-    status_value = status.value if isinstance(status, PaymentStatusEnum) else status
-    orders_logger.info(
-        "Actualizando estado de pago desde dashboard",
-        extra={
-            "order_id": order_id,
-            "new_status": status_value,
-        },
-    )
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    # Validar que el status sea válido para pagos
-    valid_payment_statuses = [status.value for status in PaymentStatusEnum]
-    if status_value not in valid_payment_statuses:
-        orders_logger.warning(
-            "Estado de pago inválido recibido",
-            extra={
-                "order_id": order_id,
-                "new_status": status_value,
-                "valid_statuses": valid_payment_statuses,
-            },
-        )
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Status de pago inválido. Valores válidos: {valid_payment_statuses}"
-        )
-    
-    order.payment_status = status_value
-    db.commit()
-    db.refresh(order)
-    return order
+# update_payment_status eliminado - Order no se usa con Profit Plus
 
 # =============================================================================
 # FUNCIONES DE CRÉDITO PARA DASHBOARD

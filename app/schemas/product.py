@@ -8,7 +8,6 @@ class ProductBase(BaseModel):
     brand: str = Field(..., min_length=1, max_length=100)
     category: str = Field(..., min_length=1, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
-    patology: Optional[str] = Field(None, max_length=100)
     price: Decimal = Field(..., gt=0, description="Precio en USD (única moneda interna)")
     description: str = Field(..., min_length=10)
     ingredients: Optional[List[str]] = []
@@ -17,12 +16,6 @@ class ProductBase(BaseModel):
     in_stock: bool = True
     stock: Optional[int] = Field(default=0, ge=0)
     prescription: bool = False
-    dosage: Optional[str] = Field(None, max_length=100)
-    presentation: Optional[str] = Field(None, max_length=100)
-    laboratorio: Optional[str] = Field(None, max_length=100)
-    registro_sanitario: Optional[str] = Field(None, max_length=100)
-    contraindicaciones: Optional[str] = None
-    efectos_secundarios: Optional[str] = None
 
     @field_validator('images', mode='before')
     def validate_images(cls, v):
@@ -43,7 +36,6 @@ class ProductCreateInput(BaseModel):
     brand: str = Field(..., min_length=1, max_length=100)
     category: str = Field(..., min_length=1, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
-    patology: Optional[str] = Field(None, max_length=100)
     price: Decimal = Field(..., gt=0, description="Precio en USD")
     description: str = Field(..., min_length=10)
     ingredients: Optional[List[str]] = []
@@ -52,17 +44,10 @@ class ProductCreateInput(BaseModel):
     in_stock: bool = True
     stock: Optional[int] = Field(default=0, ge=0)
     prescription: bool = False
-    dosage: Optional[str] = Field(None, max_length=100)
-    presentation: Optional[str] = Field(None, max_length=100)
-    laboratorio: Optional[str] = Field(None, max_length=100)
-    registro_sanitario: Optional[str] = Field(None, max_length=100)
-    contraindicaciones: Optional[str] = None
-    efectos_secundarios: Optional[str] = None
     slug: Optional[str] = Field(None, max_length=200)
     featured: bool = False
     is_offer: bool = False
     original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD para ofertas")
-    offer_end_time: Optional[datetime] = None
 
     @field_validator('price', 'original_price')
     def validate_prices(cls, v):
@@ -81,7 +66,6 @@ class ProductCreate(ProductBase):
     featured: bool = False
     is_offer: bool = False
     original_price: Optional[Decimal] = Field(None, gt=0)
-    offer_end_time: Optional[datetime] = None
 
     @field_validator('slug')
     def validate_slug(cls, v):
@@ -94,7 +78,6 @@ class ProductUpdate(BaseModel):
     brand: Optional[str] = Field(None, min_length=1, max_length=100)
     category: Optional[str] = Field(None, min_length=1, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
-    patology: Optional[str] = Field(None, max_length=100)
     price: Optional[Decimal] = Field(None, gt=0, description="Precio en USD")
     description: Optional[str] = Field(None, min_length=10)
     ingredients: Optional[List[str]] = None
@@ -106,7 +89,6 @@ class ProductUpdate(BaseModel):
     featured: Optional[bool] = None
     is_offer: Optional[bool] = None
     original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD para ofertas")
-    offer_end_time: Optional[datetime] = None
 
 class FlashOfferInfo(BaseModel):
     """Información de flash offer aplicable a un producto"""
@@ -158,10 +140,8 @@ class ProfitDiscountInfo(BaseModel):
 class ProductResponse(ProductBase):
     id: str
     rating: Decimal
-    review_count: int
     is_offer: bool
     original_price: Optional[Decimal] = None
-    offer_end_time: Optional[datetime] = None
     featured: bool
     slug: Optional[str] = None
     discount_percentage: Optional[Decimal] = Decimal('0.00')
@@ -184,7 +164,6 @@ class ProductSummary(BaseModel):
     image: Optional[str] = None  # Deprecated, use images
     images: Optional[List[str]] = Field(default_factory=list)
     rating: Decimal
-    review_count: int
     in_stock: bool
     prescription: bool
     is_offer: bool
@@ -205,7 +184,6 @@ class ProductSummary(BaseModel):
 class ProductSearchFilters(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
-    patology: Optional[str] = None
     brand: Optional[str] = None
     min_price: Optional[Decimal] = Field(None, ge=0)
     max_price: Optional[Decimal] = Field(None, ge=0)
@@ -299,19 +277,12 @@ class ProductBulkUploadItem(BaseModel):
     brand: Optional[str] = Field(None, max_length=100)
     category: Optional[str] = Field(None, max_length=100)
     subcategory: Optional[str] = Field(None, max_length=100)
-    patology: Optional[str] = Field(None, max_length=100)
     image: Optional[str] = Field(None, min_length=1, description="URL de imagen principal")
     images: Optional[List[str]] = []
     ingredients: Optional[List[str]] = []
     in_stock: Optional[bool] = True
     stock: Optional[int] = Field(default=0, ge=0)
     prescription: Optional[bool] = False
-    dosage: Optional[str] = Field(None, max_length=100)
-    presentation: Optional[str] = Field(None, max_length=100)
-    laboratorio: Optional[str] = Field(None, max_length=100)
-    registro_sanitario: Optional[str] = Field(None, max_length=100)
-    contraindicaciones: Optional[str] = None
-    efectos_secundarios: Optional[str] = None
     sku: Optional[str] = Field(None, max_length=50)
     featured: Optional[bool] = False
     is_offer: Optional[bool] = False

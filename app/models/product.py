@@ -64,7 +64,6 @@ class Product(Base):
     brand = Column(String, nullable=True, index=True)  # Legacy field
     category = Column(String, nullable=True, index=True)  # Legacy field
     subcategory = Column(String, nullable=True, index=True)
-    patology = Column(String, nullable=True, index=True)
     
     # Pricing (USD only - sistema unificado)
     price = Column(Numeric(10, 2), nullable=False, index=True)  # Precio base en USD
@@ -87,38 +86,21 @@ class Product(Base):
     
     # Rating and reviews
     rating = Column(Numeric(3, 2), default=Decimal('0.00'), index=True)  # Add index for rating sorting
-    review_count = Column(Integer, default=0)
     
     # Offers and promotions
     is_offer = Column(Boolean, default=False, index=True)
-    offer_end_time = Column(DateTime, nullable=True)
     
     # Featured products
     featured = Column(Boolean, default=False, index=True)
-    
-    # Medical information
-    dosage = Column(String, nullable=True)
-    presentation = Column(String, nullable=True)
-    laboratorio = Column(String, nullable=True)
-    registro_sanitario = Column(String, nullable=True)
-    contraindicaciones = Column(Text, nullable=True)
-    efectos_secundarios = Column(Text, nullable=True)
-    
-    # SEO and URL
-    slug = Column(String, unique=True, nullable=True, index=True)
-    meta_title = Column(String, nullable=True)
-    meta_description = Column(Text, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=get_ve_now, index=True)  # Add index for date sorting
     updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
-    brand_obj = relationship("Brand", back_populates="products")
-    category_obj = relationship("Category", back_populates="products")
-    reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
     cart_items = relationship("CartItem", back_populates="product")
-    order_items = relationship("OrderItem", back_populates="product")
+    # order_items relationship eliminado - Order no se usa con Profit Plus
+    # order_items = relationship("OrderItem", back_populates="product")
     favorited_by = relationship("UserFavorite", back_populates="product", cascade="all, delete-orphan")
     
     def __repr__(self):
