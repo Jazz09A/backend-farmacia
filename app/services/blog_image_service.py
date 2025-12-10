@@ -4,7 +4,6 @@ from typing import List, Optional, Dict, Tuple
 from fastapi import HTTPException, status
 from app.models.blog import BlogPost, BlogImage
 from app.config.logging_config import get_logger
-from app.utils.timezone import get_ve_now
 from app.config.settings import Settings
 from app.config.database import SessionLocal
 import re
@@ -325,6 +324,5 @@ class BlogImageService:
     
     def _build_image_url(self, image_id: str) -> str:
         """Construye la URL para obtener la imagen."""
-        base_url = settings.API_URL.rstrip('/')
-        return f"{base_url}/api/v1/public/blog/images/{image_id}"
+        return f"/api/v1/public/blog/images/{image_id}"
 

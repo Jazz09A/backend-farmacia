@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, asc, or_, func
+from sqlalchemy import desc, or_
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from app.models.blog import BlogPost, BlogCategory
