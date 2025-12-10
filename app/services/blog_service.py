@@ -8,10 +8,12 @@ from app.schemas.blog import (
     BlogPostCreate, BlogPostUpdate, BlogCategoryCreate, BlogCategoryUpdate
 )
 from app.config.logging_config import get_logger
+from app.config.settings import Settings
 from app.utils.timezone import get_ve_now
 import re
 
 logger = get_logger("blog")
+settings = Settings()
 
 
 class BlogService:
@@ -53,6 +55,40 @@ class BlogService:
             slug = 'categoria'
         
         return slug
+
+    @staticmethod
+    def _normalize_featured_image(value: Optional[str]) -> Optional[str]:
+        """
+        Guarda solo la ruta relativa para imágenes internas.
+        - Si viene vacía, retorna None.
+        - Si es una URL externa (http y no empieza con nuestro API_URL), se conserva.
+        - Si empieza con API_URL, se recorta y se guarda solo desde la primera '/'.
+        - Si ya es relativa, se deja igual (asegurando que arranque con '/').
+        """
+        if not value:
+            return None
+        
+        trimmed = value.strip()
+        if not trimmed:
+            return None
+        
+        base_api = settings.API_URL.rstrip('/')
+        
+        # URL externa
+        if trimmed.startswith('http') and not trimmed.startswith(base_api):
+            return trimmed
+        
+        # Si arranca con el API_URL, recortar
+        if trimmed.startswith(base_api):
+            trimmed = trimmed[len(base_api):]
+            if not trimmed.startswith('/'):
+                trimmed = '/' + trimmed
+        
+        # Si es relativa pero no empieza con '/', agregarlo
+        if not trimmed.startswith('/'):
+            trimmed = '/' + trimmed
+        
+        return trimmed
     
     def generate_unique_slug(self, base_slug: str, exclude_id: Optional[str] = None) -> str:
         """Genera un slug único. Si ya existe, agrega un número incremental."""
@@ -251,12 +287,14 @@ class BlogService:
         if post_data.status == 'published':
             published_at = get_ve_now()
         
+        normalized_featured = self._normalize_featured_image(post_data.featured_image_url)
+        
         post = BlogPost(
             title=post_data.title,
             slug=unique_slug,
             content=post_data.content,
             category_id=post_data.category_id,
-            featured_image_url=post_data.featured_image_url,
+            featured_image_url=normalized_featured,
             status=post_data.status or 'draft',
             published_at=published_at,
             author_id=author_id,
@@ -440,6 +478,8 @@ class BlogService:
         
         # Actualizar campos
         update_data = post_data.model_dump(exclude_unset=True)
+        if 'featured_image_url' in update_data:
+            update_data['featured_image_url'] = self._normalize_featured_image(update_data['featured_image_url'])
         for field, value in update_data.items():
             setattr(post, field, value)
         
