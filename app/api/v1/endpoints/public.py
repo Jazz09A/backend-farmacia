@@ -1,26 +1,26 @@
 """
 Endpoints públicos que no requieren autenticación.
 """
-from typing import List, Optional, Dict
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, desc, asc
-from decimal import Decimal
+# from sqlalchemy import func, and_, or_, desc, asc
+# from decimal import Decimal
 from app.config.database import get_db
 # Product model eliminado - Los artículos vienen de Profit Plus a través de /articles
 # from app.models.product import Product
-from app.models.user import User
-from app.models.promotion import FlashOffer, DiscountType
-from app.core.dependencies import PaginationParams, get_pagination_params
+# from app.models.user import User
+# from app.models.promotion import FlashOffer, DiscountType
+# from app.core.dependencies import PaginationParams, get_pagination_params
 # Product schemas eliminados - Los artículos vienen de Profit Plus
 # from app.schemas.product import ProductResponse, ProductListResponse, ProductSummary, FlashOfferInfo
-from app.schemas.promotion import QuantityDiscountResponse
-from app.core.dependencies import get_optional_current_user
-from app.services.discount_service import DiscountService
+# from app.schemas.promotion import QuantityDiscountResponse
+# from app.core.dependencies import get_optional_current_user
+# from app.services.discount_service import DiscountService
 from app.services.blog_service import BlogService
 from app.services.blog_image_service import BlogImageService
 from app.schemas.blog import BlogPostListResponse, BlogPostDetailResponse, BlogPostSummary, BlogCategoryResponse
-from app.utils.timezone import get_ve_now
+# from app.utils.timezone import get_ve_now
 from fastapi.responses import Response
 
 router = APIRouter(prefix="/public")
@@ -40,37 +40,37 @@ router = APIRouter(prefix="/public")
 # =============================================================================
 
 
-@router.get("/payment-methods")
-async def get_payment_methods():
-    """
-    💳 **Métodos de pago disponibles**
+# @router.get("/payment-methods")
+# async def get_payment_methods():
+#     """
+#     💳 **Métodos de pago disponibles**
     
-    Obtiene los métodos de pago activos en el sistema.
-    """
-    methods = [
-        {
-            "id": "cash",
-            "name": "Efectivo",
-            "description": "Pago en efectivo contra entrega",
-            "fee": 0.00,
-            "active": True
-        },
-        {
-            "id": "transfer",
-            "name": "Transferencia Bancaria", 
-            "description": "Transferencia a cuenta bancaria",
-            "fee": 0.00,
-            "active": True
-        },
-        {
-            "id": "mobile_payment",
-            "name": "Pago Móvil",
-            "description": "Pago móvil interbancario",
-            "fee": 0.00,
-            "active": True
-        }
-    ]
-    return {"payment_methods": methods}
+#     Obtiene los métodos de pago activos en el sistema.
+#     """
+#     methods = [
+#         {
+#             "id": "cash",
+#             "name": "Efectivo",
+#             "description": "Pago en efectivo contra entrega",
+#             "fee": 0.00,
+#             "active": True
+#         },
+#         {
+#             "id": "transfer",
+#             "name": "Transferencia Bancaria", 
+#             "description": "Transferencia a cuenta bancaria",
+#             "fee": 0.00,
+#             "active": True
+#         },
+#         {
+#             "id": "mobile_payment",
+#             "name": "Pago Móvil",
+#             "description": "Pago móvil interbancario",
+#             "fee": 0.00,
+#             "active": True
+#         }
+#     ]
+#     return {"payment_methods": methods}
 
 # Endpoints de categories y brands eliminados - no se usan con Profit Plus
 # Las categorías y marcas vienen de Profit Plus a través de articles.py
@@ -92,45 +92,45 @@ async def health_check():
         "version": "1.0.0"
     }
 
-@router.get("/features")
-async def get_public_features():
-    """
-    ⭐ **Características del sistema**
+# @router.get("/features")
+# async def get_public_features():
+#     """
+#     ⭐ **Características del sistema**
     
-    Obtiene las características públicas del sistema.
-    """
-    return {
-        "features": {
-            "user_registration": True,
-            "guest_checkout": False,
-            "multiple_payment_methods": True,
-            "prescription_upload": True,
-            "delivery_tracking": True,
-            "customer_reviews": True,
-            "loyalty_program": False
-        },
-        "supported_currencies": ["VES", "USD"],
-        "supported_languages": ["es"],
-        "api_version": "v1"
-    } 
+#     Obtiene las características públicas del sistema.
+#     """
+#     return {
+#         "features": {
+#             "user_registration": True,
+#             "guest_checkout": False,
+#             "multiple_payment_methods": True,
+#             "prescription_upload": True,
+#             "delivery_tracking": True,
+#             "customer_reviews": True,
+#             "loyalty_program": False
+#         },
+#         "supported_currencies": ["VES", "USD"],
+#         "supported_languages": ["es"],
+#         "api_version": "v1"
+#     } 
 
-# =============================================================================
-# DESCUENTOS PÚBLICOS
-# =============================================================================
+# # =============================================================================
+# # DESCUENTOS PÚBLICOS
+# # =============================================================================
 
-@router.get("/quantity-discounts/applicable", response_model=Optional[QuantityDiscountResponse])
-async def get_applicable_quantity_discount(
-    total_quantity: int = Query(..., gt=0, description="Cantidad total de productos"),
-    db: Session = Depends(get_db)
-):
-    """
-    Obtener el descuento por cantidad aplicable para una cantidad dada.
+# @router.get("/quantity-discounts/applicable", response_model=Optional[QuantityDiscountResponse])
+# async def get_applicable_quantity_discount(
+#     total_quantity: int = Query(..., gt=0, description="Cantidad total de productos"),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Obtener el descuento por cantidad aplicable para una cantidad dada.
 
-    **Endpoint público** - No requiere autenticación.
-    """
-    service = DiscountService(db)
-    discount = service.get_applicable_quantity_discount(total_quantity)
-    return discount
+#     **Endpoint público** - No requiere autenticación.
+#     """
+#     service = DiscountService(db)
+#     discount = service.get_applicable_quantity_discount(total_quantity)
+#     return discount
 
 # =============================================================================
 # BLOG PÚBLICO - LECTURA DE ARTÍCULOS

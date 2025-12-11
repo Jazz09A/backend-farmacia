@@ -4,15 +4,15 @@ Endpoints de administración para gestión de usuarios, roles y productos.
 from datetime import timedelta
 from app.utils.timezone import get_ve_now
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, asc, or_
+# from sqlalchemy import func, desc, asc, or_
 from app.config.database import get_db
 from app.core.auth import get_admin_user, get_super_admin_user
 # Order model eliminado - Order no se usa con Profit Plus
 # from app.models.order import Order
 from app.models.user import User
-from app.models.product import Product
+# from app.models.product import Product
 # UpdatePaymentStatus eliminado - Order no se usa con Profit Plus
 # from app.schemas.order import UpdatePaymentStatus
 from app.services.role_service import RoleService
@@ -21,28 +21,30 @@ from app.schemas.role import (
     UserRole
 )
 from app.schemas.dashboard import DashboardData
-from app.schemas.product import (
-    ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
-    # ProductBulkUploadResult, ProductBulkUploadItem eliminados - Los productos vienen de Profit Plus
-)
+# from app.schemas.product import (
+#     ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
+#     # ProductBulkUploadResult, ProductBulkUploadItem eliminados - Los productos vienen de Profit Plus
+# )
 # from app.services.exchange_service import exchange_service
 from app.schemas.user import (
-    CustomerDetailedStats, CustomerStats, ProductPurchaseStats,
-    OrderStatusDistribution, MonthlyPurchaseStats, UserResponse
+    CustomerDetailedStats, CustomerStats, # ProductPurchaseStats,
+    #OrderStatusDistribution, MonthlyPurchaseStats, 
+    UserResponse
 )
 from app.core.dependencies import PaginationParams, get_pagination_params
 from app.services import dashboard_service # Import the new service
 from app.services.imges_service import ImageService
 # ProductBulkService eliminado - Los productos vienen de Profit Plus, no se crean localmente
 # from app.services.product_bulk_service import ProductBulkService
-from app.config.logging_config import get_logger, log_error
+from app.config.logging_config import get_logger
+# from app.config.logging_config import log_error
 
 # SourceSystem imports y endpoints
 from app.services.source_system_service import source_system_service
 from app.services.source_system_user_creation_service import SourceSystemUserCreationService
-from app.core.dependencies import PaginationParams, get_pagination_params
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+# from app.core.dependencies import PaginationParams, get_pagination_params
+# from typing import List, Optional
+from pydantic import BaseModel
 
 # Schemas para endpoints
 class SourceSystemCustomerResponse(BaseModel):
@@ -83,7 +85,7 @@ class CreateUsersResponse(BaseModel):
     failed: List[UserCreationResult]
     summary: dict
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(prefix="/admin")
 image_service = ImageService()
 logger = get_logger("app")
 # =============================================================================
@@ -123,28 +125,28 @@ async def get_admin_dashboard(
 # ENDPOINTS DE INFORMACIÓN DE ROLES
 # =============================================================================
 
-@router.get("/roles/hierarchy", response_model=RoleHierarchyResponse)
-async def get_role_hierarchy(
-    current_user: User = Depends(get_admin_user)
-):
-    """
-    📋 **Obtener jerarquía de roles**
+# @router.get("/roles/hierarchy", response_model=RoleHierarchyResponse)
+# async def get_role_hierarchy(
+#     current_user: User = Depends(get_admin_user)
+# ):
+#     """
+#     📋 **Obtener jerarquía de roles**
     
-    Obtiene la estructura completa de roles y permisos del sistema.
-    Requiere rol de admin o superior.
-    """
-    return RoleService.get_role_hierarchy()
+#     Obtiene la estructura completa de roles y permisos del sistema.
+#     Requiere rol de admin o superior.
+#     """
+#     return RoleService.get_role_hierarchy()
 
-@router.get("/roles/my-permissions", response_model=RolePermissionsResponse)
-async def get_my_permissions(
-    current_user: User = Depends(get_admin_user)
-):
-    """
-    🔑 **Obtener mis permisos**
+# @router.get("/roles/my-permissions", response_model=RolePermissionsResponse)
+# async def get_my_permissions(
+#     current_user: User = Depends(get_admin_user)
+# ):
+#     """
+#     🔑 **Obtener mis permisos**
     
-    Obtiene los permisos del usuario actual.
-    """
-    return RoleService.get_user_permissions(current_user)
+#     Obtiene los permisos del usuario actual.
+#     """
+#     return RoleService.get_user_permissions(current_user)
 
 # =============================================================================
 # GESTIÓN DE USUARIOS
@@ -211,112 +213,112 @@ async def get_user_details(
         is_super_admin=user.is_super_admin()
     )
 
-@router.put("/users/{user_id}/ban")
-async def ban_user(
-    user_id: str,
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    🚫 **Banear usuario**
+# @router.put("/users/{user_id}/ban")
+# async def ban_user(
+#     user_id: str,
+#     current_user: User = Depends(get_admin_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     🚫 **Banear usuario**
     
-    Desactiva la cuenta de un usuario.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
+#     Desactiva la cuenta de un usuario.
+#     """
+#     user = db.query(User).filter(User.id == user_id).first()
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Usuario no encontrado"
+#         )
     
-    if user.id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No puedes banearte a ti mismo"
-        )
+#     if user.id == current_user.id:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="No puedes banearte a ti mismo"
+#         )
     
-    # No permitir banear usuarios de nivel igual o superior
-    if user.get_role_level() >= current_user.get_role_level():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No puedes banear usuarios de tu mismo nivel o superior"
-        )
+#     # No permitir banear usuarios de nivel igual o superior
+#     if user.get_role_level() >= current_user.get_role_level():
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="No puedes banear usuarios de tu mismo nivel o superior"
+#         )
     
-    user.is_active = False
-    db.commit()
+#     user.is_active = False
+#     db.commit()
     
-    return {"message": f"Usuario {user.email} ha sido baneado"}
+#     return {"message": f"Usuario {user.email} ha sido baneado"}
 
-@router.put("/users/{user_id}/unban")
-async def unban_user(
-    user_id: str,
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    ✅ **Desbanear usuario**
+# @router.put("/users/{user_id}/unban")
+# async def unban_user(
+#     user_id: str,
+#     current_user: User = Depends(get_admin_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     ✅ **Desbanear usuario**
     
-    Reactiva la cuenta de un usuario baneado.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
+#     Reactiva la cuenta de un usuario baneado.
+#     """
+#     user = db.query(User).filter(User.id == user_id).first()
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Usuario no encontrado"
+#         )
     
-    user.is_active = True
-    db.commit()
+#     user.is_active = True
+#     db.commit()
     
-    return {"message": f"Usuario {user.email} ha sido desbaneado"}
+#     return {"message": f"Usuario {user.email} ha sido desbaneado"}
 
 # =============================================================================
 # GESTIÓN DE ROLES (SOLO SUPER_ADMIN)
 # =============================================================================
 
-@router.post("/users/{user_id}/promote", response_model=UserRoleResponse)
-async def promote_user(
-    user_id: str,
-    new_role: UserRole,
-    justification: str = Query(..., min_length=10, description="Justificación para la promoción"),
-    current_user: User = Depends(get_super_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    🚀 **Promover usuario**
+# @router.post("/users/{user_id}/promote", response_model=UserRoleResponse)
+# async def promote_user(
+#     user_id: str,
+#     new_role: UserRole,
+#     justification: str = Query(..., min_length=10, description="Justificación para la promoción"),
+#     current_user: User = Depends(get_super_admin_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     🚀 **Promover usuario**
     
-    Promover un usuario a un rol superior.
-    Solo disponible para super_admin.
-    """
-    return RoleService.promote_user(
-        db=db,
-        promoter=current_user,
-        target_user_id=user_id,
-        new_role=new_role.value,
-        justification=justification
-    )
+#     Promover un usuario a un rol superior.
+#     Solo disponible para super_admin.
+#     """
+#     return RoleService.promote_user(
+#         db=db,
+#         promoter=current_user,
+#         target_user_id=user_id,
+#         new_role=new_role.value,
+#         justification=justification
+#     )
 
-@router.post("/users/{user_id}/demote", response_model=UserRoleResponse)
-async def demote_user(
-    user_id: str,
-    new_role: UserRole = UserRole.USER,
-    reason: str = Query(None, description="Razón para la degradación"),
-    current_user: User = Depends(get_super_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    ⬇️ **Degradar usuario**
+# @router.post("/users/{user_id}/demote", response_model=UserRoleResponse)
+# async def demote_user(
+#     user_id: str,
+#     new_role: UserRole = UserRole.USER,
+#     reason: str = Query(None, description="Razón para la degradación"),
+#     current_user: User = Depends(get_super_admin_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     ⬇️ **Degradar usuario**
     
-    Degradar un usuario a un rol inferior.
-    Solo disponible para super_admin.
-    """
-    return RoleService.demote_user(
-        db=db,
-        demoter=current_user,
-        target_user_id=user_id,
-        new_role=new_role.value,
-        reason=reason
-    )
+#     Degradar un usuario a un rol inferior.
+#     Solo disponible para super_admin.
+#     """
+#     return RoleService.demote_user(
+#         db=db,
+#         demoter=current_user,
+#         target_user_id=user_id,
+#         new_role=new_role.value,
+#         reason=reason
+#     )
 
 @router.delete("/users/{user_id}")
 async def delete_user(
@@ -473,35 +475,35 @@ async def get_customer_statistics(
 # ESTADÍSTICAS Y REPORTES
 # =============================================================================
 
-@router.get("/stats/users-by-role")
-async def get_users_stats_by_role(
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    📊 **Estadísticas de usuarios por rol**
+# @router.get("/stats/users-by-role")
+# async def get_users_stats_by_role(
+#     current_user: User = Depends(get_admin_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     📊 **Estadísticas de usuarios por rol**
     
-    Obtiene conteo de usuarios agrupados por rol.
-    """
-    stats = {}
-    for role in User.ROLE_HIERARCHY.keys():
-        count = db.query(User).filter(User.role == role).count()
-        stats[role] = count
+#     Obtiene conteo de usuarios agrupados por rol.
+#     """
+#     stats = {}
+#     for role in User.ROLE_HIERARCHY.keys():
+#         count = db.query(User).filter(User.role == role).count()
+#         stats[role] = count
     
-    total_users = db.query(User).count()
-    active_users = db.query(User).filter(User.is_active == True).count()
-    verified_users = db.query(User).filter(User.is_verified == True).count()
+#     total_users = db.query(User).count()
+#     active_users = db.query(User).filter(User.is_active == True).count()
+#     verified_users = db.query(User).filter(User.is_verified == True).count()
     
-    stats = {
-        "users_by_role": stats,
-        "total_users": total_users,
-        "active_users": active_users,
-        "verified_users": verified_users,
-        "inactive_users": total_users - active_users,
-        "unverified_users": total_users - verified_users
-    }
+#     stats = {
+#         "users_by_role": stats,
+#         "total_users": total_users,
+#         "active_users": active_users,
+#         "verified_users": verified_users,
+#         "inactive_users": total_users - active_users,
+#         "unverified_users": total_users - verified_users
+#     }
     
-    return stats
+#     return stats
 
 @router.get("/stats/dashboard")
 async def get_admin_dashboard(
@@ -557,32 +559,22 @@ async def get_source_system_customers(
     db: Session = Depends(get_db)
 ):
     try:
+        # Obtener clientes paginados con búsqueda en SQL
         customers = source_system_service.get_all_customers(
             include_inactive=include_inactive,
             only_with_email=only_with_email,
             limit=pagination.limit,
-            offset=pagination.skip
+            offset=pagination.skip,
+            search=search  # Búsqueda ahora se hace en SQL
         )
-        if search:
-            search_lower = search.lower()
-            customers = [
-                c for c in customers
-                if search_lower in c.get('customer_name', '').lower()
-                or search_lower in c.get('customer_code', '').lower()
-            ]
-        all_customers = source_system_service.get_all_customers(
+        
+        # Obtener total usando COUNT(*) eficiente (no trae todos los registros)
+        total = source_system_service.count_customers(
             include_inactive=include_inactive,
-            only_with_email=only_with_email
+            only_with_email=only_with_email,
+            search=search  # Búsqueda ahora se hace en SQL
         )
-        total = len(all_customers)
-        if search:
-            search_lower = search.lower()
-            all_customers = [
-                c for c in all_customers
-                if search_lower in c.get('customer_name', '').lower()
-                or search_lower in c.get('customer_code', '').lower()
-            ]
-            total = len(all_customers)
+        
         customer_responses = [
             SourceSystemCustomerResponse(**customer)
             for customer in customers

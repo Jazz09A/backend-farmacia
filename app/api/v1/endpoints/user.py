@@ -38,7 +38,7 @@ from app.config.logging_config import get_logger, log_error
 
 logger = get_logger("orders")
 
-router = APIRouter(prefix="/user", tags=["User Protected"])
+router = APIRouter(prefix="/user")
 
 # =============================================================================
 # PERFIL DE USUARIO
@@ -56,7 +56,7 @@ async def update_user_profile(
     db: Session = Depends(get_db)
 ):
     """✏️ **Actualizar perfil**: Actualiza la información del perfil del usuario."""
-    for field, value in user_update.dict(exclude_unset=True).items():
+    for field, value in user_update.model_dump(exclude_unset=True).items():
         if hasattr(current_user, field):
             setattr(current_user, field, value)
     db.commit()
@@ -148,333 +148,333 @@ async def clear_cart(current_user: User = Depends(get_current_active_user), db: 
 # DIRECCIONES DE ENVÍO
 # =============================================================================
 
-@router.post("/addresses", response_model=AddressResponse, status_code=status.HTTP_201_CREATED)
-def create_address(
-    address_data: AddressCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    **Crear nueva dirección**: Añade una nueva dirección de envío para el usuario.
-    """
-    if address_data.is_default:
-        # Si esta se marca como predeterminada, quitar la marca de las otras
-        db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+# @router.post("/addresses", response_model=AddressResponse, status_code=status.HTTP_201_CREATED)
+# def create_address(
+#     address_data: AddressCreate,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_active_user)
+# ):
+#     """
+#     **Crear nueva dirección**: Añade una nueva dirección de envío para el usuario.
+#     """
+#     if address_data.is_default:
+#         # Si esta se marca como predeterminada, quitar la marca de las otras
+#         db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
     
-    new_address = Address(**address_data.model_dump(), user_id=current_user.id)
-    db.add(new_address)
-    db.commit()
-    db.refresh(new_address)
-    return new_address
+#     new_address = Address(**address_data.model_dump(), user_id=current_user.id)
+#     db.add(new_address)
+#     db.commit()
+#     db.refresh(new_address)
+#     return new_address
 
-@router.get("/addresses")
-async def get_addresses(
-    include_checkout_preview: bool = False,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    **Mis direcciones**: Obtiene todas las direcciones de envío del usuario.
+# @router.get("/addresses")
+# async def get_addresses(
+#     include_checkout_preview: bool = False,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_active_user)
+# ):
+#     """
+#     **Mis direcciones**: Obtiene todas las direcciones de envío del usuario.
     
-    Args:
-        include_checkout_preview: Si True, incluye cálculo de costos para cada dirección
-    """
-    # 1. Obtener direcciones del usuario
-    addresses = db.query(Address).filter(Address.user_id == current_user.id).all()
+#     Args:
+#         include_checkout_preview: Si True, incluye cálculo de costos para cada dirección
+#     """
+#     # 1. Obtener direcciones del usuario
+#     addresses = db.query(Address).filter(Address.user_id == current_user.id).all()
     
-    if not include_checkout_preview:
-        return {"addresses": addresses}
+#     if not include_checkout_preview:
+#         return {"addresses": addresses}
     
-    # 2. Validar y obtener carrito
-    cart_service = CartService(db)
-    cart = cart_service.get_user_cart(current_user.id)
+#     # 2. Validar y obtener carrito
+#     cart_service = CartService(db)
+#     cart = cart_service.get_user_cart(current_user.id)
     
-    if not cart or cart.total == 0:
-        return {
-            "addresses": addresses,
-            "checkout_preview": None,
-            "message": "Carrito vacío - no se puede calcular preview de costos"
-        }
+#     if not cart or cart.total == 0:
+#         return {
+#             "addresses": addresses,
+#             "checkout_preview": None,
+#             "message": "Carrito vacío - no se puede calcular preview de costos"
+#         }
     
-    # 3. Validar que el carrito tenga productos disponibles
-    cart_items = db.query(CartItem).options(joinedload(CartItem.product)).filter(CartItem.user_id == current_user.id).all()
+#     # 3. Validar que el carrito tenga productos disponibles
+#     cart_items = db.query(CartItem).options(joinedload(CartItem.product)).filter(CartItem.user_id == current_user.id).all()
     
-    unavailable_products = []
-    for item in cart_items:
-        product = item.product
-        if not product or not product.is_available or product.stock < item.quantity:
-            unavailable_products.append({
-                "product_name": product.name if product else "Producto no encontrado",
-                "required_quantity": item.quantity,
-                "available_stock": product.stock if product else 0
-            })
+#     unavailable_products = []
+#     for item in cart_items:
+#         product = item.product
+#         if not product or not product.is_available or product.stock < item.quantity:
+#             unavailable_products.append({
+#                 "product_name": product.name if product else "Producto no encontrado",
+#                 "required_quantity": item.quantity,
+#                 "available_stock": product.stock if product else 0
+#             })
     
-    if unavailable_products:
-        return {
-            "addresses": addresses,
-            "checkout_preview": None,
-            "message": "Algunos productos no están disponibles",
-            "unavailable_products": unavailable_products
-        }
+#     if unavailable_products:
+#         return {
+#             "addresses": addresses,
+#             "checkout_preview": None,
+#             "message": "Algunos productos no están disponibles",
+#             "unavailable_products": unavailable_products
+#         }
     
-    # 4. Calcular preview para cada dirección
-    order_service = OrderService(db)
-    checkout_previews = {}
+#     # 4. Calcular preview para cada dirección
+#     order_service = OrderService(db)
+#     checkout_previews = {}
     
-    for address in addresses:
-        try:
-            # Calcular totales usando el servicio existente
-            preview = await order_service.calculate_checkout_totals(
-                user_id=current_user.id,
-                shipping_address_id=address.id,
-                payment_currency="USD"
-            )
+#     for address in addresses:
+#         try:
+#             # Calcular totales usando el servicio existente
+#             preview = await order_service.calculate_checkout_totals(
+#                 user_id=current_user.id,
+#                 shipping_address_id=address.id,
+#                 payment_currency="USD"
+#             )
             
-            # Obtener información de descuentos del carrito
-            cart_items = db.query(CartItem).options(joinedload(CartItem.product)).filter(CartItem.user_id == current_user.id).all()
-            discount_service = DiscountService(db)
-            discounts_info = discount_service.calculate_cart_discounts(cart_items)
+#             # Obtener información de descuentos del carrito
+#             cart_items = db.query(CartItem).options(joinedload(CartItem.product)).filter(CartItem.user_id == current_user.id).all()
+#             discount_service = DiscountService(db)
+#             discounts_info = discount_service.calculate_cart_discounts(cart_items)
             
-            # Calcular precios originales y con descuento
-            original_subtotal = float(discounts_info.get('subtotal_original', preview['subtotal']))
-            discounted_subtotal = float(preview['subtotal'])
-            shipping_cost = float(preview['shipping_cost'])
+#             # Calcular precios originales y con descuento
+#             original_subtotal = float(discounts_info.get('subtotal_original', preview['subtotal']))
+#             discounted_subtotal = float(preview['subtotal'])
+#             shipping_cost = float(preview['shipping_cost'])
             
-            # Calcular impuestos correctamente
-            original_taxes = float(original_subtotal * 0.16)  # Impuestos sobre subtotal original
-            discounted_taxes = float(discounted_subtotal * 0.16)  # Impuestos sobre subtotal con descuento
+#             # Calcular impuestos correctamente
+#             original_taxes = float(original_subtotal * 0.16)  # Impuestos sobre subtotal original
+#             discounted_taxes = float(discounted_subtotal * 0.16)  # Impuestos sobre subtotal con descuento
             
-            # Calcular totales
-            original_total = float(original_subtotal + original_taxes + shipping_cost)
-            discounted_total = float(discounted_subtotal + discounted_taxes + shipping_cost)
+#             # Calcular totales
+#             original_total = float(original_subtotal + original_taxes + shipping_cost)
+#             discounted_total = float(discounted_subtotal + discounted_taxes + shipping_cost)
             
-            # Calcular ahorro del descuento (SOLO en productos)
-            product_savings = original_subtotal - discounted_subtotal
-            tax_savings = original_taxes - discounted_taxes  # Diferencia en impuestos (no es ahorro del descuento)
-            total_savings = product_savings  # El ahorro real es SOLO el descuento en productos
+#             # Calcular ahorro del descuento (SOLO en productos)
+#             product_savings = original_subtotal - discounted_subtotal
+#             tax_savings = original_taxes - discounted_taxes  # Diferencia en impuestos (no es ahorro del descuento)
+#             total_savings = product_savings  # El ahorro real es SOLO el descuento en productos
             
-            checkout_previews[address.id] = {
-                # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS + ENVÍO
-                "original_subtotal": original_subtotal,
-                "original_taxes": original_taxes,
-                "original_total": original_total,
+#             checkout_previews[address.id] = {
+#                 # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS + ENVÍO
+#                 "original_subtotal": original_subtotal,
+#                 "original_taxes": original_taxes,
+#                 "original_total": original_total,
                 
-                # Precios finales (con descuentos)
-                "subtotal": discounted_subtotal,
-                "shipping_cost": shipping_cost,
-                "taxes": discounted_taxes,  # Usar impuestos calculados correctamente
-                "total": discounted_total,  # Usar total calculado correctamente
+#                 # Precios finales (con descuentos)
+#                 "subtotal": discounted_subtotal,
+#                 "shipping_cost": shipping_cost,
+#                 "taxes": discounted_taxes,  # Usar impuestos calculados correctamente
+#                 "total": discounted_total,  # Usar total calculado correctamente
                 
-                # Información detallada de ahorro
-                "product_savings": product_savings,  # Descuento aplicado en productos
-                "tax_savings": tax_savings,  # Diferencia en impuestos (consecuencia del descuento)
-                "total_savings": total_savings,  # Descuento real (solo productos)
-                "savings_percentage": round((product_savings / original_subtotal * 100), 2) if original_subtotal > 0 else 0,
+#                 # Información detallada de ahorro
+#                 "product_savings": product_savings,  # Descuento aplicado en productos
+#                 "tax_savings": tax_savings,  # Diferencia en impuestos (consecuencia del descuento)
+#                 "total_savings": total_savings,  # Descuento real (solo productos)
+#                 "savings_percentage": round((product_savings / original_subtotal * 100), 2) if original_subtotal > 0 else 0,
                 
-                # Información de envío y moneda
-                "shipping_zone": preview['shipping_zone'],
-                "payment_currency": preview['payment_currency'],
-                "exchange_rate": float(preview['exchange_rate']) if preview['exchange_rate'] else None,
+#                 # Información de envío y moneda
+#                 "shipping_zone": preview['shipping_zone'],
+#                 "payment_currency": preview['payment_currency'],
+#                 "exchange_rate": float(preview['exchange_rate']) if preview['exchange_rate'] else None,
                 
-                # Información detallada de descuentos
-                "quantity_discount": preview.get('quantity_discount'),
-                "quantity_discount_amount": float(preview.get('quantity_discount_amount', 0)),
-                "flash_discounts": preview.get('flash_discounts', []),
-                "total_discount": float(preview.get('total_discount', 0))
-            }
+#                 # Información detallada de descuentos
+#                 "quantity_discount": preview.get('quantity_discount'),
+#                 "quantity_discount_amount": float(preview.get('quantity_discount_amount', 0)),
+#                 "flash_discounts": preview.get('flash_discounts', []),
+#                 "total_discount": float(preview.get('total_discount', 0))
+#             }
             
-        except HTTPException as e:
-            # Error específico (dirección no válida, etc.)
-            cart_total = float(cart.total)
-            original_taxes = float(cart_total * 0.16)
-            original_total = float(cart_total + original_taxes)
+#         except HTTPException as e:
+#             # Error específico (dirección no válida, etc.)
+#             cart_total = float(cart.total)
+#             original_taxes = float(cart_total * 0.16)
+#             original_total = float(cart_total + original_taxes)
             
-            checkout_previews[address.id] = {
-                "error": e.detail,
-                # Precios originales (sin descuentos)
-                "original_subtotal": cart_total,
-                "original_taxes": original_taxes,
-                "original_total": original_total,
-                # Precios finales (sin descuentos en caso de error)
-                "subtotal": cart_total,
-                "shipping_cost": 0,
-                "taxes": original_taxes,
-                "total": original_total,
-                # Información de ahorro (sin ahorro en caso de error)
-                "product_savings": 0,
-                "tax_savings": 0,
-                "total_savings": 0,
-                "savings_percentage": 0,
-                # Información de envío y moneda
-                "shipping_zone": "error",
-                "payment_currency": "USD",
-                "exchange_rate": None,
-                # Información de descuentos (sin descuentos en caso de error)
-                "quantity_discount": None,
-                "quantity_discount_amount": 0,
-                "flash_discounts": [],
-                "total_discount": 0
-            }
-        except Exception as e:
-            # Error inesperado
-            cart_total = float(cart.total)
-            original_taxes = float(cart_total * 0.16)
-            original_total = float(cart_total + original_taxes)
+#             checkout_previews[address.id] = {
+#                 "error": e.detail,
+#                 # Precios originales (sin descuentos)
+#                 "original_subtotal": cart_total,
+#                 "original_taxes": original_taxes,
+#                 "original_total": original_total,
+#                 # Precios finales (sin descuentos en caso de error)
+#                 "subtotal": cart_total,
+#                 "shipping_cost": 0,
+#                 "taxes": original_taxes,
+#                 "total": original_total,
+#                 # Información de ahorro (sin ahorro en caso de error)
+#                 "product_savings": 0,
+#                 "tax_savings": 0,
+#                 "total_savings": 0,
+#                 "savings_percentage": 0,
+#                 # Información de envío y moneda
+#                 "shipping_zone": "error",
+#                 "payment_currency": "USD",
+#                 "exchange_rate": None,
+#                 # Información de descuentos (sin descuentos en caso de error)
+#                 "quantity_discount": None,
+#                 "quantity_discount_amount": 0,
+#                 "flash_discounts": [],
+#                 "total_discount": 0
+#             }
+#         except Exception as e:
+#             # Error inesperado
+#             cart_total = float(cart.total)
+#             original_taxes = float(cart_total * 0.16)
+#             original_total = float(cart_total + original_taxes)
             
-            checkout_previews[address.id] = {
-                "error": f"Error calculando costos: {str(e)}",
-                # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS
-                "original_subtotal": cart_total,
-                "original_taxes": original_taxes,
-                "original_total": original_total,
-                # Precios finales (sin descuentos en caso de error)
-                "subtotal": cart_total,
-                "shipping_cost": 0,
-                "taxes": original_taxes,
-                "total": original_total,
-                # Información de ahorro (sin ahorro en caso de error)
-                "product_savings": 0,
-                "tax_savings": 0,
-                "total_savings": 0,
-                "savings_percentage": 0,
-                # Información de envío y moneda
-                "shipping_zone": "error",
-                "payment_currency": "USD",
-                "exchange_rate": None,
-                # Información de descuentos (sin descuentos en caso de error)
-                "quantity_discount": None,
-                "quantity_discount_amount": 0,
-                "flash_discounts": [],
-                "total_discount": 0
-            }
+#             checkout_previews[address.id] = {
+#                 "error": f"Error calculando costos: {str(e)}",
+#                 # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS
+#                 "original_subtotal": cart_total,
+#                 "original_taxes": original_taxes,
+#                 "original_total": original_total,
+#                 # Precios finales (sin descuentos en caso de error)
+#                 "subtotal": cart_total,
+#                 "shipping_cost": 0,
+#                 "taxes": original_taxes,
+#                 "total": original_total,
+#                 # Información de ahorro (sin ahorro en caso de error)
+#                 "product_savings": 0,
+#                 "tax_savings": 0,
+#                 "total_savings": 0,
+#                 "savings_percentage": 0,
+#                 # Información de envío y moneda
+#                 "shipping_zone": "error",
+#                 "payment_currency": "USD",
+#                 "exchange_rate": None,
+#                 # Información de descuentos (sin descuentos en caso de error)
+#                 "quantity_discount": None,
+#                 "quantity_discount_amount": 0,
+#                 "flash_discounts": [],
+#                 "total_discount": 0
+#             }
     
-    # 5. Calcular resumen general
-    valid_previews = {k: v for k, v in checkout_previews.items() if 'error' not in v}
+#     # 5. Calcular resumen general
+#     valid_previews = {k: v for k, v in checkout_previews.items() if 'error' not in v}
     
-    if valid_previews:
-        min_total = min(preview['total'] for preview in valid_previews.values())
-        max_total = max(preview['total'] for preview in valid_previews.values())
-        avg_total = sum(preview['total'] for preview in valid_previews.values()) / len(valid_previews)
-    else:
-        min_total = max_total = avg_total = 0
+#     if valid_previews:
+#         min_total = min(preview['total'] for preview in valid_previews.values())
+#         max_total = max(preview['total'] for preview in valid_previews.values())
+#         avg_total = sum(preview['total'] for preview in valid_previews.values()) / len(valid_previews)
+#     else:
+#         min_total = max_total = avg_total = 0
     
-    # Calcular resumen de precios originales
-    if valid_previews:
-        original_totals = [preview['original_total'] for preview in valid_previews.values()]
-        min_original = min(original_totals)
-        max_original = max(original_totals)
-        avg_original = sum(original_totals) / len(original_totals)
+#     # Calcular resumen de precios originales
+#     if valid_previews:
+#         original_totals = [preview['original_total'] for preview in valid_previews.values()]
+#         min_original = min(original_totals)
+#         max_original = max(original_totals)
+#         avg_original = sum(original_totals) / len(original_totals)
         
-        # Calcular ahorro promedio
-        savings = [preview['total_savings'] for preview in valid_previews.values()]
-        avg_savings = sum(savings) / len(savings) if savings else 0
-    else:
-        min_original = max_original = avg_original = avg_savings = 0
+#         # Calcular ahorro promedio
+#         savings = [preview['total_savings'] for preview in valid_previews.values()]
+#         avg_savings = sum(savings) / len(savings) if savings else 0
+#     else:
+#         min_original = max_original = avg_original = avg_savings = 0
 
-    cart_total = float(cart.total)
-    original_taxes = float(cart_total * 0.16)
-    original_total = float(cart_total + original_taxes)
+#     cart_total = float(cart.total)
+#     original_taxes = float(cart_total * 0.16)
+#     original_total = float(cart_total + original_taxes)
     
-    return {
-        "addresses": addresses,
-        "checkout_preview": {
-            # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS
-            "original_subtotal": cart_total,
-            "original_taxes": original_taxes,
-            "original_total": original_total,
+#     return {
+#         "addresses": addresses,
+#         "checkout_preview": {
+#             # Precios originales (sin descuentos) - SOLO PRODUCTOS + IMPUESTOS
+#             "original_subtotal": cart_total,
+#             "original_taxes": original_taxes,
+#             "original_total": original_total,
             
-            # Precios finales (con descuentos)
-            "subtotal": cart_total,  # Este será actualizado por el primer preview válido
-            "tax_rate": 0.16,
-            "previews_by_address": checkout_previews,
+#             # Precios finales (con descuentos)
+#             "subtotal": cart_total,  # Este será actualizado por el primer preview válido
+#             "tax_rate": 0.16,
+#             "previews_by_address": checkout_previews,
             
-            # Resumen general
-            "summary": {
-                # Totales originales
-                "min_original_total": min_original,
-                "max_original_total": max_original,
-                "avg_original_total": round(avg_original, 2),
+#             # Resumen general
+#             "summary": {
+#                 # Totales originales
+#                 "min_original_total": min_original,
+#                 "max_original_total": max_original,
+#                 "avg_original_total": round(avg_original, 2),
                 
-                # Totales con descuentos
-                "min_total": min_total,
-                "max_total": max_total,
-                "avg_total": round(avg_total, 2),
+#                 # Totales con descuentos
+#                 "min_total": min_total,
+#                 "max_total": max_total,
+#                 "avg_total": round(avg_total, 2),
                 
-                # Ahorro promedio
-                "avg_savings": round(avg_savings, 2),
-                "avg_savings_percentage": round((avg_savings / avg_original * 100), 2) if avg_original > 0 else 0,
+#                 # Ahorro promedio
+#                 "avg_savings": round(avg_savings, 2),
+#                 "avg_savings_percentage": round((avg_savings / avg_original * 100), 2) if avg_original > 0 else 0,
                 
-                # Información de direcciones
-                "total_addresses": len(addresses),
-                "valid_addresses": len(valid_previews)
-            }
-        }
-    }
+#                 # Información de direcciones
+#                 "total_addresses": len(addresses),
+#                 "valid_addresses": len(valid_previews)
+#             }
+#         }
+#     }
 
-@router.put("/addresses/{address_id}", response_model=AddressResponse)
-def update_address(
-    address_id: str,
-    address_data: AddressUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    **Actualizar dirección**: Modifica una dirección de envío existente.
-    """
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
-    if not address:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+# @router.put("/addresses/{address_id}", response_model=AddressResponse)
+# def update_address(
+#     address_id: str,
+#     address_data: AddressUpdate,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_active_user)
+# ):
+#     """
+#     **Actualizar dirección**: Modifica una dirección de envío existente.
+#     """
+#     address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+#     if not address:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
 
-    if address_data.is_default:
-        # Si esta se marca como predeterminada, quitar la marca de las otras
-        db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+#     if address_data.is_default:
+#         # Si esta se marca como predeterminada, quitar la marca de las otras
+#         db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
 
-    update_data = address_data.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(address, key, value)
+#     update_data = address_data.dict(exclude_unset=True)
+#     for key, value in update_data.items():
+#         setattr(address, key, value)
     
-    db.commit()
-    db.refresh(address)
-    return address
+#     db.commit()
+#     db.refresh(address)
+#     return address
 
-@router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_address(
-    address_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    **Eliminar dirección**: Elimina una dirección de envío.
-    """
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
-    if not address:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+# @router.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
+# def delete_address(
+#     address_id: str,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_active_user)
+# ):
+#     """
+#     **Eliminar dirección**: Elimina una dirección de envío.
+#     """
+#     address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+#     if not address:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
     
-    db.delete(address)
-    db.commit()
-    return
+#     db.delete(address)
+#     db.commit()
+#     return
 
-@router.post("/addresses/{address_id}/set-default", response_model=AddressResponse)
-def set_default_address(
-    address_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """
-    **Marcar como predeterminada**: Establece una dirección como la de envío por defecto.
-    """
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
-    if not address:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+# @router.post("/addresses/{address_id}/set-default", response_model=AddressResponse)
+# def set_default_address(
+#     address_id: str,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_active_user)
+# ):
+#     """
+#     **Marcar como predeterminada**: Establece una dirección como la de envío por defecto.
+#     """
+#     address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+#     if not address:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
 
-    # Quitar la marca de predeterminada de cualquier otra dirección
-    db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
+#     # Quitar la marca de predeterminada de cualquier otra dirección
+#     db.query(Address).filter(Address.user_id == current_user.id).update({Address.is_default: False})
     
-    # Marcar la nueva como predeterminada
-    address.is_default = True
-    db.commit()
-    db.refresh(address)
-    return address
+#     # Marcar la nueva como predeterminada
+#     address.is_default = True
+#     db.commit()
+#     db.refresh(address)
+#     return address
 
 @router.get("/stats", response_model=UserStats, summary="Obtiene estadísticas del usuario")
 async def get_user_stats(
@@ -545,7 +545,7 @@ async def get_user_recommendations(
     return [row_to_summary(row) for row in recommended]
 
 # =============================================================================
-# FACTURAS DEMOA
+# FACTURAS PROFIT PLUS
 # =============================================================================
 
 @router.get("/invoices/summary", response_model=DEMOAInvoiceSummary)
@@ -554,7 +554,7 @@ async def get_invoices_summary(
 ):
     """
     📊 **Resumen de Facturas**: Obtiene un resumen de facturas del usuario
-    desde el sistema DEMOA.
+    desde el sistema Profit Plus.
     """
     demoa_service = DEMOAInvoiceService()
     
@@ -580,7 +580,7 @@ async def get_all_invoices(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    📄 **Mis Facturas**: Obtiene todas las facturas del usuario desde DEMOA.
+    📄 **Mis Facturas**: Obtiene todas las facturas del usuario desde Profit Plus.
     
     Filtros disponibles:
     - `pending`: Solo facturas pendientes
@@ -650,7 +650,7 @@ async def get_invoice_details(
     if not customer_code:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cliente no encontrado en DEMOA"
+            detail="Cliente no encontrado en Profit Plus"
         )
     
     invoice = demoa_service.get_invoice_details(invoice_number, customer_code)

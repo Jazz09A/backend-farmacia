@@ -17,7 +17,7 @@ from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
 from app.config.logging_config import get_logger, log_error
 
-router = APIRouter( tags=["Authentication"])
+router = APIRouter()
 logger = get_logger("auth")
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

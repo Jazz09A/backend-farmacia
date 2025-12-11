@@ -77,26 +77,12 @@ api_router.include_router(
     tags=["📊 Dashboard"],
 )
 
-# =============================================================================
-# 🛍️ RUTAS DE CATÁLOGO
-# =============================================================================
-
-# =============================================================================
-# ⚡ RUTAS DE PROMOCIONES
-# =============================================================================
 
 # Flash Offers
 api_router.include_router(
     flash_offers.router,
     prefix="/admin",
     tags=["⚡ Flash Offers"],
-)
-
-# Quantity Discounts
-api_router.include_router(
-    quantity_discounts.router,
-    prefix="/admin",
-    tags=["💰 Descuentos por Cantidad"],
 )
 
 # Article Discounts (Profit Plus Native)

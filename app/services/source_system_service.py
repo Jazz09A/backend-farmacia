@@ -31,7 +31,6 @@ class SourceSystemService:
         # Inicializar pool si no está inicializado
         self._init_pool()
         
-        # Log de configuración (sin mostrar contraseña completa)
         if self.user:
             self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: {self.user[:3]}***")
         else:
@@ -160,7 +159,8 @@ class SourceSystemService:
         include_inactive: bool = False,
         only_with_email: bool = True,
         limit: int = None,
-        offset: int = 0
+        offset: int = 0,
+        search: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         conn = None
         try:
@@ -185,23 +185,85 @@ class SourceSystemService:
             WHERE 1=1
             """
 
+            params = []
+            
             if not include_inactive:
                 query += " AND inactivo = 0"
             if only_with_email:
                 query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
+            
+            # Búsqueda en SQL en lugar de en memoria
+            if search:
+                search_pattern = f"%{search}%"
+                query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
+                params.extend([search_pattern.lower(), search_pattern.lower()])
                 
             query += " ORDER BY cli_des"
 
             if limit:
                 query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
 
-            cursor.execute(query)
+            if params:
+                cursor.execute(query, tuple(params))
+            else:
+                cursor.execute(query)
             customers = cursor.fetchall()
 
             cursor.close()
             return customers
         except Exception as e:
             self.logger.error(f"Error obteniendo clientes de SourceSystem: {str(e)}")
+            raise
+        finally:
+            if conn:
+                self.return_connection(conn)
+
+    def count_customers(
+        self,
+        include_inactive: bool = False,
+        only_with_email: bool = True,
+        search: Optional[str] = None
+    ) -> int:
+        """
+        Cuenta el total de clientes de forma eficiente usando COUNT(*) en SQL.
+        Esto evita traer todos los registros solo para contar.
+        """
+        conn = None
+        try:
+            conn = self.get_pooled_connection()
+            cursor = conn.cursor()
+
+            query = """
+            SELECT COUNT(*) AS total
+            FROM saCliente
+            WHERE 1=1
+            """
+
+            params = []
+            
+            if not include_inactive:
+                query += " AND inactivo = 0"
+            if only_with_email:
+                query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
+            
+            # Búsqueda en SQL
+            if search:
+                search_pattern = f"%{search}%"
+                query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
+                params.extend([search_pattern.lower(), search_pattern.lower()])
+
+            if params:
+                cursor.execute(query, tuple(params))
+            else:
+                cursor.execute(query)
+            
+            result = cursor.fetchone()
+            total = result.get("total", 0) if result else 0
+
+            cursor.close()
+            return total
+        except Exception as e:
+            self.logger.error(f"Error contando clientes de SourceSystem: {str(e)}")
             raise
         finally:
             if conn:
