@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, func, text
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from app.models.blog import BlogPost, BlogCategory
@@ -155,10 +155,11 @@ class BlogService:
         return query.first()
     
     def get_all_categories(self, include_deleted: bool = False) -> List[BlogCategory]:
-        """Obtener todas las categorías."""
+        """Obtener todas las categorías (optimizado)."""
         query = self.db.query(BlogCategory)
         if not include_deleted:
             query = query.filter(BlogCategory.deleted == False)
+        # Ordenar usando índice para mejor rendimiento
         return query.order_by(BlogCategory.name).all()
     
     def update_category(self, category_id: str, category_data: BlogCategoryUpdate) -> BlogCategory:
@@ -349,10 +350,8 @@ class BlogService:
         search: Optional[str] = None
     ) -> Tuple[List[BlogPost], int]:
         """Obtener posts publicados (para usuarios públicos)."""
-        query = self.db.query(BlogPost).options(
-            joinedload(BlogPost.author),
-            joinedload(BlogPost.category)
-        ).filter(
+        # Crear query base para filtros (sin joinedload para count más rápido)
+        base_query = self.db.query(BlogPost).filter(
             BlogPost.status == 'published',
             BlogPost.published_at.isnot(None),
             BlogPost.deleted == False
@@ -362,23 +361,30 @@ class BlogService:
         if category_slug:
             category = self.get_category_by_slug(category_slug)
             if category:
-                query = query.filter(BlogPost.category_id == category.id)
+                base_query = base_query.filter(BlogPost.category_id == category.id)
         
-        # Buscar en título y contenido
+        # Buscar en título y contenido (optimizado)
         if search:
             search_pattern = f"%{search}%"
-            query = query.filter(
+            # Para búsquedas, limitar la búsqueda en contenido a los primeros caracteres para mejor rendimiento
+            base_query = base_query.filter(
                 or_(
                     BlogPost.title.ilike(search_pattern),
-                    BlogPost.content.ilike(search_pattern)
+                    func.substring(BlogPost.content, 1, 5000).ilike(search_pattern)  # Limitar búsqueda en contenido
                 )
             )
         
+        # OPTIMIZACIÓN: Contar usando subquery sin joinedloads (mucho más rápido)
+        total = base_query.count()
+        
+        # Query para obtener posts con relaciones (solo para los posts paginados)
+        query = base_query.options(
+            joinedload(BlogPost.author),
+            joinedload(BlogPost.category)
+        )
+        
         # Ordenar por fecha de publicación (más recientes primero)
         query = query.order_by(desc(BlogPost.published_at))
-        
-        # Contar total
-        total = query.count()
         
         # Paginar
         offset = (page - 1) * limit
@@ -395,43 +401,126 @@ class BlogService:
         search: Optional[str] = None,
         include_deleted: bool = False
     ) -> Tuple[List[BlogPost], int]:
-        """Obtener todos los posts (para admin)."""
-        query = self.db.query(BlogPost).options(
-            joinedload(BlogPost.author),
-            joinedload(BlogPost.category)
-        )
+        """Obtener todos los posts (para admin) - Optimizado con SQL directo."""
+        # Construir condiciones WHERE
+        where_conditions = []
+        params = {}
         
         # Filtrar eliminados si no se incluyen
         if not include_deleted:
-            query = query.filter(BlogPost.deleted == False)
+            where_conditions.append("bp.deleted = :deleted")
+            params['deleted'] = False
         
         # Filtrar por estado
         if status_filter:
-            query = query.filter(BlogPost.status == status_filter)
+            where_conditions.append("bp.status = :status_filter")
+            params['status_filter'] = status_filter
         
         # Filtrar por categoría
         if category_id:
-            query = query.filter(BlogPost.category_id == category_id)
+            where_conditions.append("bp.category_id = :category_id")
+            params['category_id'] = category_id
         
-        # Buscar en título y contenido
+        # Buscar en título y contenido (optimizado)
         if search:
-            search_pattern = f"%{search}%"
-            query = query.filter(
-                or_(
-                    BlogPost.title.ilike(search_pattern),
-                    BlogPost.content.ilike(search_pattern)
-                )
-            )
+            where_conditions.append("(bp.title ILIKE :search OR SUBSTRING(bp.content, 1, 5000) ILIKE :search)")
+            params['search'] = f"%{search}%"
         
-        # Ordenar por fecha de creación (más recientes primero)
-        query = query.order_by(desc(BlogPost.created_at))
+        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         
-        # Contar total
-        total = query.count()
+        # Query para contar total (optimizado - solo cuenta IDs)
+        count_query = text(f"""
+            SELECT COUNT(*) as total
+            FROM blog_posts bp
+            WHERE {where_clause}
+        """)
         
-        # Paginar
+        result = self.db.execute(count_query, params)
+        total = result.scalar() or 0
+        
+        # Query principal optimizada con JOINs y cálculo de full_name en SQL
         offset = (page - 1) * limit
-        posts = query.offset(offset).limit(limit).all()
+        params['offset'] = offset
+        params['limit'] = limit
+        
+        main_query = text(f"""
+            SELECT 
+                bp.id,
+                bp.title,
+                bp.slug,
+                bp.content,
+                bp.featured_image_url,
+                bp.status,
+                bp.published_at,
+                bp.created_at,
+                bp.updated_at,
+                bp.author_id,
+                bp.author_name,
+                bp.category_id,
+                bp.deleted,
+                -- Author info (solo campos necesarios para mejor rendimiento)
+                u.id as author_user_id,
+                u.email as author_email,
+                u.user_type as author_user_type,
+                u.first_name as author_first_name,
+                u.last_name as author_last_name,
+                u.company_name as author_company_name,
+                -- Category info
+                bc.id as category_id_full,
+                bc.name as category_name,
+                bc.slug as category_slug,
+                bc.description as category_description
+            FROM blog_posts bp
+            LEFT JOIN users u ON bp.author_id = u.id
+            LEFT JOIN blog_categories bc ON bp.category_id = bc.id
+            WHERE {where_clause}
+            ORDER BY bp.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        
+        result = self.db.execute(main_query, params)
+        rows = result.fetchall()
+        
+        # Mapear resultados a objetos BlogPost
+        posts = []
+        for row in rows:
+            # Crear instancia de BlogPost
+            post = BlogPost()
+            post.id = row.id
+            post.title = row.title
+            post.slug = row.slug
+            post.content = row.content
+            post.featured_image_url = row.featured_image_url
+            post.status = row.status
+            post.published_at = row.published_at
+            post.created_at = row.created_at
+            post.updated_at = row.updated_at
+            post.author_id = row.author_id
+            post.author_name = row.author_name
+            post.category_id = row.category_id
+            post.deleted = row.deleted
+            
+            # Crear objeto User simplificado si existe (solo campos necesarios)
+            if row.author_user_id:
+                author = User()
+                author.id = row.author_user_id
+                author.email = row.author_email
+                author.user_type = row.author_user_type or 'natural'
+                author.first_name = row.author_first_name
+                author.last_name = row.author_last_name
+                author.company_name = row.author_company_name
+                post.author = author
+            
+            # Crear objeto BlogCategory si existe
+            if row.category_id_full:
+                category = BlogCategory()
+                category.id = row.category_id_full
+                category.name = row.category_name
+                category.slug = row.category_slug
+                category.description = row.category_description
+                post.category = category
+            
+            posts.append(post)
         
         return posts, total
     
@@ -514,16 +603,26 @@ class BlogService:
     
     @staticmethod
     def generate_excerpt(content: str, max_length: int = 200) -> str:
-        """Generar un extracto del contenido."""
-        # Remover HTML tags básicos
-        text = re.sub(r'<[^>]+>', '', content)
-        # Remover espacios múltiples
+        """Generar un extracto del contenido (optimizado para rendimiento)."""
+        if not content:
+            return ""
+        
+        # OPTIMIZACIÓN: Limitar el contenido a procesar (evitar procesar contenido muy largo)
+        # Solo procesar los primeros caracteres necesarios + margen (reducido de 3x a 2x para mejor rendimiento)
+        process_limit = max_length * 2 + 100  # Margen más pequeño
+        content_to_process = content[:process_limit] if len(content) > process_limit else content
+        
+        # OPTIMIZACIÓN: Remover HTML tags básicos de manera más eficiente
+        # Usar una expresión regular compilada sería mejor, pero para simplicidad usamos la básica
+        text = re.sub(r'<[^>]+>', '', content_to_process, flags=re.IGNORECASE)
+        
+        # Remover espacios múltiples y caracteres de control
         text = re.sub(r'\s+', ' ', text).strip()
         
         if len(text) <= max_length:
             return text
         
-        # Truncar en el último espacio antes del límite
+        # Truncar en el último espacio antes del límite (más eficiente)
         truncated = text[:max_length].rsplit(' ', 1)[0]
         return truncated + '...'
 

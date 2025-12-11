@@ -39,25 +39,37 @@ class BlogPost(Base):
     # Relationships
     author_id = Column(String, ForeignKey("users.id"), nullable=True)  # Opcional si se usa author_name
     author_name = Column(String, nullable=True)  # Nombre del autor (si no se usa author_id)
-    category_id = Column(String, ForeignKey("blog_categories.id"), nullable=False)
+    category_id = Column(String, ForeignKey("blog_categories.id"), nullable=False, index=True)
     
     # Media
     featured_image_url = Column(String, nullable=True)
     
     # Status and publishing
     status = Column(String, nullable=True, index=True)  # 'draft', 'published', 'archived'
-    published_at = Column(DateTime, nullable=True)
+    published_at = Column(DateTime, nullable=True, index=True)
     
     # Soft delete
     deleted = Column(Boolean, default=False, nullable=False, index=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=get_ve_now)
+    created_at = Column(DateTime, default=get_ve_now, index=True)
     updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     
     # Relationships
     author = relationship("User", backref="blog_posts")
     category = relationship("BlogCategory", back_populates="posts")
+    
+    # Índices compuestos para optimizar consultas comunes
+    __table_args__ = (
+        # Índice para consultas de admin: deleted + status + created_at
+        Index('idx_blog_post_deleted_status_created', 'deleted', 'status', 'created_at'),
+        # Índice para consultas públicas: deleted + status + published_at
+        Index('idx_blog_post_deleted_status_published', 'deleted', 'status', 'published_at'),
+        # Índice para filtros por categoría: deleted + category_id + created_at
+        Index('idx_blog_post_deleted_category_created', 'deleted', 'category_id', 'created_at'),
+        # Índice para búsquedas: deleted + title (para búsquedas en título)
+        Index('idx_blog_post_deleted_title', 'deleted', 'title'),
+    )
     
     def __repr__(self):
         return f"<BlogPost(id={self.id}, title={self.title}, slug={self.slug}, status={self.status}, deleted={self.deleted})>"
