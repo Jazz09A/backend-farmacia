@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, dashboard, flash_offers, quantity_discounts, article_discounts
+from app.api.v1.endpoints import auth, admin, user, public, dashboard, flash_offers, article_discounts
 from app.api.v1.endpoints import quotes
 from app.api.v1.endpoints import exchange_rate
 from app.api.v1.endpoints import articles

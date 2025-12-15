@@ -20,17 +20,21 @@ class DEMOAInvoiceService:
     def get_customer_code_by_email(self, email: str) -> Optional[str]:
         """
         Obtiene el código de cliente en DEMOA por email
+        El código se normaliza (sin espacios) antes de devolverlo.
         
         Args:
             email: Email del cliente
             
         Returns:
-            Código de cliente (co_cli) o None si no se encuentra
+            Código de cliente (co_cli) normalizado o None si no se encuentra
         """
         try:
             customer = source_system_service.get_customer_by_email(email)
             if customer:
-                return customer.get('customer_code')
+                customer_code = customer.get('customer_code')
+                # Normalizar el código antes de devolverlo
+                if customer_code:
+                    return (customer_code or '').strip()
             return None
         except Exception as e:
             logger.error(f"Error obteniendo código de cliente por email {email}: {e}")
@@ -39,17 +43,25 @@ class DEMOAInvoiceService:
     def get_all_invoices(self, customer_code: str) -> List[Dict]:
         """
         Obtiene todas las facturas de un cliente (pagadas y pendientes)
+        Consulta optimizada usando RTRIM para normalizar códigos de cliente.
         
         Args:
-            customer_code: Código de cliente en DEMOA
+            customer_code: Código de cliente en DEMOA (ya normalizado sin espacios)
             
         Returns:
             Lista de facturas
         """
         try:
+            # Normalizar el código de cliente
+            normalized_code = (customer_code or '').strip()
+            if not normalized_code:
+                logger.warning("Código de cliente vacío")
+                return []
+            
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Consulta optimizada usando RTRIM para normalizar espacios en co_cli
             query = """
             SELECT 
                 fv.doc_num AS invoice_number,
@@ -72,12 +84,12 @@ class DEMOAInvoiceService:
                 CASE WHEN fv.impresa = 1 THEN 1 ELSE 0 END AS is_printed
             FROM saFacturaVenta fv
             LEFT JOIN saMoneda m ON fv.co_mone = m.co_mone
-            WHERE fv.co_cli = %s
+            WHERE RTRIM(fv.co_cli) = %s
                 AND fv.anulado = 0
             ORDER BY fv.fec_emis DESC
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (normalized_code,))
             invoices = cursor.fetchall()
             
             cursor.close()
@@ -85,23 +97,31 @@ class DEMOAInvoiceService:
             
             return self._transform_invoices(invoices)
         except Exception as e:
-            logger.error(f"Error obteniendo facturas para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo facturas para cliente {customer_code}: {e}", exc_info=True)
             return []
     
     def get_pending_invoices(self, customer_code: str) -> List[Dict]:
         """
         Obtiene facturas pendientes de pago
+        Consulta optimizada usando RTRIM para normalizar códigos de cliente.
         
         Args:
-            customer_code: Código de cliente en DEMOA
+            customer_code: Código de cliente en DEMOA (ya normalizado sin espacios)
             
         Returns:
             Lista de facturas pendientes
         """
         try:
+            # Normalizar el código de cliente
+            normalized_code = (customer_code or '').strip()
+            if not normalized_code:
+                logger.warning("Código de cliente vacío")
+                return []
+            
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Consulta optimizada usando RTRIM para normalizar espacios en co_cli
             query = """
             SELECT 
                 fv.doc_num AS invoice_number,
@@ -119,13 +139,13 @@ class DEMOAInvoiceService:
                 CASE WHEN fv.impresa = 1 THEN 1 ELSE 0 END AS is_printed
             FROM saFacturaVenta fv
             LEFT JOIN saMoneda m ON fv.co_mone = m.co_mone
-            WHERE fv.co_cli = %s
+            WHERE RTRIM(fv.co_cli) = %s
                 AND fv.anulado = 0
                 AND fv.saldo > 0
             ORDER BY fv.fec_emis DESC
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (normalized_code,))
             invoices = cursor.fetchall()
             
             cursor.close()
@@ -133,23 +153,31 @@ class DEMOAInvoiceService:
             
             return self._transform_invoices(invoices)
         except Exception as e:
-            logger.error(f"Error obteniendo facturas pendientes para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo facturas pendientes para cliente {customer_code}: {e}", exc_info=True)
             return []
     
     def get_paid_invoices(self, customer_code: str) -> List[Dict]:
         """
         Obtiene facturas pagadas
+        Consulta optimizada usando RTRIM para normalizar códigos de cliente.
         
         Args:
-            customer_code: Código de cliente en DEMOA
+            customer_code: Código de cliente en DEMOA (ya normalizado sin espacios)
             
         Returns:
             Lista de facturas pagadas
         """
         try:
+            # Normalizar el código de cliente
+            normalized_code = (customer_code or '').strip()
+            if not normalized_code:
+                logger.warning("Código de cliente vacío")
+                return []
+            
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Consulta optimizada usando RTRIM para normalizar espacios en co_cli
             query = """
             SELECT 
                 fv.doc_num AS invoice_number,
@@ -164,13 +192,13 @@ class DEMOAInvoiceService:
                 CASE WHEN fv.impresa = 1 THEN 1 ELSE 0 END AS is_printed
             FROM saFacturaVenta fv
             LEFT JOIN saMoneda m ON fv.co_mone = m.co_mone
-            WHERE fv.co_cli = %s
+            WHERE RTRIM(fv.co_cli) = %s
                 AND fv.anulado = 0
                 AND fv.saldo = 0
             ORDER BY fv.fec_emis DESC
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (normalized_code,))
             invoices = cursor.fetchall()
             
             cursor.close()
@@ -178,7 +206,7 @@ class DEMOAInvoiceService:
             
             return self._transform_invoices(invoices)
         except Exception as e:
-            logger.error(f"Error obteniendo facturas pagadas para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo facturas pagadas para cliente {customer_code}: {e}", exc_info=True)
             return []
     
     def get_invoice_details(self, invoice_number: str, customer_code: Optional[str] = None) -> Optional[Dict]:
@@ -233,10 +261,13 @@ class DEMOAInvoiceService:
                 return None
             
             # Validar que la factura pertenece al cliente si se proporciona customer_code
-            if customer_code and header.get('customer_code') != customer_code:
-                cursor.close()
-                conn.close()
-                return None
+            if customer_code:
+                normalized_customer_code = (customer_code or '').strip()
+                header_customer_code = (header.get('customer_code') or '').strip()
+                if normalized_customer_code and header_customer_code != normalized_customer_code:
+                    cursor.close()
+                    conn.close()
+                    return None
             
             # Obtener items de la factura
             items_query = """
@@ -275,17 +306,25 @@ class DEMOAInvoiceService:
     def get_payment_history(self, customer_code: str) -> List[Dict]:
         """
         Obtiene historial de pagos aplicados a facturas
+        Consulta optimizada usando RTRIM para normalizar códigos de cliente.
         
         Args:
-            customer_code: Código de cliente en DEMOA
+            customer_code: Código de cliente en DEMOA (ya normalizado sin espacios)
             
         Returns:
             Lista de pagos
         """
         try:
+            # Normalizar el código de cliente
+            normalized_code = (customer_code or '').strip()
+            if not normalized_code:
+                logger.warning("Código de cliente vacío")
+                return []
+            
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Consulta optimizada usando RTRIM para normalizar espacios en co_cli
             query = """
             SELECT 
                 c.cob_num AS payment_number,
@@ -296,13 +335,13 @@ class DEMOAInvoiceService:
             FROM saCobro c
             INNER JOIN saCobroDocReng cd ON c.cob_num = cd.cob_num
             INNER JOIN saFacturaVenta fv ON cd.nro_doc = fv.doc_num
-            WHERE c.co_cli = %s
+            WHERE RTRIM(c.co_cli) = %s
                 AND c.anulado = 0
                 AND fv.anulado = 0
             ORDER BY c.fecha DESC, fv.doc_num
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (normalized_code,))
             payments = cursor.fetchall()
             
             cursor.close()
@@ -310,23 +349,37 @@ class DEMOAInvoiceService:
             
             return self._transform_payments(payments)
         except Exception as e:
-            logger.error(f"Error obteniendo historial de pagos para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo historial de pagos para cliente {customer_code}: {e}", exc_info=True)
             return []
     
     def get_invoices_summary(self, customer_code: str) -> Dict:
         """
         Obtiene resumen de facturas del cliente
+        Consulta optimizada usando RTRIM para normalizar códigos de cliente.
         
         Args:
-            customer_code: Código de cliente en DEMOA
+            customer_code: Código de cliente en DEMOA (ya normalizado sin espacios)
             
         Returns:
             Diccionario con resumen de facturas
         """
         try:
+            # Normalizar el código de cliente
+            normalized_code = (customer_code or '').strip()
+            if not normalized_code:
+                logger.warning("Código de cliente vacío")
+                return {
+                    'total_invoices': 0,
+                    'pending_invoices': 0,
+                    'paid_invoices': 0,
+                    'total_pending_amount': Decimal('0.00'),
+                    'total_invoiced': Decimal('0.00')
+                }
+            
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Consulta optimizada usando RTRIM para normalizar espacios en co_cli
             query = """
             SELECT 
                 COUNT(*) AS total_invoices,
@@ -335,11 +388,11 @@ class DEMOAInvoiceService:
                 SUM(CASE WHEN saldo > 0 THEN saldo ELSE 0 END) AS total_pending_amount,
                 SUM(total_neto) AS total_invoiced
             FROM saFacturaVenta
-            WHERE co_cli = %s
+            WHERE RTRIM(co_cli) = %s
                 AND anulado = 0
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (normalized_code,))
             summary = cursor.fetchone()
             
             cursor.close()
@@ -362,7 +415,7 @@ class DEMOAInvoiceService:
                 'total_invoiced': Decimal('0.00')
             }
         except Exception as e:
-            logger.error(f"Error obteniendo resumen de facturas para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo resumen de facturas para cliente {customer_code}: {e}", exc_info=True)
             return {
                 'total_invoices': 0,
                 'pending_invoices': 0,

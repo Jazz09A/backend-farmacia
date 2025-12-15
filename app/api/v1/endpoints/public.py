@@ -26,55 +26,6 @@ from fastapi.responses import Response
 router = APIRouter(prefix="/public")
 
 
-# Funciones helper eliminadas - ya no se usan porque los endpoints de productos fueron eliminados
-# Los artículos vienen de Profit Plus a través de /articles
-
-# Endpoints de productos eliminados - Los artículos vienen de Profit Plus a través de /articles
-# @router.get("/products") - ELIMINADO
-# @router.get("/products/{product_id}") - ELIMINADO  
-# @router.get("/products/search") - ELIMINADO
-# Los artículos se obtienen desde /api/v1/articles que se conecta directamente a Profit Plus
-
-# =============================================================================
-# INFORMACIÓN GENERAL - PÚBLICO
-# =============================================================================
-
-
-# @router.get("/payment-methods")
-# async def get_payment_methods():
-#     """
-#     💳 **Métodos de pago disponibles**
-    
-#     Obtiene los métodos de pago activos en el sistema.
-#     """
-#     methods = [
-#         {
-#             "id": "cash",
-#             "name": "Efectivo",
-#             "description": "Pago en efectivo contra entrega",
-#             "fee": 0.00,
-#             "active": True
-#         },
-#         {
-#             "id": "transfer",
-#             "name": "Transferencia Bancaria", 
-#             "description": "Transferencia a cuenta bancaria",
-#             "fee": 0.00,
-#             "active": True
-#         },
-#         {
-#             "id": "mobile_payment",
-#             "name": "Pago Móvil",
-#             "description": "Pago móvil interbancario",
-#             "fee": 0.00,
-#             "active": True
-#         }
-#     ]
-#     return {"payment_methods": methods}
-
-# Endpoints de categories y brands eliminados - no se usan con Profit Plus
-# Las categorías y marcas vienen de Profit Plus a través de articles.py
-
 # =============================================================================
 # INFORMACIÓN DEL SISTEMA
 # =============================================================================
@@ -92,45 +43,6 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# @router.get("/features")
-# async def get_public_features():
-#     """
-#     ⭐ **Características del sistema**
-    
-#     Obtiene las características públicas del sistema.
-#     """
-#     return {
-#         "features": {
-#             "user_registration": True,
-#             "guest_checkout": False,
-#             "multiple_payment_methods": True,
-#             "prescription_upload": True,
-#             "delivery_tracking": True,
-#             "customer_reviews": True,
-#             "loyalty_program": False
-#         },
-#         "supported_currencies": ["VES", "USD"],
-#         "supported_languages": ["es"],
-#         "api_version": "v1"
-#     } 
-
-# # =============================================================================
-# # DESCUENTOS PÚBLICOS
-# # =============================================================================
-
-# @router.get("/quantity-discounts/applicable", response_model=Optional[QuantityDiscountResponse])
-# async def get_applicable_quantity_discount(
-#     total_quantity: int = Query(..., gt=0, description="Cantidad total de productos"),
-#     db: Session = Depends(get_db)
-# ):
-#     """
-#     Obtener el descuento por cantidad aplicable para una cantidad dada.
-
-#     **Endpoint público** - No requiere autenticación.
-#     """
-#     service = DiscountService(db)
-#     discount = service.get_applicable_quantity_discount(total_quantity)
-#     return discount
 
 # =============================================================================
 # BLOG PÚBLICO - LECTURA DE ARTÍCULOS
@@ -338,4 +250,4 @@ async def get_blog_image(
         headers={
             "Content-Disposition": f'inline; filename="{image.image_code}.jpg"'
         }
-    )
+    )  

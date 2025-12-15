@@ -93,7 +93,7 @@ class FlashOffersService:
                     detail="El precio objetivo debe ser menor al precio del artículo en Profit Plus",
                 )
             discount_percentage = ((source_price - fixed_price_decimal) / source_price) * Decimal("100")
-            payload["discount_type"] = DiscountType.PERCENTAGE.value
+            payload["discount_type"] = DiscountType.PERCENTAGE
             payload["discount_value"] = float(discount_percentage.quantize(Decimal("0.01")))
         else:
             discount_value = payload.get("discount_value")

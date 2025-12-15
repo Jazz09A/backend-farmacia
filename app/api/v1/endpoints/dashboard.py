@@ -5,8 +5,6 @@ from decimal import Decimal
 from app.schemas.dashboard import DashboardData
 from app.services.dashboard_service import (
     get_dashboard_data, 
-    # get_order_by_id eliminado - Order no se usa con Profit Plus
-    # update_order_status eliminado - Order no se usa con Profit Plus
     get_all_customers,
     get_all_quotes_paginated,
     get_quote_detail_for_admin
@@ -14,9 +12,8 @@ from app.services.dashboard_service import (
 from app.core.dependencies import get_db, get_current_user, get_admin_user
 from app.models.user import User
 from app.schemas.user import UserResponse
-# Order schemas eliminados - Order no se usa con Profit Plus
+
 from app.schemas.quote import QuoteListResponse, QuoteDetailResponse
-# get_all_orders eliminado - Order no se usa con Profit Plus
 
 router = APIRouter()
 

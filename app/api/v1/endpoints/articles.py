@@ -17,7 +17,7 @@ from app.core.dependencies import (
     PaginationParams,
     get_admin_user,
     get_current_active_user,
-    get_optional_current_user,  # Agregar esto
+    get_optional_current_user,
     get_pagination_params,
 )
 from app.config.database import get_db

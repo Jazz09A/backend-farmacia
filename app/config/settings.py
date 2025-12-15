@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     
     # API URL
     API_URL: str = os.getenv("API_URL", "http://localhost:8000")
+    
     # Database
-    # DATABASE_URL: str = "postgresql://farmaplus:password@localhost:5432/farmaplus"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./db.sqlite3")
     
     # Security
@@ -39,26 +39,9 @@ class Settings(BaseSettings):
     SMTP_FROM: Optional[str] = os.getenv("SMTP_FROM", "programatevzla@gmail.com")
     SMTP_FROM_NAME: Optional[str] = os.getenv("SMTP_FROM_NAME", "Grupo Drozainka")
     
-    # Currency API
-    CURRENCY_API_KEY: Optional[str] = None
-    
-    # Payment Gateways
-    STRIPE_SECRET_KEY: Optional[str] = None
-    PAYPAL_CLIENT_ID: Optional[str] = None
-    PAYPAL_CLIENT_SECRET: Optional[str] = None
-    
-    # Venezuelan Payment Methods
-    BANESCO_API_KEY: Optional[str] = None
-    MERCANTIL_API_KEY: Optional[str] = None
-    
     # Frontend URL
     FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-    # Cloudinary
-    CLOUDINARY_CLOUD_NAME: Optional[str] = None
-    CLOUDINARY_API_KEY: Optional[str] = None
-    CLOUDINARY_API_SECRET: Optional[str] = None
-    CLOUDINARY_UPLOAD_PRESET: Optional[str] = None
     
     # SourceSystem Database Configuration
     SOURCE_SYSTEM_SERVER: Optional[str] = os.getenv("SOURCE_SYSTEM_SERVER", "localhost")

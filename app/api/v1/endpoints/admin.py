@@ -6,44 +6,31 @@ from app.utils.timezone import get_ve_now
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-# from sqlalchemy import func, desc, asc, or_
+
 from app.config.database import get_db
 from app.core.auth import get_admin_user, get_super_admin_user
-# Order model eliminado - Order no se usa con Profit Plus
-# from app.models.order import Order
+
 from app.models.user import User
-# from app.models.product import Product
-# UpdatePaymentStatus eliminado - Order no se usa con Profit Plus
-# from app.schemas.order import UpdatePaymentStatus
 from app.services.role_service import RoleService
 from app.schemas.role import (
-    UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse,
-    UserRole
+    UserRoleResponse
 )
 from app.schemas.dashboard import DashboardData
-# from app.schemas.product import (
-#     ProductResponse, ProductCreate, ProductUpdate, ProductListResponse
-#     # ProductBulkUploadResult, ProductBulkUploadItem eliminados - Los productos vienen de Profit Plus
-# )
-# from app.services.exchange_service import exchange_service
+
 from app.schemas.user import (
-    CustomerDetailedStats, CustomerStats, # ProductPurchaseStats,
-    #OrderStatusDistribution, MonthlyPurchaseStats, 
+    CustomerDetailedStats, CustomerStats,
     UserResponse
 )
 from app.core.dependencies import PaginationParams, get_pagination_params
-from app.services import dashboard_service # Import the new service
+from app.services import dashboard_service
 from app.services.imges_service import ImageService
-# ProductBulkService eliminado - Los productos vienen de Profit Plus, no se crean localmente
-# from app.services.product_bulk_service import ProductBulkService
+
 from app.config.logging_config import get_logger
-# from app.config.logging_config import log_error
+
 
 # SourceSystem imports y endpoints
 from app.services.source_system_service import source_system_service
 from app.services.source_system_user_creation_service import SourceSystemUserCreationService
-# from app.core.dependencies import PaginationParams, get_pagination_params
-# from typing import List, Optional
 from pydantic import BaseModel
 
 # Schemas para endpoints
@@ -103,50 +90,6 @@ async def get_admin_dashboard(
     dashboard_data = dashboard_service.get_dashboard_data(db=db, days_filter=7)
     return dashboard_data
 
-
-
-
-# =============================================================================
-# GESTIÓN DE PRODUCTOS - ADMIN
-# =============================================================================
-
-# Endpoints de productos locales eliminados - Los artículos vienen de Profit Plus a través de /articles
-# @router.get("/products") - ELIMINADO
-# @router.post("/products") - ELIMINADO
-# @router.get("/products/{product_id}") - ELIMINADO
-# @router.put("/products/{product_id}") - ELIMINADO
-# @router.delete("/products/{product_id}") - ELIMINADO
-# @router.get("/products/stats/summary") - ELIMINADO
-# @router.post("/products/{product_id}/images") - ELIMINADO
-# @router.delete("/products/{product_id}/images/{image_url}") - ELIMINADO
-
-
-# =============================================================================
-# ENDPOINTS DE INFORMACIÓN DE ROLES
-# =============================================================================
-
-# @router.get("/roles/hierarchy", response_model=RoleHierarchyResponse)
-# async def get_role_hierarchy(
-#     current_user: User = Depends(get_admin_user)
-# ):
-#     """
-#     📋 **Obtener jerarquía de roles**
-    
-#     Obtiene la estructura completa de roles y permisos del sistema.
-#     Requiere rol de admin o superior.
-#     """
-#     return RoleService.get_role_hierarchy()
-
-# @router.get("/roles/my-permissions", response_model=RolePermissionsResponse)
-# async def get_my_permissions(
-#     current_user: User = Depends(get_admin_user)
-# ):
-#     """
-#     🔑 **Obtener mis permisos**
-    
-#     Obtiene los permisos del usuario actual.
-#     """
-#     return RoleService.get_user_permissions(current_user)
 
 # =============================================================================
 # GESTIÓN DE USUARIOS

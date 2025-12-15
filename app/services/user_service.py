@@ -46,7 +46,15 @@ class UserService:
                     "total_products_purchased": 0
                 }
             
-            customer_code = customer.get('customer_code')
+            customer_code = (customer.get('customer_code') or '').strip()
+            if not customer_code:
+                logger.warning(f"Código de cliente vacío para email: {email}")
+                return {
+                    "total_orders": 0,
+                    "total_spent": 0.0,
+                    "total_products_purchased": 0
+                }
+            
             logger.debug(f"Obteniendo estadísticas para cliente {customer_code} (email: {email})")
             
             # Obtener estadísticas desde source_system
@@ -63,10 +71,15 @@ class UserService:
     
     def _get_stats_from_source_system(self, customer_code: str) -> dict:
         """
-        Obtiene estadísticas del cliente desde DEMOA usando las tablas saFactura y saFacturaReng.
+        Obtiene estadísticas del cliente desde Profit Plus usando las tablas saFacturaVenta y saFacturaVentaReng.
+        
+        Las estadísticas se calculan desde las facturas (productos ya comprados):
+        - total_orders: Total de facturas del cliente (COUNT de facturas únicas)
+        - total_spent: Suma del total_neto de todas las facturas
+        - total_products_purchased: Suma de la cantidad de productos comprados (total_art de los renglones)
         
         Args:
-            customer_code: Código de cliente (co_cli) en DEMOA
+            customer_code: Código de cliente (co_cli) en Profit Plus
             
         Returns:
             Diccionario con total_orders, total_spent, total_products_purchased
@@ -75,18 +88,26 @@ class UserService:
             conn = source_system_service.get_connection()
             cursor = conn.cursor()
             
+            # Usar subconsultas para evitar que el JOIN multiplique el total_neto
+            # cuando una factura tiene múltiples renglones
+            # Usar RTRIM para normalizar espacios en blanco en co_cli
             query = """
             SELECT 
-                COUNT(DISTINCT f.doc_num) AS total_orders,
-                ISNULL(SUM(f.total_neto), 0) AS total_spent,
-                ISNULL(SUM(fr.total_art), 0) AS total_products_purchased
-            FROM saFacturaVenta f
-            LEFT JOIN saFacturaVentaReng fr ON f.doc_num = fr.doc_num
-            WHERE f.co_cli = %s
-              AND f.anulado = 0
+                (SELECT COUNT(DISTINCT doc_num) 
+                 FROM saFacturaVenta 
+                 WHERE RTRIM(co_cli) = %s AND anulado = 0) AS total_orders,
+                
+                (SELECT ISNULL(SUM(total_neto), 0) 
+                 FROM saFacturaVenta 
+                 WHERE RTRIM(co_cli) = %s AND anulado = 0) AS total_spent,
+                
+                (SELECT ISNULL(SUM(fr.total_art), 0) 
+                 FROM saFacturaVentaReng fr
+                 INNER JOIN saFacturaVenta f ON fr.doc_num = f.doc_num
+                 WHERE RTRIM(f.co_cli) = %s AND f.anulado = 0) AS total_products_purchased
             """
             
-            cursor.execute(query, (customer_code,))
+            cursor.execute(query, (customer_code, customer_code, customer_code))
             result = cursor.fetchone()
             
             cursor.close()
@@ -119,7 +140,7 @@ class UserService:
                 'total_products_purchased': 0
             }
         except Exception as e:
-            logger.error(f"Error obteniendo estadísticas desde source_system para cliente {customer_code}: {e}")
+            logger.error(f"Error obteniendo estadísticas desde source_system para cliente {customer_code}: {e}", exc_info=True)
             return {
                 'total_orders': 0,
                 'total_spent': 0.0,
