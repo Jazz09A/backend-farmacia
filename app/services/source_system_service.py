@@ -570,7 +570,7 @@ class SourceSystemService:
         base_query = f"""
             FROM dbo.saArticulo a
             LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-            -- Stock: Sumar todos los stocks del mismo almacén para el mismo artículo
+            -- Stock: Sumar todos los stocks del mismo almacén para el mismo artículo (solo tipo ACT - stock actual)
             OUTER APPLY (
                 SELECT 
                     RTRIM(sa.co_alma) AS co_alma,
@@ -578,6 +578,7 @@ class SourceSystemService:
                 FROM dbo.saStockAlmacen sa
                 WHERE sa.co_art = a.co_art 
                     AND RTRIM(sa.co_alma) = %s
+                    AND sa.tipo = 'ACT'  -- Solo stock actual
                 GROUP BY sa.co_alma
             ) stock_data
             -- Precio: Obtener el precio más reciente
@@ -699,6 +700,7 @@ class SourceSystemService:
                 FROM dbo.saStockAlmacen sa
                 LEFT JOIN dbo.saAlmacen al ON sa.co_alma = al.co_alma
                 WHERE sa.co_art = %s
+                    AND sa.tipo = 'ACT'  -- Solo stock actual
             """
             cursor.execute(stock_query, (article_code,))
             stock = cursor.fetchall() or []

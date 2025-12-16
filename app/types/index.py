@@ -17,3 +17,14 @@ class OrderStatus(Enum):
     SHIPPED = "shipped"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
+
+class StockType(Enum):
+    """Tipos de stock en saStockAlmacen"""
+    ACT = "ACT"  # Stock actual
+    COM = "COM"  # Stock comprometido
+    LLE = "LLE"  # Stock por llegar
+    DES = "DES"  # Stock por despachar
+    SACT = "SACT"  # Stock actual secundario
+    SCOM = "SCOM"  # Stock comprometido secundario
+    SLLE = "SLLE"  # Stock por llegar secundario
+    SDES = "SDES"  # Stock por despachar secundario

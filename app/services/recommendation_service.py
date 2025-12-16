@@ -140,6 +140,7 @@ class RecommendationService:
                     FROM dbo.saStockAlmacen sa
                     WHERE sa.co_art = a.co_art 
                         AND RTRIM(sa.co_alma) = %s
+                        AND sa.tipo = 'ACT'  -- Solo stock actual
                     GROUP BY sa.co_alma
                 ) stock_data
                 OUTER APPLY (
@@ -288,6 +289,7 @@ class RecommendationService:
                     FROM dbo.saStockAlmacen sa
                     WHERE sa.co_art = a.co_art 
                         AND RTRIM(sa.co_alma) = '001'
+                        AND sa.tipo = 'ACT'  -- Solo stock actual
                     GROUP BY sa.co_alma
                 ) stock_data
                 OUTER APPLY (
@@ -407,6 +409,7 @@ class RecommendationService:
                                 FROM dbo.saStockAlmacen sa
                                 WHERE sa.co_art = a.co_art 
                                     AND RTRIM(sa.co_alma) = %s
+                                    AND sa.tipo = 'ACT'  -- Solo stock actual
                                 GROUP BY sa.co_alma
                             ) stock_data
                             OUTER APPLY (
@@ -474,6 +477,7 @@ class RecommendationService:
                         FROM dbo.saStockAlmacen sa
                         WHERE sa.co_art = a.co_art 
                             AND RTRIM(sa.co_alma) = %s
+                            AND sa.tipo = 'ACT'  -- Solo stock actual
                         GROUP BY sa.co_alma
                     ) stock_data
                     OUTER APPLY (

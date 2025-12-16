@@ -1513,6 +1513,7 @@ class QuoteService:
                     FROM dbo.saStockAlmacen sa
                     WHERE sa.co_art = a.co_art 
                         AND RTRIM(sa.co_alma) = %s
+                        AND sa.tipo = 'ACT'  -- Solo stock actual
                 ) stock_data
                 -- Precio: Obtener el precio más reciente de la lista de precios
                 OUTER APPLY (
