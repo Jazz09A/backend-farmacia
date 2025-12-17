@@ -21,12 +21,15 @@ router = APIRouter()
 def read_dashboard_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    days_filter: int = 7
+    time_range: int = Query(7, ge=1, le=365, description="Número de días para el rango de fechas (1-365)")
 ):
     """
     Retrieve all data for the admin dashboard.
+    
+    Args:
+        time_range: Número de días hacia atrás para calcular las estadísticas (por defecto 7 días)
     """
-    dashboard_data = get_dashboard_data(db, days_filter)
+    dashboard_data = get_dashboard_data(db, days_filter=time_range)
     return dashboard_data
 
 # Endpoints de Order eliminados - Order no se usa con Profit Plus

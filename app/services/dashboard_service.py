@@ -79,12 +79,24 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         start_datetime = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_datetime = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        # Get connection to source system
-        conn = source_system_service.get_connection()
-        cursor = conn.cursor()
+        error_logger.info(
+            f"Dashboard: Date range calculated - Start: {start_datetime.isoformat()}, End: {end_datetime.isoformat()}, Days: {days_filter}"
+        )
         
-        # 2. Basic Stats
-        # Total revenue: SUM(total_neto) from saFacturaVenta (invoices) for non-cancelled invoices
+        # Get connection to source system
+        try:
+            conn = source_system_service.get_connection()
+            cursor = conn.cursor()
+            error_logger.info("Dashboard: Connection to source system established")
+        except Exception as conn_error:
+            error_logger.error(
+                f"Failed to connect to source system: {str(conn_error)}",
+                exc_info=True
+            )
+            raise
+        
+        # 2. Basic Stats - Usando consultas optimizadas
+        # 2.1 Total revenue
         revenue_query = """
         SELECT 
             ISNULL(SUM(total_neto), 0) AS total_revenue
@@ -93,11 +105,21 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
           AND fec_emis <= %s
           AND anulado = 0
         """
-        cursor.execute(revenue_query, (start_datetime, end_datetime))
-        revenue_result = cursor.fetchone()
-        total_revenue = Decimal(str(revenue_result.get('total_revenue', 0) or 0))
+        try:
+            error_logger.info(f"Dashboard: Executing revenue query with dates: {start_datetime} to {end_datetime}")
+            cursor.execute(revenue_query, (start_datetime, end_datetime))
+            revenue_result = cursor.fetchone()
+            if revenue_result is None:
+                error_logger.warning("Dashboard: Revenue query returned None")
+                total_revenue = Decimal('0.00')
+            else:
+                total_revenue = Decimal(str(revenue_result.get('total_revenue', 0) or 0))
+            error_logger.info(f"Dashboard: Total revenue = {total_revenue}")
+        except Exception as query_error:
+            error_logger.error(f"Dashboard: Error executing revenue query: {str(query_error)}", exc_info=True)
+            raise
         
-        # Total orders: COUNT from saCotizacionCliente (quotes)
+        # 2.2 Total orders
         orders_query = """
         SELECT COUNT(DISTINCT doc_num) AS total_orders
         FROM dbo.saCotizacionCliente
@@ -109,8 +131,9 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         cursor.execute(orders_query, (start_datetime, end_datetime))
         orders_result = cursor.fetchone()
         total_orders = orders_result.get('total_orders', 0) or 0
+        error_logger.info(f"Dashboard: Total orders = {total_orders}")
         
-        # 3. New customers from saCliente using fecha_reg
+        # 2.3 New customers
         new_customers_query = """
         SELECT COUNT(DISTINCT co_cli) AS new_customers
         FROM dbo.saCliente
@@ -120,36 +143,135 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         cursor.execute(new_customers_query, (start_datetime, end_datetime))
         new_customers_result = cursor.fetchone()
         new_customers = new_customers_result.get('new_customers', 0) or 0
+        error_logger.info(f"Dashboard: New customers = {new_customers}")
         
-        # Placeholder for conversion rate logic
+        # 2.4 Conversion rate (optimizada con subconsultas para evitar JOIN costoso)
+        # Calcular por separado para mejor rendimiento
         conversion_rate = Decimal('0.00')
+        try:
+            # Contar facturas en el período
+            invoices_count_query = """
+            SELECT COUNT(DISTINCT doc_num) AS invoice_count
+            FROM dbo.saFacturaVenta
+            WHERE fec_emis >= %s
+              AND fec_emis <= %s
+              AND anulado = 0
+            """
+            cursor.execute(invoices_count_query, (start_datetime, end_datetime))
+            invoices_result = cursor.fetchone()
+            invoice_count = invoices_result.get('invoice_count', 0) or 0 if invoices_result else 0
+            
+            # Usar total_orders ya calculado arriba
+            if total_orders > 0:
+                conversion_rate = Decimal(str(invoice_count)) / Decimal(str(total_orders)) * 100
+            error_logger.info(f"Dashboard: Conversion rate = {conversion_rate}% (Invoices: {invoice_count}, Orders: {total_orders})")
+        except Exception as conv_error:
+            error_logger.warning(f"Dashboard: Error calculating conversion rate: {str(conv_error)}")
+            conversion_rate = Decimal('0.00')
         
-        # 4. Discount statistics (EXTENSIBLE - prepared for future implementation)
-        # TODO: When discounts are needed, query from saCotizacionClienteReng.monto_desc
-        # Structure prepared but not implemented yet
-        total_discounts_given = Decimal('0.00')
-        orders_with_discounts = 0
-        discount_usage_percentage = 0.0
-        average_discount_per_order = Decimal('0.00')
+        # 2.5 Discount statistics (optimizadas)
+        # Total discounts given
+        total_discounts_query = """
+        SELECT 
+            ISNULL(SUM(r.monto_desc), 0) AS total_discounts_given
+        FROM dbo.saCotizacionCliente c
+        INNER JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
+        WHERE c.fec_emis >= %s
+          AND c.fec_emis <= %s
+          AND c.anulado = 0
+          AND r.monto_desc > 0
+        """
+        cursor.execute(total_discounts_query, (start_datetime, end_datetime))
+        discounts_result = cursor.fetchone()
+        total_discounts_given = Decimal(str(discounts_result.get('total_discounts_given', 0) or 0))
         
-        # Discount breakdown structure (extensible)
-        discount_breakdown = DiscountBreakdown()
-        # TODO: When implementing discounts, query from saCotizacionClienteReng:
-        # - Group by discount type if available
-        # - Calculate total_amount_by_type from monto_desc
-        # - Use start_datetime and end_datetime for date filtering
-        # Example query structure (not executed):
-        # discount_query = """
-        # SELECT 
-        #     COUNT(DISTINCT c.doc_num) AS orders_with_discounts,
-        #     ISNULL(SUM(r.monto_desc), 0) AS total_discounts
-        # FROM dbo.saCotizacionCliente c
-        # INNER JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
-        # WHERE c.fec_emis >= %s AND c.fec_emis <= %s
-        #   AND c.anulado = 0
-        #   AND r.monto_desc > 0
-        # """
-        # cursor.execute(discount_query, (start_datetime, end_datetime))
+        # Orders with discounts
+        orders_with_discounts_query = """
+        SELECT 
+            COUNT(DISTINCT c.doc_num) AS orders_with_discounts
+        FROM dbo.saCotizacionCliente c
+        INNER JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
+        WHERE c.fec_emis >= %s
+          AND c.fec_emis <= %s
+          AND c.anulado = 0
+          AND r.monto_desc > 0
+        """
+        cursor.execute(orders_with_discounts_query, (start_datetime, end_datetime))
+        orders_discounts_result = cursor.fetchone()
+        orders_with_discounts = orders_discounts_result.get('orders_with_discounts', 0) or 0
+        
+        # Discount usage percentage (calculado en Python usando valores ya obtenidos)
+        if total_orders > 0:
+            discount_usage_percentage = float(orders_with_discounts) / float(total_orders) * 100.0
+        else:
+            discount_usage_percentage = 0.0
+        
+        # Average discount per order
+        avg_discount_query = """
+        SELECT 
+            CASE 
+                WHEN COUNT(DISTINCT c.doc_num) > 0 
+                THEN ISNULL(SUM(r.monto_desc), 0) / 
+                     CAST(COUNT(DISTINCT c.doc_num) AS DECIMAL(10, 2))
+                ELSE 0.00
+            END AS average_discount_per_order
+        FROM dbo.saCotizacionCliente c
+        INNER JOIN dbo.saCotizacionClienteReng r ON c.doc_num = r.doc_num
+        WHERE c.fec_emis >= %s
+          AND c.fec_emis <= %s
+          AND c.anulado = 0
+          AND r.monto_desc > 0
+        """
+        cursor.execute(avg_discount_query, (start_datetime, end_datetime))
+        avg_discount_result = cursor.fetchone()
+        average_discount_per_order = Decimal(str(avg_discount_result.get('average_discount_per_order', 0) or 0))
+        
+        # 2.6 Discount breakdown
+        # Quantity discounts
+        quantity_discounts_query = """
+        SELECT 
+            COUNT(DISTINCT co_desc) AS quantity_discounts
+        FROM dbo.saDescArticulo
+        WHERE (fecha_ini IS NULL OR fecha_ini <= GETDATE())
+          AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
+          AND (hasta1 > 0 OR hasta2 > 0 OR hasta3 > 0 OR hasta4 > 0 OR hasta5 > 0)
+        """
+        cursor.execute(quantity_discounts_query)
+        quantity_discounts_result = cursor.fetchone()
+        quantity_discounts = quantity_discounts_result.get('quantity_discounts', 0) or 0
+        
+        # Flash discounts (no identificados directamente)
+        flash_discounts = 0
+        
+        # Coupon discounts (no identificados directamente)
+        coupon_discounts = 0   
+        
+        # Promotional discounts
+        promotional_discounts_query = """
+        SELECT 
+            COUNT(DISTINCT co_desc) AS promotional_discounts
+        FROM dbo.saDescArticulo
+        WHERE (fecha_ini IS NULL OR fecha_ini <= GETDATE())
+          AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
+        """
+        cursor.execute(promotional_discounts_query)
+        promotional_discounts_result = cursor.fetchone()
+        promotional_discounts = promotional_discounts_result.get('promotional_discounts', 0) or 0
+        
+        # Total amount by type (simplificado - usar total_discounts_given ya calculado)
+        # Esta consulta con múltiples JOINs es muy costosa, usar el valor ya calculado
+        total_amount_by_type = {
+            'promotional': total_discounts_given
+        }
+        # Si se necesita más detalle, se puede calcular después de forma asíncrona
+        
+        discount_breakdown = DiscountBreakdown(
+            quantity_discounts=quantity_discounts,
+            flash_discounts=flash_discounts,
+            coupon_discounts=coupon_discounts,
+            promotional_discounts=promotional_discounts,
+            total_amount_by_type=total_amount_by_type
+        )
         
         stats = DashboardStats(
             total_revenue=total_revenue,
@@ -162,7 +284,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             average_discount_per_order=average_discount_per_order,
         )
         
-        # 5. Order Status Summary combining Cotizaciones, Notas de Despacho y Notas de Entrega
+        # 5. Order Status Summary (optimizado - consultas separadas más rápidas)
         status_counts = {
             'pending': 0,
             'confirmed': 0,
@@ -172,95 +294,122 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             'cancelled': 0
         }
         
-        # 5.1 Cotizaciones (saCotizacionCliente)
-        quotes_status_query = """
-        SELECT 
-            status,
-            anulado,
-            COUNT(DISTINCT doc_num) AS count
-        FROM dbo.saCotizacionCliente
-        WHERE fec_emis >= %s
-          AND fec_emis <= %s
-        GROUP BY status, anulado
-        """
-        cursor.execute(quotes_status_query, (start_datetime, end_datetime))
-        quote_status_results = cursor.fetchall()
-        
-        for row in quote_status_results:
-            status = str(row.get('status', '0')).strip()
-            anulado = row.get('anulado', 0)
-            count = row.get('count', 0) or 0
-            dashboard_status = _map_quote_status_to_dashboard_status(status, anulado)
-            status_counts[dashboard_status] = status_counts.get(dashboard_status, 0) + count
-        
-        # 5.2 Notas de Despacho (saNotaDespachoVenta) -> shipped (status '1')
-        dispatch_status_query = """
-        SELECT 
-            status,
-            anulado,
-            COUNT(DISTINCT doc_num) AS count
-        FROM dbo.saNotaDespachoVenta
-        WHERE fec_emis >= %s
-          AND fec_emis <= %s
-        GROUP BY status, anulado
-        """
-        cursor.execute(dispatch_status_query, (start_datetime, end_datetime))
-        dispatch_status_results = cursor.fetchall()
-        
-        for row in dispatch_status_results:
-            status = str(row.get('status', '0')).strip()
-            anulado = row.get('anulado', 0)
-            count = row.get('count', 0) or 0
+        try:
+            # 5.1 Cotizaciones (más rápido sin UNION ALL)
+            quotes_status_query = """
+            SELECT 
+                CASE 
+                    WHEN anulado = 1 THEN 'cancelled'
+                    WHEN status = '0' THEN 'pending'
+                    WHEN status = '1' THEN 'confirmed'
+                    WHEN status = '2' THEN 'processing'
+                    ELSE 'pending'
+                END AS status_type,
+                COUNT(DISTINCT doc_num) AS count
+            FROM dbo.saCotizacionCliente
+            WHERE fec_emis >= %s
+              AND fec_emis <= %s
+            GROUP BY 
+                CASE 
+                    WHEN anulado = 1 THEN 'cancelled'
+                    WHEN status = '0' THEN 'pending'
+                    WHEN status = '1' THEN 'confirmed'
+                    WHEN status = '2' THEN 'processing'
+                    ELSE 'pending'
+                END
+            """
+            cursor.execute(quotes_status_query, (start_datetime, end_datetime))
+            quotes_status_results = cursor.fetchall()
+            for row in quotes_status_results:
+                status_type = row.get('status_type', '').strip()
+                count = row.get('count', 0) or 0
+                if status_type in status_counts:
+                    status_counts[status_type] = (status_counts.get(status_type, 0) or 0) + count
             
-            if anulado == 1:
-                status_counts['cancelled'] += count
-            elif status == '1':
-                status_counts['shipped'] += count
-            # status '0' (pendiente/no despachado) no suma shipped, ya está cubierto por pending de cotizaciones
-        
-        # 5.3 Notas de Entrega (saNotaEntregaVenta) -> delivered (status '2')
-        delivery_status_query = """
-        SELECT 
-            status,
-            anulado,
-            COUNT(DISTINCT doc_num) AS count
-        FROM dbo.saNotaEntregaVenta
-        WHERE fec_emis >= %s
-          AND fec_emis <= %s
-        GROUP BY status, anulado
-        """
-        cursor.execute(delivery_status_query, (start_datetime, end_datetime))
-        delivery_status_results = cursor.fetchall()
-        
-        for row in delivery_status_results:
-            status = str(row.get('status', '0')).strip()
-            anulado = row.get('anulado', 0)
-            count = row.get('count', 0) or 0
+            # 5.2 Notas de Despacho (shipped) - solo si hay datos recientes
+            try:
+                dispatch_shipped_query = """
+                SELECT COUNT(DISTINCT doc_num) AS count
+                FROM dbo.saNotaDespachoVenta
+                WHERE fec_emis >= %s
+                  AND fec_emis <= %s
+                  AND status = '1'
+                  AND anulado = 0
+                """
+                cursor.execute(dispatch_shipped_query, (start_datetime, end_datetime))
+                shipped_result = cursor.fetchone()
+                if shipped_result:
+                    status_counts['shipped'] = (status_counts.get('shipped', 0) or 0) + (shipped_result.get('count', 0) or 0)
+                
+                dispatch_cancelled_query = """
+                SELECT COUNT(DISTINCT doc_num) AS count
+                FROM dbo.saNotaDespachoVenta
+                WHERE fec_emis >= %s
+                  AND fec_emis <= %s
+                  AND anulado = 1
+                """
+                cursor.execute(dispatch_cancelled_query, (start_datetime, end_datetime))
+                dispatch_cancelled_result = cursor.fetchone()
+                if dispatch_cancelled_result:
+                    status_counts['cancelled'] = (status_counts.get('cancelled', 0) or 0) + (dispatch_cancelled_result.get('count', 0) or 0)
+            except Exception as dispatch_error:
+                error_logger.warning(f"Dashboard: Error querying dispatch notes: {str(dispatch_error)}")
             
-            if anulado == 1:
-                status_counts['cancelled'] += count
-            elif status == '2':
-                status_counts['delivered'] += count
-            # status '0' (en tránsito) se mantiene dentro de processing/pending en función de las cotizaciones
+            # 5.3 Notas de Entrega (delivered) - solo si hay datos recientes
+            try:
+                delivery_delivered_query = """
+                SELECT COUNT(DISTINCT doc_num) AS count
+                FROM dbo.saNotaEntregaVenta
+                WHERE fec_emis >= %s
+                  AND fec_emis <= %s
+                  AND status = '2'
+                  AND anulado = 0
+                """
+                cursor.execute(delivery_delivered_query, (start_datetime, end_datetime))
+                delivered_result = cursor.fetchone()
+                if delivered_result:
+                    status_counts['delivered'] = (status_counts.get('delivered', 0) or 0) + (delivered_result.get('count', 0) or 0)
+                
+                delivery_cancelled_query = """
+                SELECT COUNT(DISTINCT doc_num) AS count
+                FROM dbo.saNotaEntregaVenta
+                WHERE fec_emis >= %s
+                  AND fec_emis <= %s
+                  AND anulado = 1
+                """
+                cursor.execute(delivery_cancelled_query, (start_datetime, end_datetime))
+                delivery_cancelled_result = cursor.fetchone()
+                if delivery_cancelled_result:
+                    status_counts['cancelled'] = (status_counts.get('cancelled', 0) or 0) + (delivery_cancelled_result.get('count', 0) or 0)
+            except Exception as delivery_error:
+                error_logger.warning(f"Dashboard: Error querying delivery notes: {str(delivery_error)}")
+                
+        except Exception as status_error:
+            error_logger.warning(f"Dashboard: Error calculating status summary: {str(status_error)}")
         
         order_status_summary = OrderStatusSummary(
             pending=status_counts['pending'],
             confirmed=status_counts['confirmed'],
             processing=status_counts['processing'],
-            shipped=status_counts['shipped'],  # Always 0 for quotes
-            delivered=status_counts['delivered'],  # Always 0 for quotes
+            shipped=status_counts['shipped'],
+            delivered=status_counts['delivered'],
             cancelled=status_counts['cancelled'],
         )
         
-        # 6. Recent Orders (last 5 quotes) from saCotizacionCliente with customer info
+        # 6. Recent Orders (optimizada)
         recent_orders_query = """
         SELECT TOP 5
-            c.doc_num AS quote_id,
+            c.doc_num AS id,
             ISNULL(cl.cli_des, 'Cliente Desconocido') AS customer_name,
-            c.fec_emis AS emission_date,
+            CONVERT(VARCHAR(10), c.fec_emis, 120) AS date,
             c.total_neto AS total,
-            c.status,
-            c.anulado
+            CASE 
+                WHEN c.anulado = 1 THEN 'cancelled'
+                WHEN c.status = '0' THEN 'pending'
+                WHEN c.status = '1' THEN 'confirmed'
+                WHEN c.status = '2' THEN 'processing'
+                ELSE 'pending'
+            END AS status
         FROM dbo.saCotizacionCliente c
         LEFT JOIN dbo.saCliente cl ON RTRIM(c.co_cli) = RTRIM(cl.co_cli)
         WHERE c.fec_emis >= %s
@@ -272,24 +421,11 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         
         recent_orders = []
         for quote in recent_quotes:
-            quote_id = str(quote.get('quote_id', ''))
+            quote_id = str(quote.get('id', ''))
             customer_name = quote.get('customer_name', 'Cliente Desconocido') or 'Cliente Desconocido'
-            emission_date = quote.get('emission_date')
+            date_str = quote.get('date', '') or start_datetime.strftime("%Y-%m-%d")
             total = Decimal(str(quote.get('total', 0) or 0))
-            status = str(quote.get('status', '0')).strip()
-            anulado = quote.get('anulado', 0)
-            
-            # Format date
-            if emission_date:
-                if isinstance(emission_date, str):
-                    date_str = emission_date[:10]  # Take first 10 chars (YYYY-MM-DD)
-                else:
-                    date_str = emission_date.strftime("%Y-%m-%d")
-            else:
-                date_str = start_datetime.strftime("%Y-%m-%d")
-            
-            # Map status
-            dashboard_status = _map_quote_status_to_dashboard_status(status, anulado)
+            dashboard_status = quote.get('status', 'pending') or 'pending'
             
             recent_orders.append(
                 RecentOrder(
@@ -303,6 +439,12 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         
         cursor.close()
         conn.close()
+        
+        error_logger.info(
+            f"Dashboard: Final results - Revenue: {total_revenue}, Orders: {total_orders}, "
+            f"Customers: {new_customers}, Conversion: {conversion_rate}, "
+            f"Discounts: {total_discounts_given}, Orders with discounts: {orders_with_discounts}"
+        )
         
         perf_logger.info(
             f"Dashboard data calculated successfully from source system",
@@ -332,17 +474,31 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             extra={
                 'days_filter': days_filter,
                 'event': 'dashboard_calculation_error',
-                'user_email': 'admin@farmaplus.com'
+                'user_email': 'admin@farmaplus.com',
+                'error_type': type(e).__name__,
+                'error_message': str(e)
             },
             exc_info=True
         )
-        # Return empty/default data on error
+        # In development, raise to see the error
+        # In production, return empty data
+        import os
+        if os.getenv("ENVIRONMENT", "development") == "development":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error calculating dashboard data: {str(e)}. Check logs for details."
+            )
+        # Return empty/default data on error for production
         return DashboardData(
             stats=DashboardStats(
                 total_revenue=Decimal('0.00'),
                 total_orders=0,
                 new_customers=0,
                 conversion_rate=Decimal('0.00'),
+                total_discounts_given=Decimal('0.00'),
+                orders_with_discounts=0,
+                discount_usage_percentage=0.0,
+                average_discount_per_order=Decimal('0.00'),
             ),
             order_status_summary=OrderStatusSummary(
                 pending=0,

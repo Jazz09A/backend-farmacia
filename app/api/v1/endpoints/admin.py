@@ -79,15 +79,19 @@ logger = get_logger("app")
 # INDEX ADMIN PAGE
 # =============================================================================
 
-@router.get("/", response_model=DashboardData)
+@router.get("/dashboard", response_model=DashboardData)
 async def get_admin_dashboard(
+    time_range: int = Query(7, ge=1, le=365, description="Número de días para el rango de fechas (1-365)"),
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
     """
     Get aggregated data for the admin dashboard.
+    
+    Args:
+        time_range: Número de días hacia atrás para calcular las estadísticas (por defecto 7 días)
     """
-    dashboard_data = dashboard_service.get_dashboard_data(db=db, days_filter=7)
+    dashboard_data = dashboard_service.get_dashboard_data(db=db, days_filter=time_range)
     return dashboard_data
 
 
