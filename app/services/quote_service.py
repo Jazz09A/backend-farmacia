@@ -813,6 +813,9 @@ class QuoteService:
             )
             
             quote_id = f"COT-{doc_num}"
+            
+            # El email se enviará desde el endpoint async
+            # Por ahora, email_sent_at será None y se actualizará en el endpoint si el email se envía exitosamente
             return QuoteCreatedResponse(
                 quote_id=quote_id,
                 profit_plus_id=doc_num,
@@ -822,7 +825,7 @@ class QuoteService:
                 total_tax=str(total_impuestos.quantize(Decimal('0.01'))),
                 total_gross=str(total_neto.quantize(Decimal('0.01'))),
                 expires_at=expires_at_dt.isoformat(),
-                email_sent_at=now.isoformat(),
+                email_sent_at=None,  # Se actualizará en el endpoint después de enviar el email
             )
             
         except Exception as e:

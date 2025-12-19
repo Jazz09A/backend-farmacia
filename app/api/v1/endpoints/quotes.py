@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_active_user
@@ -117,6 +118,78 @@ async def create_quote(
                 "items_count": len(data.items) if data.items else 0,
             },
         )
+        
+        # Enviar email de confirmación (no bloquear si falla)
+        if current_user.email:
+            try:
+                from app.services.email_service import EmailService
+                from app.config.settings import Settings
+                
+                settings = Settings()
+                email_service = EmailService()
+                
+                # Preparar items para el email
+                email_items = []
+                if data.items:
+                    for item in data.items:
+                        email_items.append({
+                            'product_code': item.product_code,
+                            'product_name': item.product_name,  # Se puede mejorar obteniendo el nombre del artículo
+                            'quantity': str(item.quantity),
+                            'unit_price': item.unit_price,
+                            'discount_amount': item.discount_amount,
+                            'tax_amount': item.tax_amount,
+                        })
+                
+                # Contexto para el template
+                customer_name = data.customer.name if data.customer and data.customer.name else current_user.company_name or 'Cliente'
+                
+                # Formatear fechas
+                from datetime import datetime as dt
+                created_at_str = dt.now().strftime('%d/%m/%Y %H:%M')
+                expires_at_str = ''
+                if created.expires_at:
+                    try:
+                        expires_dt = dt.fromisoformat(created.expires_at.replace('Z', '+00:00'))
+                        expires_at_str = expires_dt.strftime('%d/%m/%Y')
+                    except:
+                        expires_at_str = created.expires_at.split('T')[0] if 'T' in created.expires_at else created.expires_at
+                
+                email_context = {
+                    'customer_name': customer_name,
+                    'quote_id': created.quote_id,
+                    'created_at': created_at_str,
+                    'expires_at': expires_at_str,
+                    'currency': created.currency,
+                    'total_net': created.total_net,
+                    'total_tax': created.total_tax,
+                    'total_gross': created.total_gross,
+                    'items': email_items,
+                    'frontend_url': settings.FRONTEND_URL or 'https://farmaplus.com',
+                    'year': datetime.now().year
+                }
+                
+                # Enviar email de forma asíncrona
+                await email_service.send_email(
+                    to_email=current_user.email,
+                    subject=f"Tu Cotización {created.quote_id} ha sido Creada - FarmaPlus",
+                    template_name="quote_created.html",
+                    context=email_context
+                )
+                
+                # Actualizar email_sent_at en la respuesta
+                created.email_sent_at = datetime.now().isoformat()
+                logger.info(f"Email de cotización enviado exitosamente a {current_user.email}")
+                
+            except Exception as email_error:
+                # No fallar la respuesta si el email falla
+                logger.warning(
+                    f"Error enviando email de cotización a {current_user.email}: {str(email_error)}. "
+                    f"La cotización fue creada exitosamente pero el email no se pudo enviar.",
+                    exc_info=True
+                )
+                # email_sent_at permanece como None
+        
         return created
     except HTTPException as e:
         logger.warning(
