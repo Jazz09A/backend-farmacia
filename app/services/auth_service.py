@@ -258,16 +258,33 @@ class AuthService:
     @staticmethod
     async def refresh_access_token(db: Session, refresh_token: str) -> Token:
         """Refresh access token using refresh token."""
+        logger = get_logger("auth")
         try:
+            logger.debug(
+                "Iniciando refresh de token",
+                extra={
+                    "refresh_token_length": len(refresh_token) if refresh_token else 0,
+                    "refresh_token_preview": refresh_token[:30] + "..." if refresh_token and len(refresh_token) > 30 else (refresh_token or "None"),
+                },
+            )
+            
             email = verify_token(refresh_token, "refresh")
+            logger.debug("Token de refresh verificado", extra={"email": email})
+            
             user = db.query(User).filter(User.email == email).first()
             
             if not user or not user.is_active:
+                logger.warning(
+                    "Usuario no válido o inactivo en refresh",
+                    extra={"email": email, "user_exists": user is not None, "is_active": user.is_active if user else False},
+                )
                 raise InvalidCredentialsException("Usuario no válido")
             
             # Create new tokens
             access_token = create_access_token(data={"sub": user.email})
             new_refresh_token = create_refresh_token(data={"sub": user.email})
+            
+            logger.info("Tokens de acceso y refresh generados exitosamente", extra={"email": email})
             
             return Token(
                 access_token=access_token,
@@ -276,7 +293,17 @@ class AuthService:
                 expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
                 role=user.role
             )
-        except Exception:
+        except HTTPException as e:
+            # Re-lanzar HTTPException para mantener el código de estado correcto
+            logger.warning(
+                "HTTPException en refresh_access_token",
+                extra={"status_code": e.status_code, "detail": e.detail},
+            )
+            raise
+        except InvalidCredentialsException:
+            raise
+        except Exception as e:
+            log_error(logger, e, context={"operation": "refresh_access_token"})
             raise InvalidCredentialsException("Token de actualización inválido")
     
     @staticmethod

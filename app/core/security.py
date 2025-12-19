@@ -71,7 +71,11 @@ def verify_token(token: str, token_type: str = "access") -> str:
             "Token con formato inválido",
             extra={
                 "segments_count": len(segments),
-                "token_preview": token[:20] + "..." if len(token) > 20 else token,
+                "token_length": len(token),
+                "token_preview": token[:50] + "..." if len(token) > 50 else token,
+                "token_ends_with": token[-10:] if len(token) > 10 else token,
+                "has_spaces": " " in token,
+                "has_newlines": "\n" in token or "\r" in token,
             },
         )
         raise HTTPException(

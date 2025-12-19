@@ -79,6 +79,22 @@ async def refresh_token(
     """
     Actualizar token de acceso usando token de actualización.
     """
+    logger.info(
+        "Solicitud de refresh token recibida",
+        extra={
+            "refresh_token_length": len(refresh_data.refresh_token) if refresh_data.refresh_token else 0,
+            "refresh_token_preview": refresh_data.refresh_token[:30] + "..." if refresh_data.refresh_token and len(refresh_data.refresh_token) > 30 else (refresh_data.refresh_token or "None"),
+            "has_refresh_token": bool(refresh_data.refresh_token),
+        },
+    )
+    
+    if not refresh_data.refresh_token:
+        logger.warning("Refresh token vacío en solicitud")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token es requerido"
+        )
+    
     return await AuthService.refresh_access_token(db, refresh_data.refresh_token)
 
 @router.get("/me", response_model=UserResponse)
