@@ -53,6 +53,32 @@ def verify_token(token: str, token_type: str = "access") -> str:
         },
     )
     
+    # Validar que el token no esté vacío
+    if not token:
+        logger.warning("Token vacío recibido")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido: token vacío"
+        )
+    
+    # Limpiar espacios en blanco
+    token = token.strip()
+    
+    # Validar formato JWT: debe tener exactamente 3 segmentos separados por puntos
+    segments = token.split(".")
+    if len(segments) != 3:
+        logger.warning(
+            "Token con formato inválido",
+            extra={
+                "segments_count": len(segments),
+                "token_preview": token[:20] + "..." if len(token) > 20 else token,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido: formato incorrecto"
+        )
+    
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         logger.debug(
