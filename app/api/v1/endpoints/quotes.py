@@ -128,18 +128,60 @@ async def create_quote(
                 settings = Settings()
                 email_service = EmailService()
                 
-                # Preparar items para el email
+                # Preparar items para el email - usar datos obtenidos en create_quote (ya están en created.items_data)
                 email_items = []
                 if data.items:
-                    for item in data.items:
-                        email_items.append({
-                            'product_code': item.product_code,
-                            'product_name': item.product_name,  # Se puede mejorar obteniendo el nombre del artículo
-                            'quantity': str(item.quantity),
-                            'unit_price': item.unit_price,
-                            'discount_amount': item.discount_amount,
-                            'tax_amount': item.tax_amount,
-                        })
+                    # Usar los datos que ya obtuvimos en create_quote antes de cerrar la conexión
+                    if created.items_data and len(created.items_data) > 0:
+                        logger.info(f"[EMAIL DEBUG] Usando items_data obtenidos en create_quote: {len(created.items_data)} items")
+                        quote_items_list = created.items_data
+                        
+                        # Mapear items por código de artículo para facilitar la búsqueda
+                        quote_items_map = {item['co_art']: item for item in quote_items_list}
+                        logger.info(f"[EMAIL DEBUG] Mapeando items por código. unit_prices: {[(k, v.get('unit_price', 'N/A')) for k, v in quote_items_map.items()]}")
+                        
+                        # Construir email_items usando los datos ya obtenidos
+                        for item in data.items:
+                            product_code = item.product_code
+                            if product_code in quote_items_map:
+                                quote_item = quote_items_map[product_code]
+                                logger.info(f"[EMAIL DEBUG] Item {product_code} -> unit_price: {quote_item.get('unit_price', 'N/A')}")
+                                email_items.append({
+                                    'product_code': quote_item['co_art'],
+                                    'product_name': quote_item['name'],
+                                    'quantity': quote_item['quantity'],
+                                    'unit_price': quote_item['unit_price'],
+                                    'discount_amount': quote_item['discount_amount'],
+                                    'tax_amount': quote_item['tax_amount'],
+                                })
+                            else:
+                                # Fallback si no se encuentra en los datos obtenidos
+                                logger.warning(f"[EMAIL DEBUG] Item {product_code} no encontrado en items_data, usando fallback")
+                                email_items.append({
+                                    'product_code': product_code,
+                                    'product_name': item.product_name or product_code,
+                                    'quantity': str(item.quantity),
+                                    'unit_price': item.unit_price if item.unit_price and item.unit_price != 'None' else 'N/A',
+                                    'discount_amount': item.discount_amount if item.discount_amount and item.discount_amount != 'None' else '0.00',
+                                    'tax_amount': item.tax_amount if item.tax_amount and item.tax_amount != 'None' else '0.00',
+                                })
+                    else:
+                        # Fallback: usar datos del payload si no hay items_data (no debería pasar normalmente)
+                        logger.warning(f"[EMAIL DEBUG] No hay items_data disponible, usando fallback con data.items")
+                        for item in data.items:
+                            unit_price_fallback = item.unit_price if item.unit_price and item.unit_price != 'None' else 'N/A'
+                            logger.warning(f"[EMAIL DEBUG] Fallback - Item {item.product_code} -> unit_price: {unit_price_fallback}")
+                            email_items.append({
+                                'product_code': item.product_code,
+                                'product_name': item.product_name or item.product_code,
+                                'quantity': str(item.quantity),
+                                'unit_price': unit_price_fallback,
+                                'discount_amount': item.discount_amount if item.discount_amount and item.discount_amount != 'None' else '0.00',
+                                'tax_amount': item.tax_amount if item.tax_amount and item.tax_amount != 'None' else '0.00',
+                            })
+                
+                # Log final de email_items antes de enviar
+                logger.info(f"[EMAIL DEBUG] email_items FINAL antes de enviar: {[{'product_code': item.get('product_code'), 'product_name': item.get('product_name'), 'quantity': item.get('quantity'), 'unit_price': item.get('unit_price')} for item in email_items]}")
                 
                 # Contexto para el template
                 customer_name = data.customer.name if data.customer and data.customer.name else current_user.company_name or 'Cliente'

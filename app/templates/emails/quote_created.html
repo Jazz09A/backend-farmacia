@@ -54,7 +54,7 @@
             letter-spacing: 0.5px;
         }
         .success-icon {
-            background: linear-gradient(135deg, #009FE3, #005A87);
+            background: transparent;
             border-radius: 50%;
             width: 100px;
             height: 100px;
@@ -63,8 +63,8 @@
             align-items: center;
             justify-content: center;
             font-size: 50px;
-            color: white;
-            box-shadow: 0 10px 25px rgba(0, 159, 227, 0.3);
+            color: #005A87;
+            box-shadow: none;
         }
         .content {
             padding: 50px 40px;
@@ -87,14 +87,17 @@
             font-size: 16px;
             color: #555;
             margin-bottom: 20px;
-            text-align: left;
+            text-align: center;
+            max-width: 100%;
         }
         .quote-details {
             background: linear-gradient(135deg, #f8f9fa, #e9ecef);
             border-radius: 12px;
             padding: 30px;
-            margin: 30px 0;
+            margin: 30px auto;
             text-align: left;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .quote-details h3 {
             color: #005A87;
@@ -109,6 +112,8 @@
             justify-content: space-between;
             padding: 12px 0;
             border-bottom: 1px solid #dee2e6;
+            max-width: 500px;
+            margin: 0 auto;
         }
         .detail-row:last-child {
             border-bottom: none;
@@ -132,11 +137,12 @@
         }
         .items-list {
             margin-top: 20px;
-            text-align: left;
+            text-align: center;
         }
         .item-row {
             padding: 10px 0;
             border-bottom: 1px solid #dee2e6;
+            text-align: center;
         }
         .item-row:last-child {
             border-bottom: none;
@@ -145,9 +151,11 @@
             background: #fff3cd;
             border-left: 4px solid #ffc107;
             padding: 20px;
-            margin: 30px 0;
+            margin: 30px auto;
             border-radius: 8px;
-            text-align: left;
+            text-align: center;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         .warning-box strong {
             color: #856404;
@@ -236,14 +244,14 @@
                 </div>
                 {% if items %}
                 <div class="items-list">
-                    <h4 style="color: #005A87; margin-top: 20px; margin-bottom: 15px;">Artículos Cotizados:</h4>
+                    <h4 style="color: #005A87; margin-top: 20px; margin-bottom: 15px; text-align: center;">Artículos Cotizados:</h4>
                     {% for item in items %}
-                    <div class="item-row">
-                        <strong>{{ item.product_name }}</strong><br>
-                        <span style="color: #666; font-size: 14px;">
+                    <div class="item-row" style="text-align: center; padding: 10px 0; border-bottom: 1px solid #dee2e6;">
+                        <strong style="display: block; margin-bottom: 5px; color: #005A87;">{% if item.product_name and item.product_name != 'None' %}{{ item.product_name }}{% else %}{{ item.product_code }}{% endif %}</strong>
+                        <span style="color: #666; font-size: 14px; display: block;">
                             Código: {{ item.product_code }} | 
                             Cantidad: {{ item.quantity }} | 
-                            Precio Unitario: {{ item.unit_price }} {{ currency }}
+                            Precio Unitario: {% if item.unit_price and item.unit_price != 'None' and item.unit_price != 'N/A' and item.unit_price != '0.00' %}{{ item.unit_price }} {{ currency }}{% else %}N/A{% endif %}
                         </span>
                     </div>
                     {% endfor %}
@@ -275,7 +283,7 @@
             <p>Puedes revisar el estado de tu cotización en cualquier momento desde tu cuenta.</p>
             
             <p style="text-align: center;">
-                <a href="{{ frontend_url }}/quotes/{{ quote_id }}" class="button">Ver Mi Cotización</a>
+                <a href="{{ frontend_url }}/profile" class="button">Ver Mi Cotización</a>
             </p>
             
             <p>Si tienes alguna pregunta sobre esta cotización o necesitas realizar algún cambio, 

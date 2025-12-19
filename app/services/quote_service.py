@@ -773,6 +773,57 @@ class QuoteService:
             conn.commit()
             logger.debug(f"[DEBUG] conn.commit() completado - Transacción confirmada")
             
+            # Obtener datos de los items de la cotización para el email ANTES de cerrar la conexión
+            quote_items_for_email = []
+            try:
+                email_cursor = conn.cursor()
+                quote_items_query = """
+                SELECT 
+                    r.reng_num,
+                    RTRIM(r.co_art) AS co_art,
+                    ISNULL(a.art_des, r.des_art) AS art_des,
+                    r.total_art AS quantity,
+                    r.prec_vta AS unit_price,
+                    r.monto_desc AS discount_amount,
+                    r.monto_imp AS tax_amount
+                FROM dbo.saCotizacionClienteReng r
+                LEFT JOIN dbo.saArticulo a ON RTRIM(r.co_art) = RTRIM(a.co_art)
+                WHERE r.doc_num = %s
+                ORDER BY r.reng_num
+                """
+                email_cursor.execute(quote_items_query, (doc_num,))
+                quote_items_data = email_cursor.fetchall()
+                
+                logger.info(f"[EMAIL DEBUG] Obteniendo datos de items desde BD (antes de cerrar conexión): {len(quote_items_data)} items encontrados")
+                
+                for row in quote_items_data:
+                    co_art = (row.get('co_art') or '').strip()
+                    if co_art:
+                        art_des = (row.get('art_des') or '').strip()
+                        unit_price_raw = row.get('unit_price', 0) or 0
+                        quantity = row.get('quantity', 0) or 0
+                        
+                        logger.info(f"[EMAIL DEBUG] Item {co_art} - unit_price RAW desde BD: {unit_price_raw} (tipo: {type(unit_price_raw)})")
+                        
+                        unit_price_formatted = f"{float(unit_price_raw):.2f}" if unit_price_raw else '0.00'
+                        
+                        logger.info(f"[EMAIL DEBUG] Item {co_art} - unit_price FORMATEADO: {unit_price_formatted}")
+                        
+                        quote_items_for_email.append({
+                            'co_art': co_art,
+                            'name': art_des if art_des else co_art,
+                            'unit_price': unit_price_formatted,
+                            'quantity': f"{float(quantity):.2f}" if quantity else '0.00',
+                            'discount_amount': f"{float(row.get('discount_amount', 0) or 0):.2f}",
+                            'tax_amount': f"{float(row.get('tax_amount', 0) or 0):.2f}",
+                        })
+                
+                email_cursor.close()
+                logger.info(f"[EMAIL DEBUG] Datos de items obtenidos para email: {len(quote_items_for_email)} items procesados")
+            except Exception as email_data_error:
+                logger.warning(f"[EMAIL DEBUG] Error obteniendo datos de items para email: {email_data_error}")
+                quote_items_for_email = []
+            
             # Cerrar cursor de la transacción principal
             cursor.close()
             logger.debug(f"[DEBUG] Cursor principal cerrado")
@@ -826,6 +877,7 @@ class QuoteService:
                 total_gross=str(total_neto.quantize(Decimal('0.01'))),
                 expires_at=expires_at_dt.isoformat(),
                 email_sent_at=None,  # Se actualizará en el endpoint después de enviar el email
+                items_data=quote_items_for_email if quote_items_for_email else None,  # Datos de items para el email
             )
             
         except Exception as e:

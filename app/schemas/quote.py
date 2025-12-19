@@ -48,6 +48,7 @@ class QuoteCreatedResponse(BaseModel):
     total_gross: str
     expires_at: Optional[str] = None
     email_sent_at: Optional[str] = None
+    items_data: Optional[List[dict]] = Field(default=None, description="Datos de los items obtenidos de la BD para el email")
 
 
 class QuoteVerifyItemRequest(BaseModel):
