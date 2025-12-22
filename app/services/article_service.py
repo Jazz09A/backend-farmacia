@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional
 from decimal import Decimal
+import json
+import os
+from pathlib import Path
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -28,6 +31,8 @@ class ArticleService:
     def __init__(self):
         self.logger = get_logger("articles")
         self._source_service = source_system_service
+        self._descriptions_cache: Optional[Dict[str, str]] = None
+        self._descriptions_file_path = Path("articles_with_descriptions.json")
     
     def _get_active_flash_offers_by_article_codes(
         self, 
@@ -171,6 +176,43 @@ class ArticleService:
         url = f"{base_url}/api/v1/articles/images/{guid_str}"
         return url
 
+    def _load_descriptions(self) -> Dict[str, str]:
+        """Carga las descripciones desde el archivo JSON y las mantiene en cache."""
+        if self._descriptions_cache is not None:
+            return self._descriptions_cache
+        
+        self._descriptions_cache = {}
+        
+        if not self._descriptions_file_path.exists():
+            self.logger.warning(f"Archivo de descripciones no encontrado: {self._descriptions_file_path}")
+            return self._descriptions_cache
+        
+        try:
+            with open(self._descriptions_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            articles = data.get('articles', [])
+            for article in articles:
+                co_art = (article.get('co_art') or '').strip().upper()
+                description = article.get('description', '').strip()
+                if co_art and description:
+                    self._descriptions_cache[co_art] = description
+            
+            self.logger.info(f"Cargadas {len(self._descriptions_cache)} descripciones desde JSON")
+        except Exception as e:
+            self.logger.error(f"Error al cargar descripciones: {str(e)}")
+        
+        return self._descriptions_cache
+    
+    def _get_description(self, co_art: str) -> Optional[str]:
+        """Obtiene la descripción de un artículo desde el cache."""
+        if not co_art:
+            return None
+        
+        descriptions = self._load_descriptions()
+        normalized_co_art = co_art.strip().upper()
+        return descriptions.get(normalized_co_art)
+    
     @staticmethod
     def _to_decimal(value: Any) -> Optional[Decimal]:
         if value is None:
@@ -243,6 +285,9 @@ class ArticleService:
             if profit_discount_row:
                 profit_discount = self._build_profit_discount_info(profit_discount_row)
             
+            # Obtener descripción desde JSON
+            description = self._get_description(co_art)
+            
             summaries.append(
                 ArticleSummary(
                     co_art=co_art,
@@ -255,6 +300,7 @@ class ArticleService:
                     warehouse_code=warehouse,
                     image_url=image_url,
                     has_image=bool(image_guid_normalized),
+                    description=description,
                     flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
                     profit_discount=profit_discount,
                 )
@@ -344,6 +390,9 @@ class ArticleService:
         if profit_discount_row:
             profit_discount = self._build_profit_discount_info(profit_discount_row)
 
+        # Obtener descripción desde JSON
+        description = self._get_description(co_art)
+
         return ArticleDetail(
             co_art=(header.get("co_art") or "").strip(),
             art_des=header.get("art_des") or "",
@@ -354,6 +403,7 @@ class ArticleService:
             line_code=(header.get("co_lin") or "").strip() or None,
             sub_line_code=(header.get("co_subl") or "").strip() or None,
             presentation=None,  # Campo no disponible en saArticulo
+            description=description,
             additional_data=additional_data,
             prices=prices,
             stock_by_warehouse=stock,

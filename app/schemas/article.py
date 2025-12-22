@@ -71,6 +71,9 @@ class ArticleSummary(BaseModel):
     has_image: bool = Field(
         False, description="Indica si el artículo tiene al menos una imagen"
     )
+    description: Optional[str] = Field(
+        None, description="Descripción extendida del producto"
+    )
     flash_offer: Optional[FlashOfferInfo] = Field(
         None, description="Información de flash offer activa para este artículo"
     )
@@ -95,6 +98,9 @@ class ArticleDetail(BaseModel):
     sub_line_code: Optional[str] = Field(None, description="Código de sub-línea (co_subl)")
     presentation: Optional[str] = Field(
         None, description="Presentación o unidad de empaque (campo adicional)"
+    )
+    description: Optional[str] = Field(
+        None, description="Descripción extendida del producto"
     )
     additional_data: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Datos adicionales relevantes del artículo"
