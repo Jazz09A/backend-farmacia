@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     SOURCE_POOL_TIMEOUT: int = int(os.getenv("SOURCE_POOL_TIMEOUT", "30"))
     SOURCE_POOL_RECYCLE: int = int(os.getenv("SOURCE_POOL_RECYCLE", "300"))
     
+    # Cache TTL Configuration (seconds)
+    CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "True").lower() == "true"
+    CACHE_CATALOG_TTL: int = int(os.getenv("CACHE_CATALOG_TTL", "1800"))  # 30 minutos
+    CACHE_DETAIL_TTL: int = int(os.getenv("CACHE_DETAIL_TTL", "3600"))  # 60 minutos
+    CACHE_STATIC_TTL: int = int(os.getenv("CACHE_STATIC_TTL", "7200"))  # 2 horas
+    CACHE_DEFAULT_TTL: int = int(os.getenv("CACHE_DEFAULT_TTL", "1800"))  # 30 minutos por defecto
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

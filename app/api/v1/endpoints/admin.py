@@ -600,3 +600,175 @@ async def create_users_from_source_system(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al crear usuarios: {str(e)}"
         )
+
+# =============================================================================
+# GESTIÓN DE CACHE
+# =============================================================================
+
+from app.services.cache_service import cache_service
+from pydantic import BaseModel
+
+class CacheStatsResponse(BaseModel):
+    enabled: bool
+    total_entries: int
+    expired_entries: int
+    active_entries: int
+    hits: int
+    misses: int
+    sets: int
+    invalidations: int
+    cleanups: int
+    hit_rate: float
+    total_requests: int
+
+class CacheInvalidateRequest(BaseModel):
+    pattern: Optional[str] = None
+    cache_type: Optional[str] = None  # 'catalog', 'article', 'all'
+
+class CacheInvalidateResponse(BaseModel):
+    success: bool
+    message: str
+    invalidated_count: int
+
+@router.get("/cache/stats", response_model=CacheStatsResponse)
+async def get_cache_stats(
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    📊 **Estadísticas del cache**
+    
+    Obtiene estadísticas detalladas del sistema de cache:
+    - Entradas activas y expiradas
+    - Tasa de aciertos (hit rate)
+    - Operaciones realizadas
+    """
+    stats = cache_service.get_stats()
+    return CacheStatsResponse(**stats)
+
+@router.post("/cache/invalidate", response_model=CacheInvalidateResponse)
+async def invalidate_cache(
+    request: CacheInvalidateRequest,
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🗑️ **Invalidar cache**
+    
+    Invalida entradas del cache según el tipo o patrón especificado.
+    
+    - `cache_type`: 'catalog', 'article', o 'all' para limpiar todo
+    - `pattern`: Patrón personalizado (ej: 'catalog:1:', 'article:ABC123')
+    
+    Si no se especifica ninguno, se limpia todo el cache.
+    """
+    invalidated_count = 0
+    
+    if request.cache_type:
+        if request.cache_type == 'all':
+            invalidated_count = cache_service.clear()
+            message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
+        elif request.cache_type == 'catalog':
+            invalidated_count = cache_service.invalidate_pattern("catalog:")
+            message = f"Cache de catálogo invalidado. {invalidated_count} entradas eliminadas."
+        elif request.cache_type == 'article':
+            invalidated_count = cache_service.invalidate_pattern("article:")
+            message = f"Cache de artículos invalidado. {invalidated_count} entradas eliminadas."
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de cache inválido: {request.cache_type}. Use 'catalog', 'article', o 'all'"
+            )
+    elif request.pattern:
+        invalidated_count = cache_service.invalidate_pattern(request.pattern)
+        message = f"Cache invalidado para patrón '{request.pattern}'. {invalidated_count} entradas eliminadas."
+    else:
+        # Si no se especifica nada, limpiar todo
+        invalidated_count = cache_service.clear()
+        message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
+    
+    logger.info(f"Cache invalidado por {current_user.email}: {message}")
+    
+    return CacheInvalidateResponse(
+        success=True,
+        message=message,
+        invalidated_count=invalidated_count
+    )
+
+@router.delete("/cache/{cache_type}", response_model=CacheInvalidateResponse)
+async def delete_cache_by_type(
+    cache_type: str,
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🗑️ **Eliminar cache por tipo**
+    
+    Elimina todas las entradas de un tipo específico de cache.
+    
+    Tipos disponibles:
+    - `catalog`: Cache del catálogo de artículos
+    - `article`: Cache de detalles de artículos
+    """
+    if cache_type == 'catalog':
+        invalidated_count = cache_service.invalidate_pattern("catalog:")
+        message = f"Cache de catálogo eliminado. {invalidated_count} entradas eliminadas."
+    elif cache_type == 'article':
+        invalidated_count = cache_service.invalidate_pattern("article:")
+        message = f"Cache de artículos eliminado. {invalidated_count} entradas eliminadas."
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Tipo de cache inválido: {cache_type}. Use 'catalog' o 'article'"
+        )
+    
+    logger.info(f"Cache {cache_type} eliminado por {current_user.email}: {message}")
+    
+    return CacheInvalidateResponse(
+        success=True,
+        message=message,
+        invalidated_count=invalidated_count
+    )
+
+@router.post("/cache/cleanup")
+async def cleanup_expired_cache(
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🧹 **Limpiar cache expirado**
+    
+    Elimina todas las entradas expiradas del cache.
+    Útil para liberar memoria sin afectar entradas activas.
+    """
+    cleaned_count = cache_service.cleanup_expired()
+    
+    logger.info(f"Limpieza de cache expirado por {current_user.email}: {cleaned_count} entradas eliminadas")
+    
+    return {
+        "success": True,
+        "message": f"Limpieza completada. {cleaned_count} entradas expiradas eliminadas.",
+        "cleaned_count": cleaned_count
+    }
+
+@router.post("/cache/toggle")
+async def toggle_cache(
+    enable: bool = Query(..., description="True para habilitar, False para deshabilitar"),
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🔄 **Habilitar/Deshabilitar cache**
+    
+    Habilita o deshabilita el sistema de cache globalmente.
+    Cuando está deshabilitado, todas las operaciones de cache se ignoran.
+    """
+    if enable:
+        cache_service.enable()
+        message = "Cache habilitado"
+    else:
+        cache_service.disable()
+        message = "Cache deshabilitado"
+    
+    logger.info(f"Cache {message.lower()} por {current_user.email}")
+    
+    return {
+        "success": True,
+        "message": message,
+        "enabled": cache_service._enabled
+    }

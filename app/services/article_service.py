@@ -21,6 +21,7 @@ from app.schemas.article import (
 from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
 from app.models.promotion import FlashOffer, DiscountType
 from app.services.source_system_service import source_system_service
+from app.services.cache_service import cache_service
 from app.utils.timezone import get_ve_now
 
 from app.config.settings import Settings
@@ -238,7 +239,34 @@ class ArticleService:
         warehouse_code: str = "001",
         db: Optional[Session] = None,
     ) -> ArticleListResponse:
-        """Obtiene el catálogo paginado directamente desde Profit Plus."""
+        """Obtiene el catálogo paginado directamente desde Profit Plus con cache."""
+        # Generar clave de cache única basada en todos los parámetros
+        cache_key = cache_service._generate_key(
+            "catalog",
+            page=page,
+            limit=limit,
+            search=search,
+            line_code=line_code,
+            category_code=category_code,
+            min_price=str(min_price) if min_price is not None else None,
+            max_price=str(max_price) if max_price is not None else None,
+            sort_by=sort_by,
+            price_code=price_code,
+            warehouse_code=warehouse_code,
+        )
+        
+        # Intentar obtener del cache
+        cached_response = cache_service.get(cache_key)
+        if cached_response is not None:
+            self.logger.debug(f"Cache hit para catálogo: {cache_key}")
+            print(f"✅ CACHE HIT - Catálogo encontrado en cache: {cache_key}")
+            print(f"   Productos cacheados: {cached_response.get('total', 0)} artículos en página {cached_response.get('page', 1)}")
+            # Convertir el dict de vuelta a ArticleListResponse
+            return ArticleListResponse(**cached_response)
+        
+        self.logger.debug(f"Cache miss para catálogo: {cache_key}")
+        print(f"❌ CACHE MISS - Catálogo no encontrado en cache: {cache_key}")
+        
         result = self._source_service.get_articles_catalog(
             page=page,
             limit=limit,
@@ -324,7 +352,7 @@ class ArticleService:
         filters_applied["price_code"] = price_code
         filters_applied["warehouse_code"] = warehouse_code
 
-        return ArticleListResponse(
+        response = ArticleListResponse(
             articles=summaries,
             total=total,
             page=page,
@@ -334,10 +362,37 @@ class ArticleService:
             has_prev=page > 1,
             filters_applied=filters_applied,
         )
+        
+        # Almacenar en cache (usar model_dump para Pydantic v2 o dict() para v1)
+        try:
+            cache_data = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+            cache_service.set(cache_key, cache_data)
+            print(f"💾 CACHE SET - Catálogo almacenado en cache: {cache_key}")
+            print(f"   Productos almacenados: {response.total} artículos en página {response.page}")
+        except Exception as e:
+            self.logger.warning(f"Error al almacenar en cache: {e}")
+        
+        return response
 
     def get_article_detail(self, co_art: str, db: Optional[Session] = None) -> ArticleDetail:
-        """Obtiene el detalle de un artículo y lo transforma a schema."""
-        detail = self._source_service.get_article_detail(co_art)
+        """Obtiene el detalle de un artículo y lo transforma a schema con cache."""
+        # Normalizar código de artículo
+        normalized_co_art = (co_art or "").strip().upper()
+        
+        # Generar clave de cache
+        cache_key = cache_service._generate_key("article", normalized_co_art)
+        
+        # Intentar obtener del cache
+        cached_response = cache_service.get(cache_key)
+        if cached_response is not None:
+            self.logger.debug(f"Cache hit para detalle de artículo: {normalized_co_art}")
+            print(f"✅ CACHE HIT - Detalle de artículo encontrado en cache: {normalized_co_art}")
+            return ArticleDetail(**cached_response)
+        
+        self.logger.debug(f"Cache miss para detalle de artículo: {normalized_co_art}")
+        print(f"❌ CACHE MISS - Detalle de artículo no encontrado en cache: {normalized_co_art}")
+        
+        detail = self._source_service.get_article_detail(normalized_co_art)
         if not detail:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -391,9 +446,9 @@ class ArticleService:
             profit_discount = self._build_profit_discount_info(profit_discount_row)
 
         # Obtener descripción desde JSON
-        description = self._get_description(co_art)
+        description = self._get_description(normalized_co_art)
 
-        return ArticleDetail(
+        response = ArticleDetail(
             co_art=(header.get("co_art") or "").strip(),
             art_des=header.get("art_des") or "",
             modelo=(header.get("modelo") or "").strip() if header.get("modelo") else None,
@@ -411,6 +466,16 @@ class ArticleService:
             flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
             profit_discount=profit_discount,
         )
+        
+        # Almacenar en cache
+        try:
+            cache_data = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+            cache_service.set(cache_key, cache_data)
+            print(f"💾 CACHE SET - Detalle de artículo almacenado en cache: {normalized_co_art}")
+        except Exception as e:
+            self.logger.warning(f"Error al almacenar detalle en cache: {e}")
+        
+        return response
 
     def upload_image(
         self,
@@ -441,6 +506,14 @@ class ArticleService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),
             )
+        
+        # Invalidar cache del artículo ya que cambió su información de imágenes
+        normalized_co_art = (co_art or "").strip().upper()
+        cache_key = cache_service._generate_key("article", normalized_co_art)
+        cache_service.invalidate(cache_key)
+        # También invalidar cualquier catálogo que pueda incluir este artículo
+        cache_service.invalidate_pattern("catalog:")
+        self.logger.info(f"Cache invalidado para artículo {normalized_co_art} después de subir imagen")
 
         return ImageUploadResponse(
             message="Imagen subida correctamente",
