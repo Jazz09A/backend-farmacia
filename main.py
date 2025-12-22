@@ -222,6 +222,27 @@ async def health_check():
         "success": True
     }
 
+@app.get("/health/db")
+async def health_check_database():
+    """
+    Health check detallado incluyendo estado del pool de conexiones de SourceSystem.
+    Útil para monitoreo y debugging de problemas de conexión.
+    """
+    from app.services.source_system_service import source_system_service
+    
+    try:
+        source_health = source_system_service.health_check()
+    except Exception as e:
+        source_health = {"status": "error", "error": str(e)}
+    
+    return {
+        "status": "healthy" if source_health.get("status") == "healthy" else "degraded",
+        "timestamp": time.time(),
+        "version": settings.VERSION,
+        "source_system": source_health,
+        "success": True
+    }
+
 @app.get("/api/v1/info")
 async def api_info():
     return {

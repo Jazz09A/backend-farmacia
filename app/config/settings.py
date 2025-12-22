@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     SOURCE_SYSTEM_USER: Optional[str] = os.getenv("SOURCE_SYSTEM_USER", None)
     SOURCE_SYSTEM_PASSWORD: Optional[str] = os.getenv("SOURCE_SYSTEM_PASSWORD", None)
     
+    # SourceSystem Connection Pool Configuration
+    SOURCE_POOL_SIZE: int = int(os.getenv("SOURCE_POOL_SIZE", "15"))
+    SOURCE_MAX_OVERFLOW: int = int(os.getenv("SOURCE_MAX_OVERFLOW", "10"))
+    SOURCE_POOL_TIMEOUT: int = int(os.getenv("SOURCE_POOL_TIMEOUT", "30"))
+    SOURCE_POOL_RECYCLE: int = int(os.getenv("SOURCE_POOL_RECYCLE", "300"))
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

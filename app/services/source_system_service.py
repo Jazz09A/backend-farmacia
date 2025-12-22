@@ -1,158 +1,446 @@
 import pymssql
-from typing import List, Optional, Dict, Any, Tuple
+import time
+from typing import List, Optional, Dict, Any, Tuple, Generator
 from uuid import uuid4
 from decimal import Decimal, InvalidOperation
-from queue import Queue, Empty
-from threading import Lock
+from queue import Queue, Empty, Full
+from threading import Lock, RLock
+from contextlib import contextmanager
 from app.config.settings import Settings
 from app.config.logging_config import get_logger
 
 settings = Settings()
-class SourceSystemService:
-    """Servicio para conectar y consultar la base de datos SourceSystem"""
+
+
+class ConnectionPool:
+    """
+    Pool de conexiones thread-safe mejorado para pymssql.
     
-    # Pool de conexiones compartido (clase-nivel)
-    _connection_pool: Queue = None
-    _pool_lock = Lock()
-    _pool_size = 5  # Máximo de conexiones en el pool
-    _pool_initialized = False
+    Características:
+    - Context manager para uso seguro (with statement)
+    - Overflow controlado para picos de tráfico
+    - Recycle de conexiones viejas
+    - Métricas del pool
+    - Timeout configurable
+    - Limpieza automática de transacciones
+    """
+    
+    def __init__(
+        self,
+        connect_func,
+        pool_size: int = 15,
+        max_overflow: int = 10,
+        timeout: int = 30,
+        recycle: int = 300,
+        logger=None
+    ):
+        self._connect_func = connect_func
+        self._pool_size = pool_size
+        self._max_overflow = max_overflow
+        self._timeout = timeout
+        self._recycle = recycle
+        self._logger = logger
+        
+        self._pool = Queue(maxsize=pool_size)
+        self._overflow_count = 0
+        self._lock = RLock()
+        self._connection_times = {}  # Tracking para recycle
+        self._total_created = 0
+        self._total_recycled = 0
+        self._total_reused = 0
+        
+        # Lazy initialization
+        self._initialized = False
+    
+    def _lazy_init(self):
+        """Inicialización lazy del pool con conexiones iniciales."""
+        if self._initialized:
+            return
+        with self._lock:
+            if self._initialized:
+                return
+            # Pre-crear 3 conexiones iniciales
+            initial_count = min(3, self._pool_size)
+            for _ in range(initial_count):
+                try:
+                    conn = self._create_connection()
+                    self._pool.put_nowait(conn)
+                except Exception as e:
+                    if self._logger:
+                        self._logger.warning(f"Error pre-creando conexión: {e}")
+            self._initialized = True
+            if self._logger:
+                self._logger.info(
+                    f"ConnectionPool inicializado: pool_size={self._pool_size}, "
+                    f"max_overflow={self._max_overflow}, timeout={self._timeout}s, "
+                    f"recycle={self._recycle}s, conexiones_iniciales={initial_count}"
+                )
+    
+    def _create_connection(self):
+        """Crea una nueva conexión física."""
+        conn = self._connect_func()
+        conn_id = id(conn)
+        self._connection_times[conn_id] = time.time()
+        self._total_created += 1
+        if self._logger:
+            self._logger.debug(f"Nueva conexión creada (total creadas: {self._total_created})")
+        return conn
+    
+    def _is_connection_valid(self, conn) -> bool:
+        """Verifica si la conexión está viva y no expirada."""
+        conn_id = id(conn)
+        
+        # Verificar tiempo de vida (recycle)
+        created_at = self._connection_times.get(conn_id, 0)
+        age = time.time() - created_at
+        if age > self._recycle:
+            if self._logger:
+                self._logger.debug(f"Conexión expirada (edad: {age:.0f}s > {self._recycle}s)")
+            self._total_recycled += 1
+            return False
+        
+        # Ping a la conexión
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 AS ping")
+            cursor.fetchone()
+            cursor.close()
+            return True
+        except Exception as e:
+            if self._logger:
+                self._logger.debug(f"Conexión muerta (ping falló): {e}")
+            return False
+    
+    def _close_connection(self, conn):
+        """Cierra una conexión de forma segura."""
+        conn_id = id(conn)
+        self._connection_times.pop(conn_id, None)
+        try:
+            conn.close()
+        except Exception:
+            pass
+    
+    def _clean_transaction(self, conn):
+        """Limpia transacciones pendientes de una conexión."""
+        try:
+            cursor = conn.cursor()
+            cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+            cursor.close()
+        except Exception:
+            pass
+    
+    def acquire(self, timeout: int = None) -> pymssql.Connection:
+        """
+        Obtiene una conexión del pool.
+        
+        Args:
+            timeout: Tiempo máximo de espera (usa el default del pool si no se especifica)
+            
+        Returns:
+            Conexión pymssql lista para usar
+            
+        Raises:
+            TimeoutError: Si no hay conexión disponible en el tiempo especificado
+        """
+        self._lazy_init()
+        timeout = timeout or self._timeout
+        
+        # 1. Intentar obtener del pool (inmediato)
+        try:
+            conn = self._pool.get_nowait()
+            if self._is_connection_valid(conn):
+                self._total_reused += 1
+                return conn
+            # Conexión inválida, cerrar
+            self._close_connection(conn)
+        except Empty:
+            pass
+        
+        # 2. Crear nueva si hay espacio en overflow
+        with self._lock:
+            if self._overflow_count < self._max_overflow:
+                self._overflow_count += 1
+                try:
+                    conn = self._create_connection()
+                    if self._logger:
+                        self._logger.debug(
+                            f"Conexión overflow creada ({self._overflow_count}/{self._max_overflow})"
+                        )
+                    return conn
+                except Exception as e:
+                    self._overflow_count -= 1
+                    if self._logger:
+                        self._logger.error(f"Error creando conexión overflow: {e}")
+                    raise
+        
+        # 3. Esperar por una conexión disponible
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                conn = self._pool.get(timeout=1)
+                if self._is_connection_valid(conn):
+                    self._total_reused += 1
+                    return conn
+                self._close_connection(conn)
+            except Empty:
+                continue
+        
+        # Timeout
+        stats = self.get_stats()
+        raise TimeoutError(
+            f"No se pudo obtener conexión en {timeout}s. "
+            f"Pool: {stats['available']}/{stats['pool_size']}, "
+            f"Overflow: {stats['overflow_current']}/{stats['overflow_max']}, "
+            f"En uso: {stats['in_use']}"
+        )
+    
+    def release(self, conn):
+        """Devuelve una conexión al pool."""
+        if conn is None:
+            return
+        
+        # Limpiar transacciones pendientes antes de devolver
+        self._clean_transaction(conn)
+        
+        # Verificar si la conexión sigue válida
+        if not self._is_connection_valid(conn):
+            self._close_connection(conn)
+            with self._lock:
+                if self._overflow_count > 0:
+                    self._overflow_count -= 1
+            return
+        
+        # Intentar devolver al pool
+        with self._lock:
+            try:
+                self._pool.put_nowait(conn)
+            except Full:
+                # Pool lleno (fue una conexión overflow)
+                self._close_connection(conn)
+                self._overflow_count = max(0, self._overflow_count - 1)
+    
+    @contextmanager
+    def connection(self) -> Generator[pymssql.Connection, None, None]:
+        """
+        Context manager para uso seguro de conexiones.
+        
+        Usage:
+            with pool.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT ...")
+                # La conexión se devuelve automáticamente al salir
+        """
+        conn = self.acquire()
+        try:
+            yield conn
+        finally:
+            self.release(conn)
+    
+    def get_stats(self) -> dict:
+        """Obtiene estadísticas del pool."""
+        available = self._pool.qsize()
+        return {
+            "pool_size": self._pool_size,
+            "available": available,
+            "overflow_current": self._overflow_count,
+            "overflow_max": self._max_overflow,
+            "total_created": self._total_created,
+            "total_recycled": self._total_recycled,
+            "total_reused": self._total_reused,
+            "in_use": self._pool_size - available + self._overflow_count,
+        }
+    
+    def dispose(self):
+        """Cierra todas las conexiones del pool."""
+        while not self._pool.empty():
+            try:
+                conn = self._pool.get_nowait()
+                self._close_connection(conn)
+            except Empty:
+                break
+        if self._logger:
+            self._logger.info("ConnectionPool cerrado")
+
+
+class SourceSystemService:
+    """
+    Servicio para conectar y consultar la base de datos SourceSystem (SQL Server).
+    
+    Implementa patrón Singleton con pool de conexiones mejorado.
+    """
+    
+    _instance = None
+    _instance_lock = Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self):
+        # Evitar re-inicialización del singleton
+        if self._initialized:
+            return
+            
         self.logger = get_logger("source_system")
+        
         # Limpiar espacios en blanco de todos los parámetros
         self.server = settings.SOURCE_SYSTEM_SERVER.strip() if settings.SOURCE_SYSTEM_SERVER else None
         self.port = settings.SOURCE_SYSTEM_PORT
         self.database = settings.SOURCE_SYSTEM_DATABASE.strip() if settings.SOURCE_SYSTEM_DATABASE else None
-        # Limpiar espacios en blanco de usuario y contraseña para evitar errores de autenticación
-        # NOTA: El usuario puede tener guion bajo al final si es parte del nombre real (ej: alvarobbsita_)
         self.user = settings.SOURCE_SYSTEM_USER.strip() if settings.SOURCE_SYSTEM_USER else None
         self.password = settings.SOURCE_SYSTEM_PASSWORD.strip() if settings.SOURCE_SYSTEM_PASSWORD else None
         
-        # Inicializar pool si no está inicializado
-        self._init_pool()
+        # Configuración del pool desde settings
+        pool_size = getattr(settings, 'SOURCE_POOL_SIZE', 15)
+        max_overflow = getattr(settings, 'SOURCE_MAX_OVERFLOW', 10)
+        pool_timeout = getattr(settings, 'SOURCE_POOL_TIMEOUT', 30)
+        pool_recycle = getattr(settings, 'SOURCE_POOL_RECYCLE', 300)
+        
+        # Crear pool de conexiones mejorado
+        self._pool = ConnectionPool(
+            connect_func=self._create_raw_connection,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            timeout=pool_timeout,
+            recycle=pool_recycle,
+            logger=self.logger
+        )
+        
+        self._initialized = True
         
         if self.user:
-            self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: {self.user[:3]}***")
+            self.logger.info(
+                f"SourceSystemService inicializado - Server: {self.server}, "
+                f"DB: {self.database}, User: {self.user[:3]}***, "
+                f"Pool: {pool_size}+{max_overflow}"
+            )
         else:
-            self.logger.info(f"SourceSystem configurado - Server: {self.server}, DB: {self.database}, User: (sin autenticación)")
+            self.logger.info(
+                f"SourceSystemService inicializado - Server: {self.server}, "
+                f"DB: {self.database}, User: (sin auth), "
+                f"Pool: {pool_size}+{max_overflow}"
+            )
     
-    def _init_pool(self):
-        """Inicializa el pool de conexiones si no está inicializado"""
-        with SourceSystemService._pool_lock:
-            if not SourceSystemService._pool_initialized:
-                SourceSystemService._connection_pool = Queue(maxsize=self._pool_size)
-                SourceSystemService._pool_initialized = True
-                self.logger.info(f"Pool de conexiones inicializado (tamaño máximo: {self._pool_size})")
+    def _create_raw_connection(self):
+        """Crea una conexión raw a SQL Server."""
+        if not self.server:
+            raise ValueError("SOURCE_SYSTEM_SERVER no está configurado")
+        if not self.database:
+            raise ValueError("SOURCE_SYSTEM_DATABASE no está configurado")
+        
+        connect_kwargs = {
+            "server": self.server,
+            "port": self.port,
+            "database": self.database,
+            "as_dict": True,
+            "login_timeout": 30,
+            "timeout": 90,
+        }
+        
+        if self.user and self.password:
+            connect_kwargs["user"] = self.user
+            connect_kwargs["password"] = self.password
+        
+        return pymssql.connect(**connect_kwargs)
+    
+    # =========================================================================
+    # Context Manager (NUEVO - Uso recomendado)
+    # =========================================================================
+    
+    @contextmanager
+    def connection(self) -> Generator[pymssql.Connection, None, None]:
+        """
+        Context manager para obtener conexión de forma segura.
+        
+        La conexión se devuelve automáticamente al pool al salir del bloque,
+        incluso si hay errores.
+        
+        Usage:
+            with source_system_service.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT ...")
+                results = cursor.fetchall()
+                cursor.close()
+            # Conexión devuelta automáticamente aquí
+        """
+        with self._pool.connection() as conn:
+            yield conn
+    
+    # =========================================================================
+    # Métodos legacy (compatibilidad con código existente)
+    # =========================================================================
     
     def get_pooled_connection(self):
         """
-        Obtiene una conexión del pool o crea una nueva.
-        La conexión debe ser devuelta al pool con return_connection().
+        [LEGACY] Obtiene conexión del pool.
+        
+        IMPORTANTE: Debes llamar return_connection() cuando termines.
+        Preferir usar connection() con context manager.
         """
-        try:
-            # Intentar obtener una conexión del pool (sin esperar)
-            conn = SourceSystemService._connection_pool.get_nowait()
-            # Verificar si la conexión sigue viva
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT 1 AS test")
-                cursor.fetchone()
-                cursor.close()
-                self.logger.debug("Conexión reutilizada del pool")
-                return conn
-            except Exception:
-                # Conexión muerta, cerrarla y crear una nueva
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                self.logger.debug("Conexión del pool estaba muerta, creando nueva")
-                return self._create_connection()
-        except Empty:
-            # Pool vacío, crear nueva conexión
-            self.logger.debug("Pool vacío, creando nueva conexión")
-            return self._create_connection()
+        return self._pool.acquire()
     
     def return_connection(self, conn):
-        """Devuelve una conexión al pool para reutilizarla"""
-        if conn is None:
-            return
-        try:
-            # Intentar poner la conexión en el pool
-            SourceSystemService._connection_pool.put_nowait(conn)
-            self.logger.debug("Conexión devuelta al pool")
-        except Exception:
-            # Pool lleno, cerrar la conexión
-            try:
-                conn.close()
-                self.logger.debug("Pool lleno, conexión cerrada")
-            except Exception:
-                pass
+        """[LEGACY] Devuelve conexión al pool."""
+        self._pool.release(conn)
     
-    def _create_connection(self):
-        """Crea una nueva conexión a la base de datos"""
-        return self.get_connection()
-
     def get_connection(self):
+        """
+        [LEGACY] Crea una nueva conexión.
+        
+        NOTA: Este método ahora usa el pool para mejor rendimiento.
+        """
+        return self._pool.acquire()
+    
+    # =========================================================================
+    # Health Check y Métricas
+    # =========================================================================
+    
+    def health_check(self) -> dict:
+        """
+        Verifica salud del servicio y retorna métricas del pool.
+        
+        Returns:
+            Dict con status y estadísticas del pool
+        """
         try:
-            # Validar que los parámetros básicos estén configurados
-            if not self.server:
-                raise ValueError("SOURCE_SYSTEM_SERVER no está configurado")
-            if not self.database:
-                raise ValueError("SOURCE_SYSTEM_DATABASE no está configurado")
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 AS ping, GETDATE() AS server_time")
+                result = cursor.fetchone()
+                cursor.close()
             
-            # Preparar parámetros de conexión
-            # El servidor puede incluir instancia (ej: sql.bsite.net\MSSQL2016)
-            server_clean = self.server.strip() if isinstance(self.server, str) else self.server
-            database_clean = self.database.strip() if isinstance(self.database, str) else self.database
-            self.logger.debug(
-                "Parámetros de conexión depurados",
-                extra={
-                    "server": server_clean,
-                    "database": database_clean,
-                    "port": self.port,
-                },
-            )
-            connect_kwargs = {
-                "server": server_clean,
-                "port": self.port,
-                "database": database_clean,
-                "as_dict": True,
-                "login_timeout": 30,  # Segundos para establecer conexión
-                "timeout": 90,        # Segundos para queries (aumentado para tablas sin índices)
+            stats = self._pool.get_stats()
+            return {
+                "status": "healthy",
+                "server_time": str(result.get('server_time')) if result else None,
+                **stats
             }
-            
-            # Solo agregar credenciales si están configuradas
-            # Asegurar que se limpien espacios en blanco (pero mantener guiones bajos si son parte del nombre)
-            if self.user and self.password:
-                user_clean = self.user.strip() if isinstance(self.user, str) else self.user
-                password_clean = self.password.strip() if isinstance(self.password, str) else self.password
-                
-                if not user_clean or not password_clean:
-                    self.logger.warning("Usuario o contraseña están vacíos después de limpiar espacios")
-                else:
-                    connect_kwargs["user"] = user_clean
-                    connect_kwargs["password"] = password_clean
-                    # Log del usuario completo para debugging (solo en modo debug)
-                    self.logger.debug(f"Usuario de conexión: '{user_clean}' (longitud: {len(user_clean)})")
-            
-            # Log de parámetros de conexión (sin contraseña)
-            self.logger.info(f"Conectando a SourceSystem: {server_clean}:{self.port}/{database_clean}")
-            self.logger.debug(f"Parámetros de conexión: {connect_kwargs}")
-            conn = pymssql.connect(**connect_kwargs)
-            self.logger.info("Conexión a SourceSystem establecida exitosamente")
-            return conn
         except Exception as e:
-            error_msg = str(e)
-            self.logger.error(f"Error conectando a SourceSystem: {error_msg}")
-            
-            # Proporcionar información adicional para debugging
-            if "18456" in error_msg:
-                self.logger.error("Error 18456: Fallo de autenticación. Verificar usuario y contraseña.")
-            if "20002" in error_msg:
-                self.logger.error("Error 20002: No se pudo conectar al servidor. Verificar conectividad de red.")
-
-            raise
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+                **self._pool.get_stats()
+            }
+    
+    def get_pool_stats(self) -> dict:
+        """Obtiene estadísticas del pool de conexiones."""
+        return self._pool.get_stats()
+    
+    def dispose(self):
+        """Cierra todas las conexiones del pool."""
+        self._pool.dispose()
+    
+    # =========================================================================
+    # Método interno para crear conexiones (usado por el pool)
+    # =========================================================================
+    
+    # =========================================================================
+    # Métodos de Clientes
+    # =========================================================================
 
     def get_all_customers(
         self,
@@ -181,7 +469,7 @@ class SourceSystemService:
                 inactivo AS inactive,
                 juridico AS is_juridico,
                 fecha_reg AS registration_date
-            FROM saCliente
+            FROM saCliente WITH (NOLOCK)
             WHERE 1=1
             """
 
@@ -212,7 +500,10 @@ class SourceSystemService:
             cursor.close()
             return customers
         except Exception as e:
-            self.logger.error(f"Error obteniendo clientes de SourceSystem: {str(e)}")
+            self.logger.error(
+                f"Error obteniendo clientes | include_inactive={include_inactive} | "
+                f"only_with_email={only_with_email} | search={search} | error={e}"
+            )
             raise
         finally:
             if conn:
@@ -235,7 +526,7 @@ class SourceSystemService:
 
             query = """
             SELECT COUNT(*) AS total
-            FROM saCliente
+            FROM saCliente WITH (NOLOCK)
             WHERE 1=1
             """
 
@@ -263,7 +554,10 @@ class SourceSystemService:
             cursor.close()
             return total
         except Exception as e:
-            self.logger.error(f"Error contando clientes de SourceSystem: {str(e)}")
+            self.logger.error(
+                f"Error contando clientes | include_inactive={include_inactive} | "
+                f"only_with_email={only_with_email} | search={search} | error={e}"
+            )
             raise
         finally:
             if conn:
@@ -288,7 +582,7 @@ class SourceSystemService:
                 inactivo AS inactive,
                 juridico AS is_juridico,
                 fecha_reg AS registration_date
-            FROM saCliente
+            FROM saCliente WITH (NOLOCK)
             WHERE co_cli = %s
             """
             cursor.execute(query, (customer_code,))
@@ -296,7 +590,7 @@ class SourceSystemService:
             cursor.close()
             return customer
         except Exception as e:
-            self.logger.error(f"Error obteniendo cliente {customer_code}: {str(e)}")
+            self.logger.error(f"Error obteniendo cliente | code={customer_code} | error={e}")
             raise
         finally:
             if conn:
@@ -320,7 +614,7 @@ class SourceSystemService:
                 inactivo AS inactive,
                 juridico AS is_juridico,
                 fecha_reg AS registration_date
-            FROM saCliente
+            FROM saCliente WITH (NOLOCK)
             WHERE email = %s OR email_alterno = %s
             """
             cursor.execute(query, (email, email))
@@ -328,7 +622,7 @@ class SourceSystemService:
             cursor.close()
             return customer
         except Exception as e:
-            self.logger.error(f"Error obteniendo cliente por email {email}: {str(e)}")
+            self.logger.error(f"Error obteniendo cliente | email={email} | error={e}")
             raise
         finally:
             if conn:
@@ -451,7 +745,7 @@ class SourceSystemService:
                 RTRIM(zip) AS postal_code,
                 RTRIM(telefonos) AS phones,
                 RTRIM(cli_des) AS customer_name
-            FROM dbo.saCliente
+            FROM dbo.saCliente WITH (NOLOCK)
             WHERE RTRIM(co_cli) = %s
             """
             cursor.execute(query, (customer_code.strip(),))
@@ -567,15 +861,16 @@ class SourceSystemService:
         }
         order_by = sort_mapping.get(sort_by, "a.art_des ASC")
 
+        # NOLOCK en todas las tablas para evitar bloqueos entre lecturas concurrentes
         base_query = f"""
-            FROM dbo.saArticulo a
-            LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+            FROM dbo.saArticulo a WITH (NOLOCK)
+            LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
             -- Stock: Sumar todos los stocks del mismo almacén para el mismo artículo (solo tipo ACT - stock actual)
             OUTER APPLY (
                 SELECT 
                     RTRIM(sa.co_alma) AS co_alma,
                     SUM(sa.stock) AS stock
-                FROM dbo.saStockAlmacen sa
+                FROM dbo.saStockAlmacen sa WITH (NOLOCK)
                 WHERE sa.co_art = a.co_art 
                     AND RTRIM(sa.co_alma) = %s
                     AND sa.tipo = 'ACT'  -- Solo stock actual
@@ -586,7 +881,7 @@ class SourceSystemService:
                 SELECT TOP 1 
                     ap.monto AS price,
                     ap.co_mone AS currency
-                FROM dbo.saArtPrecio ap
+                FROM dbo.saArtPrecio ap WITH (NOLOCK)
                 WHERE ap.co_art = a.co_art 
                     AND RTRIM(ap.co_precio) = %s
                 ORDER BY ap.desde DESC  -- Precio más reciente (fecha más actual)
@@ -594,7 +889,7 @@ class SourceSystemService:
             -- Imagen: Obtener la imagen principal
             OUTER APPLY (
                 SELECT TOP 1 img.rowguid AS image_guid
-                FROM dbo.saArtImagen img
+                FROM dbo.saArtImagen img WITH (NOLOCK)
                 WHERE img.co_art = a.co_art
                 ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
             ) img
@@ -667,8 +962,8 @@ class SourceSystemService:
                     a.tipo,
                     a.fecha_reg,
                     a.modelo
-                FROM dbo.saArticulo a
-                LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+                FROM dbo.saArticulo a WITH (NOLOCK)
+                LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
                 WHERE a.co_art = %s AND a.anulado = 0
             """
             cursor.execute(header_query, (article_code,))
@@ -684,8 +979,8 @@ class SourceSystemService:
                     ap.monto AS amount,
                     ap.co_mone AS currency,
                     ap.desde AS desde
-                FROM dbo.saArtPrecio ap
-                LEFT JOIN dbo.saTipoPrecio tp ON ap.co_precio = tp.co_precio
+                FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                LEFT JOIN dbo.saTipoPrecio tp WITH (NOLOCK) ON ap.co_precio = tp.co_precio
                 WHERE ap.co_art = %s
                 ORDER BY ap.desde DESC
             """
@@ -697,8 +992,8 @@ class SourceSystemService:
                     RTRIM(sa.co_alma) AS warehouse_code,
                     al.des_alma AS warehouse_name,
                     sa.stock AS quantity
-                FROM dbo.saStockAlmacen sa
-                LEFT JOIN dbo.saAlmacen al ON sa.co_alma = al.co_alma
+                FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                LEFT JOIN dbo.saAlmacen al WITH (NOLOCK) ON sa.co_alma = al.co_alma
                 WHERE sa.co_art = %s
                     AND sa.tipo = 'ACT'  -- Solo stock actual
             """
@@ -747,7 +1042,7 @@ class SourceSystemService:
                     tip,
                     co_us_in,
                     fe_us_in
-                FROM dbo.saArtImagen
+                FROM dbo.saArtImagen WITH (NOLOCK)
                 WHERE co_art = %s
                 ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
             """
@@ -770,7 +1065,7 @@ class SourceSystemService:
         """
         check_query = """
             SELECT COUNT(*) as count
-            FROM dbo.saArtImagen
+            FROM dbo.saArtImagen WITH (NOLOCK)
             WHERE co_art = %s AND tip = %s
         """
         cursor.execute(check_query, (article_code, tip))
@@ -987,7 +1282,7 @@ class SourceSystemService:
                     imagen_des,
                     tip,
                     co_art
-                FROM dbo.saArtImagen
+                FROM dbo.saArtImagen WITH (NOLOCK)
                 WHERE rowguid = CAST(%s AS UNIQUEIDENTIFIER)
             """
             cursor.execute(query, (image_guid_clean,))
@@ -1086,8 +1381,6 @@ class SourceSystemService:
         cursor = None
         use_existing = existing_cursor is not None
         
-        self.logger.debug(f"[DEBUG] get_article_discount INICIO - artículo: {article_code}, cantidad: {quantity}, use_existing: {use_existing}")
-        
         try:
             if use_existing:
                 cursor = existing_cursor
@@ -1095,17 +1388,13 @@ class SourceSystemService:
                 try:
                     cursor.execute("SELECT 1 AS test")
                     cursor.fetchone()
-                    self.logger.debug("[DEBUG] Cursor existente verificado - está VIVO")
-                except Exception as check_err:
-                    self.logger.error(f"[DEBUG] Cursor existente está MUERTO: {check_err}")
-                    raise ConnectionError(f"Cursor existente no está conectado: {check_err}") from check_err
+                except Exception as e:
+                    raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
             else:
-                self.logger.debug("[DEBUG] Obteniendo conexión del pool...")
                 conn = self.get_pooled_connection()
                 cursor = conn.cursor()
-                self.logger.debug("[DEBUG] Conexión del pool obtenida")
             
-            # Query simplificada
+            # Query para obtener descuento activo del artículo
             query = """
                 SELECT TOP 1 co_desc, porc1, porc2, porc3, porc4, porc5,
                         hasta1, hasta2, hasta3, hasta4, hasta5,
@@ -1115,131 +1404,80 @@ class SourceSystemService:
                     AND (fecha_ini IS NULL OR fecha_ini <= GETDATE())
                     AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
             """
-            # Nota: No filtramos por campo1 > campo2 en SQL para poder diagnosticar "sin disponibilidad" vs "no existe"
             
-            self.logger.debug(f"[DEBUG] Ejecutando query para obtener descuento de {article_code}...")
             cursor.execute(query, (article_code.strip(),))
-            self.logger.debug("[DEBUG] Query ejecutada, obteniendo resultado...")
             discount = cursor.fetchone()
-            self.logger.debug(f"[DEBUG] Resultado obtenido: {discount is not None}")
             
             if not discount:
                 return None
             
-            # Evaluar rangos para encontrar el aplicable
-            # Lógica revisada: Se aplica el descuento si la cantidad SUPERA el valor de hastaX
-            # Buscamos el mayor rango k tal que quantity > hasta[k]
-            
+            # Funciones helper para conversión segura de valores
             def safe_decimal(val):
                 try:
                     if val is None:
                         return Decimal('0')
                     s_val = str(val).strip()
-                    if not s_val:
-                        return Decimal('0')
-                    return Decimal(s_val)
+                    return Decimal(s_val) if s_val else Decimal('0')
                 except (ValueError, TypeError, InvalidOperation):
-                    self.logger.warning(f"[DEBUG] Valor no decimal encontrado en campo de descuento: '{val}'. Se asume 0.")
                     return Decimal('0')
 
-            hasta_vals = {
-                1: safe_decimal(discount.get('hasta1')),
-                2: safe_decimal(discount.get('hasta2')),
-                3: safe_decimal(discount.get('hasta3')),
-                4: safe_decimal(discount.get('hasta4')),
-                5: safe_decimal(discount.get('hasta5')),
-            }
-            
-            porc_vals = {
-                1: safe_decimal(discount.get('porc1')),
-                2: safe_decimal(discount.get('porc2')),
-                3: safe_decimal(discount.get('porc3')),
-                4: safe_decimal(discount.get('porc4')),
-                5: safe_decimal(discount.get('porc5')),
-            }
-            
             def safe_int(val):
                 try:
                     if val is None:
                         return 0
-                    # Limpiar espacios
                     s_val = str(val).strip()
-                    if not s_val:
-                        return 0
-                    # Intentar convertir directamente
-                    return int(float(s_val))
+                    return int(float(s_val)) if s_val else 0
                 except (ValueError, TypeError):
-                    # Si falla (ej: "Observación interna"), retornar 0
-                    self.logger.warning(f"[DEBUG] Valor no numérico encontrado en campo de descuento: '{val}'. Se asume 0.")
                     return 0
 
-            campo_vals = {
-                1: safe_int(discount.get('campo1')),
-                2: safe_int(discount.get('campo2')),
-                3: safe_int(discount.get('campo3')),
-                4: safe_int(discount.get('campo4')),
-                5: safe_int(discount.get('campo5')),
-            }
+            # Extraer valores de umbrales, porcentajes y contadores
+            hasta_vals = {i: safe_decimal(discount.get(f'hasta{i}')) for i in range(1, 6)}
+            porc_vals = {i: safe_decimal(discount.get(f'porc{i}')) for i in range(1, 6)}
+            campo_vals = {i: safe_int(discount.get(f'campo{i}')) for i in range(1, 6)}
 
+            # Buscar tier aplicable (del más alto al más bajo)
             selected_tier = None
-            
-            # Iteramos desde el rango más alto (5) hasta el más bajo (1)
-            # Si la cantidad supera el umbral, aplicamos ese descuento
             for i in range(5, 0, -1):
-                if hasta_vals[i] > 0 and quantity > hasta_vals[i]:
-                    # Encontramos un candidato. Verificamos si tiene porcentaje configurado.
-                    if porc_vals[i] > 0:
-                        selected_tier = i
-                        break
+                if hasta_vals[i] > 0 and quantity > hasta_vals[i] and porc_vals[i] > 0:
+                    selected_tier = i
+                    break
             
             if selected_tier is None:
-                self.logger.debug(f"[DEBUG] No se encontró tier aplicable para {article_code} (cantidad {quantity} no supera ningún umbral)")
                 return None
             
-            # Validar disponibilidad si se requiere (por ahora solo incrementamos uso)
-            # Nota: campo1 ya no es límite, es contador de uso si hasta1 es umbral
-            # Si se requiere límite global, se debe definir cuál campo lo representa.
-            # Asumimos disponibilidad siempre positiva si cumple el umbral.
-            
-            limit_total = int(hasta_vals[selected_tier]) # hastaX es el umbral
-            used_total = campo_vals[selected_tier]       # campoX es el contador de uso
-            
-            # Para evitar romper la estructura de respuesta, available simula ser alto
-            available = 999999 
-            
-            self.logger.debug(f"[DEBUG] Tier {selected_tier} seleccionado - Umbral: {limit_total}, Usados: {used_total}")
-
-            result = {
+            return {
                 'co_desc': str(discount.get('co_desc', '')).strip(),
                 'discount_percentage': porc_vals[selected_tier],
                 'range_applied': f'hasta{selected_tier}',
                 'field_to_increment': f'campo{selected_tier}',
-                'disponibles': available,
-                'limite_total': limit_total,
-                'ya_usados': used_total,
+                'disponibles': 999999,
+                'limite_total': int(hasta_vals[selected_tier]),
+                'ya_usados': campo_vals[selected_tier],
             }
-            self.logger.debug(f"[DEBUG] get_article_discount FIN - Retornando descuento: {result}")
-            return result
             
+        except ConnectionError:
+            raise
         except Exception as e:
             error_code = getattr(e, 'args', [None])[0] if hasattr(e, 'args') and e.args else None
-            self.logger.error(f"Error obteniendo descuento para artículo {article_code}: {str(e)}")
             
-            # Si es error de conexión (20002, 20003, 20047), propagar el error
-            # para que la cotización NO se cree sin conexión a la BD
+            # Error de conexión SQL Server - propagar para que no se cree cotización sin BD
             if error_code in (20002, 20003, 20047):
-                raise ConnectionError(f"Error de conexión a SQL Server: {str(e)}") from e
+                self.logger.error(
+                    f"Error de conexión obteniendo descuento | "
+                    f"articulo={article_code} | error_code={error_code} | {e}"
+                )
+                raise ConnectionError(f"Error de conexión a SQL Server: {e}") from e
             
-            # Para otros errores (ej: artículo no encontrado), continuar sin descuento
+            # Otros errores - loguear y continuar sin descuento
+            self.logger.warning(f"No se pudo obtener descuento para {article_code}: {e}")
             return None
         finally:
-            # Solo cerrar recursos si los creamos nosotros (no si usamos cursor existente)
             if not use_existing:
-                try:
-                    if cursor:
+                if cursor:
+                    try:
                         cursor.close()
-                except Exception as e:
-                    self.logger.warning(f"Error cerrando cursor al obtener descuento para {article_code}: {e}")
+                    except Exception:
+                        pass
                 
                 # Devolver conexión al pool para reutilización
                 self.return_connection(conn)
@@ -1263,88 +1501,32 @@ class SourceSystemService:
         # Validar nombre de campo para seguridad (evitar inyección SQL)
         valid_fields = ["campo1", "campo2", "campo3", "campo4", "campo5"]
         if field_name not in valid_fields:
-            raise ValueError(f"Nombre de campo inválido para incremento: {field_name}")
-        
-        import time
+            raise ValueError(f"Campo inválido: {field_name}. Debe ser uno de: {valid_fields}")
         
         conn = None
         cursor = None
         use_existing = existing_cursor is not None
         
-        self.logger.debug(f"[DEBUG] increment_discount_usage INICIO - co_desc: {co_desc}, quantity: {quantity_used}, field: {field_name}, use_existing: {use_existing}")
-        
-        start_time = time.time()
-        
         try:
             if use_existing:
                 cursor = existing_cursor
-                # Verificar que el cursor esté vivo ANTES de usarlo
                 try:
-                    self.logger.debug("[DEBUG] Verificando cursor existente antes de UPDATE...")
                     cursor.execute("SELECT 1 AS test")
                     cursor.fetchone()
-                    self.logger.debug("[DEBUG] Cursor existente verificado - está VIVO antes de UPDATE")
-                except Exception as check_err:
-                    self.logger.error(f"[DEBUG] Cursor existente está MUERTO antes de UPDATE: {check_err}")
-                    raise ConnectionError(f"Cursor existente no está conectado antes de UPDATE: {check_err}") from check_err
+                except Exception as e:
+                    raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
             else:
-                self.logger.debug("[DEBUG] Obteniendo conexión del pool para increment...")
                 conn = self.get_pooled_connection()
                 cursor = conn.cursor()
-                self.logger.debug("[DEBUG] Conexión del pool obtenida para increment")
             
-            # Primero, obtener el valor actual del campo para debug
-            self.logger.debug(f"[DEBUG] Obteniendo valor actual de {field_name} para {co_desc}...")
-            select_query = f"""
-                SELECT {field_name}, co_desc, co_art
-                FROM dbo.saDescArticulo WITH (NOLOCK)
-                WHERE co_desc = %s
-            """
-            cursor.execute(select_query, (co_desc.strip(),))
-            current_row = cursor.fetchone()
-            
-            if current_row:
-                current_value = current_row.get(field_name)
-                current_type = type(current_value).__name__
-                self.logger.debug(
-                    f"[DEBUG] Valor actual de {field_name}: '{current_value}' (tipo: {current_type}, "
-                    f"co_art: {current_row.get('co_art', 'N/A')})"
-                )
-            else:
-                self.logger.warning(f"[DEBUG] No se encontró registro con co_desc = {co_desc}")
-            
-            # Verificar si hay locks en la tabla antes del UPDATE
-            self.logger.debug(f"[DEBUG] Verificando locks en saDescArticulo para co_desc={co_desc}...")
-            try:
-                lock_check_query = """
-                    SELECT 
-                        request_session_id,
-                        resource_type,
-                        request_mode,
-                        request_status,
-                        resource_database_id
-                    FROM sys.dm_tran_locks
-                    WHERE resource_associated_entity_id = OBJECT_ID('dbo.saDescArticulo')
-                        AND request_status = 'WAIT'
-                """
-                cursor.execute(lock_check_query)
-                locks = cursor.fetchall()
-                if locks:
-                    self.logger.warning(f"[DEBUG] Se encontraron {len(locks)} locks esperando en saDescArticulo: {locks}")
-                else:
-                    self.logger.debug("[DEBUG] No se encontraron locks esperando en saDescArticulo")
-            except Exception as lock_check_err:
-                self.logger.warning(f"[DEBUG] Error verificando locks: {lock_check_err}")
-            
-            # Iniciar transacción explícita si usamos nuestra propia conexión
+            # Iniciar transacción si usamos nuestra propia conexión
             if not use_existing and conn:
-                self.logger.debug("[DEBUG] Iniciando transacción explícita (BEGIN TRANSACTION)...")
                 cursor.execute("BEGIN TRANSACTION")
 
-            # Configurar timeout corto para el UPDATE (5 segundos)
-            self.logger.debug("[DEBUG] Configurando LOCK_TIMEOUT a 5000ms (5 segundos)...")
+            # Timeout de 5 segundos para evitar bloqueos largos
             cursor.execute("SET LOCK_TIMEOUT 5000")
             
+            # Incrementar contador de uso
             update_query = f"""
                 UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK)
                 SET {field_name} = CAST(
@@ -1354,58 +1536,35 @@ class SourceSystemService:
                 WHERE co_desc = %s
             """
             
-            self.logger.debug(f"[DEBUG] Ejecutando UPDATE para incrementar {field_name} de {co_desc}...")
-            update_start = time.time()
-            try:
-                cursor.execute(update_query, (quantity_used, co_desc.strip()))
-                update_elapsed = time.time() - update_start
-                self.logger.debug(f"[DEBUG] UPDATE ejecutado exitosamente en {update_elapsed:.2f} segundos")
-            except Exception as update_err:
-                update_elapsed = time.time() - update_start
-                self.logger.error(f"[DEBUG] UPDATE falló después de {update_elapsed:.2f} segundos: {update_err}")
-                
-                # Si falla el update, intentar rollback de la transacción explícita
-                if not use_existing and conn:
-                    try:
-                        cursor.execute("ROLLBACK TRANSACTION")
-                    except Exception:
-                        pass
-                
-                # Restaurar LOCK_TIMEOUT
-                try:
-                    cursor.execute("SET LOCK_TIMEOUT -1")
-                except Exception:
-                    pass
-            raise
-            
-            # Verificar cuántas filas se actualizaron
+            cursor.execute(update_query, (quantity_used, co_desc.strip()))
             rows_affected = cursor.rowcount
-            self.logger.debug(f"[DEBUG] Filas afectadas por el UPDATE: {rows_affected}")
             
-            # Restaurar LOCK_TIMEOUT a su valor por defecto
+            # Restaurar timeout
             try:
                 cursor.execute("SET LOCK_TIMEOUT -1")
             except Exception:
                 pass
             
-            # Solo hacer commit si creamos nuestra propia conexión
+            # Commit si usamos nuestra propia conexión
             if not use_existing and conn:
-                self.logger.debug("[DEBUG] Haciendo COMMIT TRANSACTION...")
-                commit_start = time.time()
                 cursor.execute("COMMIT TRANSACTION")
                 conn.commit()
-                commit_elapsed = time.time() - commit_start
-                self.logger.debug(f"[DEBUG] Commit realizado en {commit_elapsed:.2f} segundos")
             
-            total_elapsed = time.time() - start_time
-            self.logger.debug(f"[DEBUG] increment_discount_usage FIN - Exitoso (tiempo total: {total_elapsed:.2f} segundos)")
+            if rows_affected == 0:
+                self.logger.warning(
+                    f"Descuento no actualizado | co_desc={co_desc} no existe o no se modificó"
+                )
+                
         except Exception as e:
             if not use_existing and conn:
                 try:
                     conn.rollback()
                 except Exception:
                     pass
-            self.logger.error(f"Error incrementando uso de descuento {co_desc} en {field_name}: {str(e)}")
+            self.logger.error(
+                f"Error incrementando descuento | co_desc={co_desc} | "
+                f"field={field_name} | cantidad={quantity_used} | error={e}"
+            )
             raise
         finally:
             if not use_existing:
