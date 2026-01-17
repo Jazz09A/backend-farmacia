@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, load_only
 from sqlalchemy import desc, or_, func, text
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
@@ -10,10 +10,19 @@ from app.schemas.blog import (
 from app.config.logging_config import get_logger
 from app.config.settings import Settings
 from app.utils.timezone import get_ve_now
+from app.services.cache_service import cache_service
 import re
 
 logger = get_logger("blog")
 settings = Settings()
+
+# Prefijos de caché para el blog
+CACHE_PREFIX_BLOG_POSTS = "blog:posts"
+CACHE_PREFIX_BLOG_CATEGORIES = "blog:categories"
+CACHE_PREFIX_BLOG_POST_DETAIL = "blog:post"
+CACHE_TTL_BLOG_POSTS = 300  # 5 minutos para listados
+CACHE_TTL_BLOG_CATEGORIES = 600  # 10 minutos para categorías
+CACHE_TTL_BLOG_POST_DETAIL = 600  # 10 minutos para detalle
 
 
 class BlogService:
@@ -21,6 +30,31 @@ class BlogService:
     
     def __init__(self, db: Session):
         self.db = db
+    
+    # =============================================================================
+    # CACHE INVALIDATION METHODS
+    # =============================================================================
+    
+    @staticmethod
+    def invalidate_posts_cache():
+        """Invalida todo el caché de posts del blog."""
+        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_BLOG_POSTS}:")
+        logger.info(f"Cache de posts invalidado: {count} entradas eliminadas")
+        return count
+    
+    @staticmethod
+    def invalidate_categories_cache():
+        """Invalida todo el caché de categorías del blog."""
+        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_BLOG_CATEGORIES}:")
+        logger.info(f"Cache de categorías invalidado: {count} entradas eliminadas")
+        return count
+    
+    @staticmethod
+    def invalidate_all_blog_cache():
+        """Invalida todo el caché del blog (posts y categorías)."""
+        posts_count = BlogService.invalidate_posts_cache()
+        categories_count = BlogService.invalidate_categories_cache()
+        return posts_count + categories_count
     
     # =============================================================================
     # HELPER METHODS
@@ -137,6 +171,9 @@ class BlogService:
         self.db.commit()
         self.db.refresh(category)
         
+        # Invalidar caché de categorías
+        self.invalidate_categories_cache()
+        
         logger.info(f"Categoría de blog creada: {category.name} (slug: {category.slug})")
         return category
     
@@ -147,20 +184,49 @@ class BlogService:
             query = query.filter(BlogCategory.deleted == False)
         return query.first()
     
-    def get_category_by_slug(self, slug: str, include_deleted: bool = False) -> Optional[BlogCategory]:
-        """Obtener categoría por slug."""
+    def get_category_by_slug(self, slug: str, include_deleted: bool = False, use_cache: bool = True) -> Optional[BlogCategory]:
+        """Obtener categoría por slug (con caché opcional)."""
+        # Intentar obtener del caché
+        cache_key = None
+        if use_cache and not include_deleted:
+            cache_key = f"{CACHE_PREFIX_BLOG_CATEGORIES}:slug:{slug}"
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                return cached
+        
         query = self.db.query(BlogCategory).filter(BlogCategory.slug == slug)
         if not include_deleted:
             query = query.filter(BlogCategory.deleted == False)
-        return query.first()
+        category = query.first()
+        
+        # Guardar en caché
+        if cache_key and category:
+            cache_service.set(cache_key, category, ttl=CACHE_TTL_BLOG_CATEGORIES)
+        
+        return category
     
-    def get_all_categories(self, include_deleted: bool = False) -> List[BlogCategory]:
-        """Obtener todas las categorías (optimizado)."""
+    def get_all_categories(self, include_deleted: bool = False, use_cache: bool = True) -> List[BlogCategory]:
+        """Obtener todas las categorías (optimizado con caché)."""
+        # Intentar obtener del caché si está habilitado y no incluye eliminadas
+        if use_cache and not include_deleted:
+            cache_key = f"{CACHE_PREFIX_BLOG_CATEGORIES}:all"
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache HIT para categorías del blog")
+                return cached
+        
         query = self.db.query(BlogCategory)
         if not include_deleted:
             query = query.filter(BlogCategory.deleted == False)
         # Ordenar usando índice para mejor rendimiento
-        return query.order_by(BlogCategory.name).all()
+        categories = query.order_by(BlogCategory.name).all()
+        
+        # Guardar en caché si aplica
+        if use_cache and not include_deleted:
+            cache_service.set(cache_key, categories, ttl=CACHE_TTL_BLOG_CATEGORIES)
+            logger.debug(f"Cache SET para categorías del blog ({len(categories)} items)")
+        
+        return categories
     
     def update_category(self, category_id: str, category_data: BlogCategoryUpdate) -> BlogCategory:
         """Actualizar una categoría. Si se actualiza el nombre, el slug se genera automáticamente."""
@@ -193,6 +259,9 @@ class BlogService:
         
         self.db.commit()
         self.db.refresh(category)
+        
+        # Invalidar caché de categorías y posts (los posts muestran info de categoría)
+        self.invalidate_all_blog_cache()
         
         logger.info(f"Categoría actualizada: {category.name} (slug: {category.slug})")
         return category
@@ -227,6 +296,9 @@ class BlogService:
         category.deleted = True
         self.db.commit()
         self.db.refresh(category)
+        
+        # Invalidar caché de categorías
+        self.invalidate_categories_cache()
         
         logger.info(f"Categoría eliminada (soft delete): {category.name}")
         return True
@@ -306,6 +378,9 @@ class BlogService:
         self.db.commit()
         self.db.refresh(post)
         
+        # Invalidar caché de posts
+        self.invalidate_posts_cache()
+        
         logger.info(f"Post de blog creado: {post.title} (slug: {post.slug})")
         return post
     
@@ -347,9 +422,22 @@ class BlogService:
         page: int = 1,
         limit: int = 10,
         category_slug: Optional[str] = None,
-        search: Optional[str] = None
+        search: Optional[str] = None,
+        use_cache: bool = True
     ) -> Tuple[List[BlogPost], int]:
-        """Obtener posts publicados (para usuarios públicos)."""
+        """Obtener posts publicados (para usuarios públicos) - Optimizado con caché y proyección."""
+        # Intentar obtener del caché si no hay búsqueda (búsquedas no se cachean)
+        cache_key = None
+        if use_cache and not search:
+            cache_key = cache_service._generate_key(
+                CACHE_PREFIX_BLOG_POSTS,
+                page=page, limit=limit, category=category_slug or ""
+            )
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache HIT para posts públicos: page={page}, limit={limit}")
+                return cached
+        
         # Crear query base para filtros (sin joinedload para count más rápido)
         base_query = self.db.query(BlogPost).filter(
             BlogPost.status == 'published',
@@ -359,7 +447,7 @@ class BlogService:
         
         # Filtrar por categoría si se especifica
         if category_slug:
-            category = self.get_category_by_slug(category_slug)
+            category = self.get_category_by_slug(category_slug, use_cache=False)
             if category:
                 base_query = base_query.filter(BlogPost.category_id == category.id)
         
@@ -377,20 +465,86 @@ class BlogService:
         # OPTIMIZACIÓN: Contar usando subquery sin joinedloads (mucho más rápido)
         total = base_query.count()
         
-        # Query para obtener posts con relaciones (solo para los posts paginados)
-        query = base_query.options(
-            joinedload(BlogPost.author),
-            joinedload(BlogPost.category)
-        )
-        
-        # Ordenar por fecha de publicación (más recientes primero)
-        query = query.order_by(desc(BlogPost.published_at))
-        
-        # Paginar
+        # Paginar primero para limitar la cantidad de datos
         offset = (page - 1) * limit
-        posts = query.offset(offset).limit(limit).all()
         
-        return posts, total
+        # OPTIMIZACIÓN: Usar SQL directo para cargar solo preview del contenido
+        # Esto evita cargar contenido de 50KB+ cuando solo necesitamos 500 chars
+        post_ids_query = base_query.order_by(desc(BlogPost.published_at)).offset(offset).limit(limit)
+        post_ids = [p.id for p in post_ids_query.with_entities(BlogPost.id).all()]
+        
+        if not post_ids:
+            return [], total
+        
+        # Query optimizada con SQL para cargar solo preview del contenido
+        from sqlalchemy import literal_column
+        posts_data = self.db.execute(
+            text("""
+                SELECT 
+                    bp.id, bp.title, bp.slug,
+                    SUBSTRING(bp.content, 1, 500) as content_preview,
+                    bp.featured_image_url, bp.status, bp.published_at,
+                    bp.created_at, bp.updated_at, bp.author_id, bp.author_name,
+                    bp.category_id, bp.deleted,
+                    u.id as author_user_id, u.email as author_email,
+                    u.user_type as author_user_type, u.first_name as author_first_name,
+                    u.last_name as author_last_name, u.company_name as author_company_name,
+                    bc.id as category_id_full, bc.name as category_name,
+                    bc.slug as category_slug, bc.description as category_description
+                FROM blog_posts bp
+                LEFT JOIN users u ON bp.author_id = u.id
+                LEFT JOIN blog_categories bc ON bp.category_id = bc.id
+                WHERE bp.id = ANY(:post_ids)
+                ORDER BY bp.published_at DESC
+            """),
+            {"post_ids": post_ids}
+        ).fetchall()
+        
+        # Mapear a objetos BlogPost
+        posts = []
+        for row in posts_data:
+            post = BlogPost()
+            post.id = row.id
+            post.title = row.title
+            post.slug = row.slug
+            post.content = row.content_preview  # Solo preview
+            post.featured_image_url = row.featured_image_url
+            post.status = row.status
+            post.published_at = row.published_at
+            post.created_at = row.created_at
+            post.updated_at = row.updated_at
+            post.author_id = row.author_id
+            post.author_name = row.author_name
+            post.category_id = row.category_id
+            post.deleted = row.deleted
+            
+            if row.author_user_id:
+                author = User()
+                author.id = row.author_user_id
+                author.email = row.author_email
+                author.user_type = row.author_user_type or 'natural'
+                author.first_name = row.author_first_name
+                author.last_name = row.author_last_name
+                author.company_name = row.author_company_name
+                post.author = author
+            
+            if row.category_id_full:
+                category = BlogCategory()
+                category.id = row.category_id_full
+                category.name = row.category_name
+                category.slug = row.category_slug
+                category.description = row.category_description
+                post.category = category
+            
+            posts.append(post)
+        
+        # Guardar en caché si aplica (no cachear búsquedas)
+        result = (posts, total)
+        if cache_key:
+            cache_service.set(cache_key, result, ttl=CACHE_TTL_BLOG_POSTS)
+            logger.debug(f"Cache SET para posts públicos: {len(posts)} items")
+        
+        return result
     
     def get_all_posts(
         self,
@@ -399,9 +553,23 @@ class BlogService:
         status_filter: Optional[str] = None,
         category_id: Optional[str] = None,
         search: Optional[str] = None,
-        include_deleted: bool = False
+        include_deleted: bool = False,
+        use_cache: bool = True
     ) -> Tuple[List[BlogPost], int]:
-        """Obtener todos los posts (para admin) - Optimizado con SQL directo."""
+        """Obtener todos los posts (para admin) - Optimizado con SQL directo y caché."""
+        # Intentar obtener del caché si no hay búsqueda y no incluye eliminados
+        cache_key = None
+        if use_cache and not search and not include_deleted:
+            cache_key = cache_service._generate_key(
+                f"{CACHE_PREFIX_BLOG_POSTS}:admin",
+                page=page, limit=limit, 
+                status=status_filter or "", category=category_id or ""
+            )
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache HIT para posts admin: page={page}")
+                return cached
+        
         # Construir condiciones WHERE
         where_conditions = []
         params = {}
@@ -438,7 +606,8 @@ class BlogService:
         result = self.db.execute(count_query, params)
         total = result.scalar() or 0
         
-        # Query principal optimizada con JOINs y cálculo de full_name en SQL
+        # Query principal optimizada con JOINs - SIN cargar content completo
+        # Solo cargamos los primeros 500 caracteres para el excerpt
         offset = (page - 1) * limit
         params['offset'] = offset
         params['limit'] = limit
@@ -448,7 +617,7 @@ class BlogService:
                 bp.id,
                 bp.title,
                 bp.slug,
-                bp.content,
+                SUBSTRING(bp.content, 1, 500) as content_preview,
                 bp.featured_image_url,
                 bp.status,
                 bp.published_at,
@@ -489,7 +658,7 @@ class BlogService:
             post.id = row.id
             post.title = row.title
             post.slug = row.slug
-            post.content = row.content
+            post.content = row.content_preview  # Solo preview, no contenido completo
             post.featured_image_url = row.featured_image_url
             post.status = row.status
             post.published_at = row.published_at
@@ -522,7 +691,13 @@ class BlogService:
             
             posts.append(post)
         
-        return posts, total
+        # Guardar en caché si aplica
+        result_tuple = (posts, total)
+        if cache_key:
+            cache_service.set(cache_key, result_tuple, ttl=CACHE_TTL_BLOG_POSTS)
+            logger.debug(f"Cache SET para posts admin: {len(posts)} items")
+        
+        return result_tuple
     
     def update_post(self, post_id: str, post_data: BlogPostUpdate) -> BlogPost:
         """Actualizar un post."""
@@ -575,6 +750,9 @@ class BlogService:
         self.db.commit()
         self.db.refresh(post)
         
+        # Invalidar caché de posts
+        self.invalidate_posts_cache()
+        
         logger.info(f"Post actualizado: {post.title} ({post.slug})")
         return post
     
@@ -597,6 +775,9 @@ class BlogService:
         post.deleted = True
         self.db.commit()
         self.db.refresh(post)
+        
+        # Invalidar caché de posts
+        self.invalidate_posts_cache()
         
         logger.info(f"Post eliminado (soft delete): {post.title}")
         return True

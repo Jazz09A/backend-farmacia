@@ -23,7 +23,7 @@ from app.models.promotion import FlashOffer, DiscountType
 from app.services.source_system_service import source_system_service
 from app.services.cache_service import cache_service
 from app.utils.timezone import get_ve_now
-
+from app.querys.image_query import get_image_by_co_art
 from app.config.settings import Settings
 settings = Settings()
 class ArticleService:
@@ -280,7 +280,6 @@ class ArticleService:
             warehouse_code=warehouse_code,
         )
 
-        # Obtener descuentos de Profit Plus activos desde saDescArticulo (una sola consulta)
         article_codes = [(row.get("co_art") or "").strip() for row in result["items"]]
         profit_discounts_map = self._source_service.get_active_discounts_for_articles(
             article_codes=article_codes,
@@ -303,6 +302,8 @@ class ArticleService:
             image_guid_normalized = None
             if image_guid:
                 image_guid_normalized = str(image_guid).strip().upper().replace('{', '').replace('}', '')
+            
+            # image_query = get_image_by_co_art(co_art)
             
             image_url = self._build_image_url(image_guid_normalized)
             

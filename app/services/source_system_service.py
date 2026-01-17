@@ -1809,7 +1809,7 @@ class SourceSystemService:
                 "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
                 "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
             ]
-            params = list(normalized_codes)
+            params = list[str](normalized_codes)
             
             if tip_cli:
                 where_conditions.append("RTRIM(d.tip_cli) = %s")

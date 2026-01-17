@@ -10,6 +10,8 @@ import re
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import io
+import time
+from threading import RLock
 
 logger = get_logger("blog_images")
 settings = Settings()
@@ -17,6 +19,98 @@ settings = Settings()
 # Thread pool para operaciones de base de datos bloqueantes
 # Aumentado a 10 workers para mejor rendimiento
 _db_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="blog_image_db")
+
+# =============================================================================
+# CACHÉ DE IMÁGENES EN MEMORIA
+# =============================================================================
+
+class ImageCache:
+    """
+    Caché en memoria para imágenes del blog.
+    Optimizado para servir imágenes rápidamente sin acceder a la BD.
+    """
+    
+    def __init__(self, max_size_mb: int = 100, ttl_seconds: int = 3600):
+        self._cache: Dict[str, Tuple[bytes, str, float]] = {}  # id -> (data, content_type, timestamp)
+        self._lock = RLock()
+        self._max_size_bytes = max_size_mb * 1024 * 1024
+        self._current_size = 0
+        self._ttl = ttl_seconds
+        self._hits = 0
+        self._misses = 0
+    
+    def get(self, image_id: str) -> Optional[Tuple[bytes, str]]:
+        """Obtiene imagen del caché. Retorna (data, content_type) o None."""
+        with self._lock:
+            if image_id in self._cache:
+                data, content_type, timestamp = self._cache[image_id]
+                # Verificar TTL
+                if time.time() - timestamp < self._ttl:
+                    self._hits += 1
+                    return (data, content_type)
+                else:
+                    # Expirado, eliminar
+                    self._remove(image_id)
+            self._misses += 1
+            return None
+    
+    def set(self, image_id: str, data: bytes, content_type: str) -> bool:
+        """Guarda imagen en caché. Retorna True si se guardó."""
+        # No cachear imágenes muy grandes (> 2MB)
+        if len(data) > 2 * 1024 * 1024:
+            return False
+        
+        with self._lock:
+            # Hacer espacio si es necesario
+            while self._current_size + len(data) > self._max_size_bytes and self._cache:
+                # Eliminar la más antigua
+                oldest_id = min(self._cache.keys(), key=lambda k: self._cache[k][2])
+                self._remove(oldest_id)
+            
+            # Si después de limpiar aún no hay espacio, no cachear
+            if self._current_size + len(data) > self._max_size_bytes:
+                return False
+            
+            # Si ya existe, actualizar
+            if image_id in self._cache:
+                self._remove(image_id)
+            
+            self._cache[image_id] = (data, content_type, time.time())
+            self._current_size += len(data)
+            return True
+    
+    def _remove(self, image_id: str):
+        """Elimina una imagen del caché (interno, sin lock)."""
+        if image_id in self._cache:
+            data, _, _ = self._cache.pop(image_id)
+            self._current_size -= len(data)
+    
+    def invalidate(self, image_id: str):
+        """Invalida una imagen específica del caché."""
+        with self._lock:
+            self._remove(image_id)
+    
+    def clear(self):
+        """Limpia todo el caché."""
+        with self._lock:
+            self._cache.clear()
+            self._current_size = 0
+    
+    def get_stats(self) -> Dict:
+        """Obtiene estadísticas del caché."""
+        with self._lock:
+            total = self._hits + self._misses
+            return {
+                "entries": len(self._cache),
+                "size_mb": round(self._current_size / (1024 * 1024), 2),
+                "max_size_mb": self._max_size_bytes // (1024 * 1024),
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": round(self._hits / total * 100, 2) if total > 0 else 0
+            }
+
+# Instancia global del caché de imágenes (100MB máx, 1 hora TTL)
+_image_cache = ImageCache(max_size_mb=100, ttl_seconds=3600)
 
 # Intentar importar Pillow para optimización de imágenes (opcional)
 try:
@@ -273,6 +367,82 @@ class BlogImageService:
         """Obtiene una imagen por su ID."""
         return self.db.query(BlogImage).filter(BlogImage.id == image_id).first()
     
+    @staticmethod
+    def _detect_content_type(image_data: bytes) -> str:
+        """Detecta el content-type de una imagen basándose en sus bytes."""
+        if len(image_data) < 12:
+            return "image/jpeg"
+        
+        if image_data[:8] == b'\x89PNG\r\n\x1a\n':
+            return "image/png"
+        elif image_data[:2] == b'\xff\xd8':
+            return "image/jpeg"
+        elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
+            return "image/webp"
+        elif image_data[:4] == b'GIF8':
+            return "image/gif"
+        return "image/jpeg"
+    
+    @staticmethod
+    def _get_image_from_db_sync(image_id: str) -> Optional[Tuple[bytes, str]]:
+        """
+        Obtiene imagen de la BD de forma síncrona (para ejecutar en thread pool).
+        Retorna (image_data, content_type) o None.
+        """
+        db = SessionLocal()
+        try:
+            image = db.query(BlogImage).filter(BlogImage.id == image_id).first()
+            if not image:
+                return None
+            
+            content_type = BlogImageService._detect_content_type(image.image_data)
+            return (image.image_data, content_type)
+        finally:
+            db.close()
+    
+    @staticmethod
+    async def get_image_data_async(image_id: str) -> Optional[Tuple[bytes, str]]:
+        """
+        Obtiene los datos de una imagen de forma asíncrona.
+        Usa caché en memoria para respuestas rápidas.
+        Retorna (image_data, content_type) o None.
+        """
+        # 1. Intentar obtener del caché (muy rápido)
+        cached = _image_cache.get(image_id)
+        if cached is not None:
+            logger.debug(f"Image cache HIT: {image_id}")
+            return cached
+        
+        # 2. Obtener de BD en thread pool (no bloquea el event loop)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            _db_executor,
+            BlogImageService._get_image_from_db_sync,
+            image_id
+        )
+        
+        if result is None:
+            return None
+        
+        image_data, content_type = result
+        
+        # 3. Guardar en caché para próximas requests
+        _image_cache.set(image_id, image_data, content_type)
+        logger.debug(f"Image cache SET: {image_id} ({len(image_data)} bytes)")
+        
+        return result
+    
+    @staticmethod
+    def invalidate_image_cache(image_id: str):
+        """Invalida una imagen del caché."""
+        _image_cache.invalidate(image_id)
+        logger.debug(f"Image cache invalidated: {image_id}")
+    
+    @staticmethod
+    def get_image_cache_stats() -> Dict:
+        """Obtiene estadísticas del caché de imágenes."""
+        return _image_cache.get_stats()
+    
     def get_image_by_code(self, blog_post_id: str, image_code: str) -> Optional[BlogImage]:
         """Obtiene una imagen por su código y post ID."""
         return self.db.query(BlogImage).filter(
@@ -318,6 +488,9 @@ class BlogImageService:
         
         self.db.delete(image)
         self.db.commit()
+        
+        # Invalidar caché de la imagen eliminada
+        self.invalidate_image_cache(image_id)
         
         logger.info(f"Imagen eliminada: {image_id} (post: {image.blog_post_id})")
         return True

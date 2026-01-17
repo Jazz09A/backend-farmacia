@@ -215,39 +215,45 @@ async def get_blog_categories(
 
 
 @router.get("/blog/images/{image_id}")
-async def get_blog_image(
-    image_id: str,
-    db: Session = Depends(get_db)
-):
+async def get_blog_image(image_id: str):
     """
-    🖼️ **Obtener imagen de blog (público)**
+    🖼️ **Obtener imagen de blog (público) - Optimizado para carga paralela**
     
     Obtiene una imagen de un artículo de blog por su ID.
-    Retorna la imagen como archivo binario.
+    - Usa caché en memoria para respuestas ultra-rápidas
+    - Procesamiento asíncrono para no bloquear otras requests
+    - Headers de caché para que el navegador guarde la imagen
     """
-    image_service = BlogImageService(db)
-    image = image_service.get_image_by_id(image_id)
+    # Usar método asíncrono con caché (no necesita sesión de BD como dependencia)
+    result = await BlogImageService.get_image_data_async(image_id)
     
-    if not image:
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Imagen no encontrada"
         )
     
-    # Determinar content type basado en los datos
-    # Por simplicidad, asumimos JPEG si no podemos determinarlo
-    content_type = "image/jpeg"
-    if image.image_data[:4] == b'\x89PNG':
-        content_type = "image/png"
-    elif image.image_data[:2] == b'\xff\xd8':
-        content_type = "image/jpeg"
-    elif image.image_data[:4] == b'RIFF' and image.image_data[8:12] == b'WEBP':
-        content_type = "image/webp"
+    image_data, content_type = result
+    
+    # Determinar extensión para el filename
+    ext_map = {
+        "image/jpeg": "jpg",
+        "image/png": "png", 
+        "image/webp": "webp",
+        "image/gif": "gif"
+    }
+    ext = ext_map.get(content_type, "jpg")
     
     return Response(
-        content=image.image_data,
+        content=image_data,
         media_type=content_type,
         headers={
-            "Content-Disposition": f'inline; filename="{image.image_code}.jpg"'
+            "Content-Disposition": f'inline; filename="image_{image_id[:8]}.{ext}"',
+            # Headers de caché agresivo - las imágenes no cambian
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "ETag": f'"{image_id}"',
+            # Headers para permitir carga paralela desde cualquier origen
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Content-Length, Content-Type",
         }
     )  

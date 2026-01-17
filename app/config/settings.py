@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     CACHE_STATIC_TTL: int = int(os.getenv("CACHE_STATIC_TTL", "7200"))  # 2 horas
     CACHE_DEFAULT_TTL: int = int(os.getenv("CACHE_DEFAULT_TTL", "1800"))  # 30 minutos por defecto
     
+    # Cloudinary Configuration
+    CLOUDINARY_CLOUD_NAME: Optional[str] = os.getenv("CLOUDINARY_CLOUD_NAME", None)
+    CLOUDINARY_API_KEY: Optional[str] = os.getenv("CLOUDINARY_API_KEY", None)
+    CLOUDINARY_API_SECRET: Optional[str] = os.getenv("CLOUDINARY_API_SECRET", None)
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
