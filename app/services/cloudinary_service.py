@@ -14,8 +14,6 @@ import cloudinary.api
 from cloudinary.utils import cloudinary_url
 from typing import Optional, Dict, Any, List, Tuple
 from fastapi import HTTPException, UploadFile, status
-import io
-import base64
 from enum import Enum
 
 from app.config.settings import Settings
@@ -36,7 +34,7 @@ class ImageFormat(str, Enum):
 
 class CloudinaryFolder(str, Enum):
     """Carpetas predefinidas en Cloudinary."""
-    PRODUCTS = "farmaplus/products"
+    PRODUCTS = "products"
     BLOG = "farmaplus/blog"
     USERS = "farmaplus/users"
     CATEGORIES = "farmaplus/categories"
@@ -69,12 +67,13 @@ class CloudinaryService:
             CloudinaryService._configured = True
     
     def _configure_cloudinary(self) -> None:
-        """Configura las credenciales de Cloudinary."""
-        if not all([
-            settings.CLOUDINARY_CLOUD_NAME,
-            settings.CLOUDINARY_API_KEY,
-            settings.CLOUDINARY_API_SECRET
-        ]):
+        """Configura las credenciales de Cloudinary de forma robusta."""
+        # IMPORTANTE: .strip() elimina espacios o saltos de línea invisibles
+        cloud_name = settings.CLOUDINARY_CLOUD_NAME.strip() if settings.CLOUDINARY_CLOUD_NAME else None
+        api_key = settings.CLOUDINARY_API_KEY.strip() if settings.CLOUDINARY_API_KEY else None
+        api_secret = settings.CLOUDINARY_API_SECRET.strip() if settings.CLOUDINARY_API_SECRET else None
+
+        if not all([cloud_name, api_key, api_secret]):
             logger.warning(
                 "Cloudinary no está completamente configurado. "
                 "Verifica las variables de entorno: CLOUDINARY_CLOUD_NAME, "
@@ -83,14 +82,14 @@ class CloudinaryService:
             return
         
         cloudinary.config(
-            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-            api_key=settings.CLOUDINARY_API_KEY,
-            api_secret=settings.CLOUDINARY_API_SECRET,
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret,
             secure=True
         )
         
-        logger.info(
-            f"Cloudinary configurado correctamente para cloud: {settings.CLOUDINARY_CLOUD_NAME}"
+        logger.debug(
+            f"Cloudinary configurado para cloud: {cloud_name}"
         )
     
     def _validate_configuration(self) -> None:
@@ -181,6 +180,11 @@ class CloudinaryService:
             HTTPException si hay error en la subida
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración antes de operar
+        
+        # Convertir folder de Enum a string si es necesario
+        if isinstance(folder, CloudinaryFolder):
+            folder = folder.value
         
         try:
             # Leer contenido del archivo
@@ -277,6 +281,11 @@ class CloudinaryService:
             Dict con información de la imagen subida
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
+        
+        # Convertir folder de Enum a string si es necesario
+        if isinstance(folder, CloudinaryFolder):
+            folder = folder.value
         
         try:
             # Validar tamaño
@@ -355,6 +364,11 @@ class CloudinaryService:
             Dict con información de la imagen subida
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
+        
+        # Convertir folder de Enum a string si es necesario
+        if isinstance(folder, CloudinaryFolder):
+            folder = folder.value
         
         try:
             upload_options: Dict[str, Any] = {
@@ -458,6 +472,7 @@ class CloudinaryService:
             Dict con resultado de la eliminación
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
         
         try:
             result = cloudinary.uploader.destroy(public_id)
@@ -495,6 +510,7 @@ class CloudinaryService:
             Dict con resultados de la eliminación
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
         
         if not public_ids:
             return {"deleted": [], "failed": []}
@@ -605,6 +621,7 @@ class CloudinaryService:
             Dict con información de la imagen
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
         
         try:
             result = cloudinary.api.resource(public_id)
@@ -655,6 +672,7 @@ class CloudinaryService:
             Dict con lista de imágenes y cursor de paginación
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
         
         try:
             options = {
@@ -714,6 +732,7 @@ class CloudinaryService:
             Dict con resultado del renombrado
         """
         self._validate_configuration()
+        self._configure_cloudinary()  # Forzar configuración
         
         try:
             result = cloudinary.uploader.rename(

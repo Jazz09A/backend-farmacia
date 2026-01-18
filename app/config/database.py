@@ -34,6 +34,6 @@ def create_tables():
         User, Product, CartItem, Address, UserPreferences,
         Category, Brand, FlashOffer, PromotionalCode, 
         PromotionUsage, UserFavorite, CreditPayment,
-        BlogPost, BlogCategory, BlogImage
+        BlogPost, BlogCategory, BlogImage, ProductImage
     )
     Base.metadata.create_all(bind=engine) 

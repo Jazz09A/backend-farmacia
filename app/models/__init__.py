@@ -18,6 +18,7 @@ from .category import Category, Brand
 from .favorites import UserFavorite
 from .credit_payment import CreditPayment
 from .blog import BlogPost, BlogCategory, BlogImage
+from .product_image import ProductImage
 
 __all__ = [
     "User",
@@ -43,5 +44,6 @@ __all__ = [
     "CreditPayment",
     "BlogPost",
     "BlogCategory",
-    "BlogImage"
+    "BlogImage",
+    "ProductImage"
 ] 

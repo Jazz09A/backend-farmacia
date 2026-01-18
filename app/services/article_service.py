@@ -17,13 +17,15 @@ from app.schemas.article import (
     ArticleStockDetail,
     ArticleSummary,
     ImageUploadResponse,
+    CloudinaryImageInfo,
 )
 from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
 from app.models.promotion import FlashOffer, DiscountType
 from app.services.source_system_service import source_system_service
 from app.services.cache_service import cache_service
+from app.services.product_image_service import product_image_service
 from app.utils.timezone import get_ve_now
-from app.querys.image_query import get_image_by_co_art
+# from app.querys.image_query import get_image_by_co_art
 from app.config.settings import Settings
 settings = Settings()
 class ArticleService:
@@ -285,6 +287,12 @@ class ArticleService:
             article_codes=article_codes,
             tip_cli=None  # Por ahora sin filtrar por tipo de cliente
         )
+        
+        # Obtener imágenes de Cloudinary para todos los artículos en una sola consulta
+        cloudinary_images_map = product_image_service.get_main_images_by_articles_batch(
+            co_arts=article_codes,
+            db=db
+        )
 
         summaries: List[ArticleSummary] = []
         for row in result["items"]:
@@ -317,6 +325,9 @@ class ArticleService:
             # Obtener descripción desde JSON
             description = self._get_description(co_art)
             
+            # Obtener imagen de Cloudinary si existe
+            cloudinary_image_url = cloudinary_images_map.get(normalized_co_art)
+            
             summaries.append(
                 ArticleSummary(
                     co_art=co_art,
@@ -329,6 +340,8 @@ class ArticleService:
                     warehouse_code=warehouse,
                     image_url=image_url,
                     has_image=bool(image_guid_normalized),
+                    cloudinary_image_url=cloudinary_image_url,
+                    has_cloudinary_image=bool(cloudinary_image_url),
                     description=description,
                     flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
                     profit_discount=profit_discount,
@@ -388,6 +401,39 @@ class ArticleService:
         if cached_response is not None:
             self.logger.debug(f"Cache hit para detalle de artículo: {normalized_co_art}")
             print(f"✅ CACHE HIT - Detalle de artículo encontrado en cache: {normalized_co_art}")
+            
+            # IMPORTANTE: Siempre consultar las imágenes de Cloudinary desde la BD,
+            # incluso si hay cache, porque las imágenes pueden haber sido agregadas después
+            # de que se cacheó la respuesta
+            cloudinary_images_raw = product_image_service.get_images_by_article(
+                co_art=normalized_co_art,
+                db=db
+            )
+            cloudinary_images = [
+                CloudinaryImageInfo(
+                    id=img["id"],
+                    cloudinary_url=img["cloudinary_url"],
+                    cloudinary_public_id=img.get("cloudinary_public_id"),
+                    is_main=img.get("is_main", False),
+                    display_order=img.get("display_order", 0),
+                    description=img.get("description")
+                )
+                for img in cloudinary_images_raw
+            ]
+            
+            # Actualizar las imágenes de Cloudinary en la respuesta cacheada
+            cached_response["cloudinary_images"] = [
+                {
+                    "id": img["id"],
+                    "cloudinary_url": img["cloudinary_url"],
+                    "cloudinary_public_id": img.get("cloudinary_public_id"),
+                    "is_main": img.get("is_main", False),
+                    "display_order": img.get("display_order", 0),
+                    "description": img.get("description")
+                }
+                for img in cloudinary_images_raw
+            ]
+            
             return ArticleDetail(**cached_response)
         
         self.logger.debug(f"Cache miss para detalle de artículo: {normalized_co_art}")
@@ -448,6 +494,26 @@ class ArticleService:
 
         # Obtener descripción desde JSON
         description = self._get_description(normalized_co_art)
+        
+        # Obtener imágenes de Cloudinary para este artículo
+        # IMPORTANTE: Siempre consultar las imágenes desde la BD, incluso si hay cache
+        # porque las imágenes pueden haber sido agregadas después de que se cacheó la respuesta
+        cloudinary_images_raw = product_image_service.get_images_by_article(
+            co_art=normalized_co_art,
+            db=db
+        )
+        self.logger.debug(f"Imágenes de Cloudinary obtenidas para {normalized_co_art}: {len(cloudinary_images_raw)} imágenes")
+        cloudinary_images = [
+            CloudinaryImageInfo(
+                id=img["id"],
+                cloudinary_url=img["cloudinary_url"],
+                cloudinary_public_id=img.get("cloudinary_public_id"),
+                is_main=img.get("is_main", False),
+                display_order=img.get("display_order", 0),
+                description=img.get("description")
+            )
+            for img in cloudinary_images_raw
+        ]
 
         response = ArticleDetail(
             co_art=(header.get("co_art") or "").strip(),
@@ -464,6 +530,7 @@ class ArticleService:
             prices=prices,
             stock_by_warehouse=stock,
             images=images,
+            cloudinary_images=cloudinary_images,
             flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
             profit_discount=profit_discount,
         )

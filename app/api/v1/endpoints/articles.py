@@ -24,9 +24,19 @@ from app.config.database import get_db
 from app.models.user import User
 from sqlalchemy.orm import Session
 from app.schemas.article import ArticleDetail, ArticleListResponse, ImageUploadResponse, ArticleRecommendations, ArticleSummary
+from app.schemas.product_image import (
+    ProductImageUploadResponse,
+    ProductImageResponse,
+    ProductImageListResponse,
+    ProductImageDeleteResponse,
+    ProductImageBulkDeleteResponse,
+    SetMainImageResponse,
+    ProductImageFromURL,
+)
 from app.services.article_service import article_service
 from app.services.recommendation_service import RecommendationService
 from app.services.source_system_service import source_system_service
+from app.services.product_image_service import product_image_service
 
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -267,4 +277,198 @@ async def get_article_image(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener la imagen: {str(e)}",
         )
+
+
+# =============================================================================
+# ENDPOINTS DE IMÁGENES EN CLOUDINARY (Base de datos local)
+# =============================================================================
+
+@router.post(
+    "/{co_art}/cloudinary-images",
+    response_model=ProductImageUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Product Images - Cloudinary"],
+)
+async def upload_product_image_cloudinary(
+    co_art: str,
+    file: UploadFile = File(..., description="Archivo de imagen (JPG, PNG, WEBP)"),
+    is_main: bool = Form(False, description="Marcar como imagen principal"),
+    description: Optional[str] = Form(None, description="Descripción o alt text de la imagen"),
+    admin_user=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    📷 **Subir imagen de producto a Cloudinary**
+    
+    Sube una imagen a Cloudinary y guarda la referencia en la base de datos local.
+    La imagen queda asociada al código de artículo de Profit Plus (co_art).
+    
+    **Requiere perfil administrador.**
+    
+    Args:
+        co_art: Código del artículo en Profit Plus
+        file: Archivo de imagen
+        is_main: Si debe ser la imagen principal (desmarca las anteriores)
+        description: Descripción o texto alternativo de la imagen
+        
+    Returns:
+        Información de la imagen subida incluyendo URL de Cloudinary
+    """
+    result = await product_image_service.upload_product_image(
+        co_art=co_art,
+        file=file,
+        is_main=is_main,
+        description=description,
+        created_by=getattr(admin_user, "email", "API_USER"),
+    )
+    return ProductImageUploadResponse(**result)
+
+
+@router.post(
+    "/{co_art}/cloudinary-images/from-url",
+    response_model=ProductImageUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Product Images - Cloudinary"],
+)
+async def upload_product_image_from_url(
+    co_art: str,
+    image_data: ProductImageFromURL,
+    admin_user=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    📷 **Subir imagen de producto desde URL a Cloudinary**
+    
+    Descarga una imagen desde una URL externa y la sube a Cloudinary.
+    
+    **Requiere perfil administrador.**
+    
+    Args:
+        co_art: Código del artículo en Profit Plus
+        image_data: Datos de la imagen incluyendo URL origen
+        
+    Returns:
+        Información de la imagen subida
+    """
+    result = await product_image_service.upload_product_image_from_url(
+        co_art=co_art,
+        image_url=image_data.image_url,
+        is_main=image_data.is_main,
+        description=image_data.description,
+        created_by=getattr(admin_user, "email", "API_USER"),
+    )
+    return ProductImageUploadResponse(**result)
+
+
+@router.get(
+    "/{co_art}/cloudinary-images",
+    response_model=ProductImageListResponse,
+    tags=["Product Images - Cloudinary"],
+)
+async def get_product_cloudinary_images(
+    co_art: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    📷 **Obtener imágenes de Cloudinary de un producto**
+    
+    Retorna todas las imágenes almacenadas en Cloudinary para un artículo.
+    Las imágenes vienen ordenadas con la principal primero.
+    
+    Args:
+        co_art: Código del artículo en Profit Plus
+        
+    Returns:
+        Lista de imágenes del producto
+    """
+    images = product_image_service.get_images_by_article(co_art, db=db)
+    
+    return ProductImageListResponse(
+        co_art_profit=co_art.strip().upper(),
+        images=[ProductImageResponse(**img) for img in images],
+        total=len(images)
+    )
+
+
+@router.delete(
+    "/cloudinary-images/{image_id}",
+    response_model=ProductImageDeleteResponse,
+    tags=["Product Images - Cloudinary"],
+)
+async def delete_product_cloudinary_image(
+    image_id: int,
+    admin_user=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    🗑️ **Eliminar imagen de Cloudinary**
+    
+    Elimina una imagen específica de Cloudinary y de la base de datos.
+    
+    **Requiere perfil administrador.**
+    
+    Args:
+        image_id: ID de la imagen en la base de datos
+        
+    Returns:
+        Resultado de la eliminación
+    """
+    result = await product_image_service.delete_image(image_id, db=db)
+    return ProductImageDeleteResponse(**result)
+
+
+@router.delete(
+    "/{co_art}/cloudinary-images",
+    response_model=ProductImageBulkDeleteResponse,
+    tags=["Product Images - Cloudinary"],
+)
+async def delete_all_product_cloudinary_images(
+    co_art: str,
+    admin_user=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    🗑️ **Eliminar todas las imágenes de un producto**
+    
+    Elimina todas las imágenes de Cloudinary asociadas a un artículo.
+    
+    **Requiere perfil administrador.**
+    
+    Args:
+        co_art: Código del artículo en Profit Plus
+        
+    Returns:
+        Resultado de la eliminación masiva
+    """
+    result = await product_image_service.delete_all_images_by_article(co_art, db=db)
+    return ProductImageBulkDeleteResponse(**result)
+
+
+@router.patch(
+    "/cloudinary-images/{image_id}/set-main",
+    response_model=SetMainImageResponse,
+    tags=["Product Images - Cloudinary"],
+)
+async def set_main_product_image(
+    image_id: int,
+    admin_user=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ⭐ **Establecer imagen principal**
+    
+    Marca una imagen como la imagen principal del producto.
+    Las demás imágenes del mismo producto se desmarcan como principales.
+    
+    **Requiere perfil administrador.**
+    
+    Args:
+        image_id: ID de la imagen a establecer como principal
+        
+    Returns:
+        Información de la imagen actualizada
+    """
+    result = await product_image_service.set_main_image(image_id, db=db)
+    return SetMainImageResponse(**result)
 

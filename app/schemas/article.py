@@ -44,6 +44,16 @@ class ArticleStockDetail(BaseModel):
     quantity: Decimal = Field(..., description="Cantidad disponible (stock)")
 
 
+class CloudinaryImageInfo(BaseModel):
+    """Información de una imagen almacenada en Cloudinary."""
+    id: int = Field(..., description="ID de la imagen en la base de datos")
+    cloudinary_url: str = Field(..., description="URL de la imagen en Cloudinary")
+    cloudinary_public_id: Optional[str] = Field(None, description="Public ID en Cloudinary")
+    is_main: bool = Field(False, description="Si es la imagen principal")
+    display_order: int = Field(0, description="Orden de visualización")
+    description: Optional[str] = Field(None, description="Descripción o alt text")
+
+
 class ArticleSummary(BaseModel):
     """Resumen para listados de catálogo público."""
 
@@ -66,10 +76,17 @@ class ArticleSummary(BaseModel):
         None, description="Almacén base usado para el stock de catálogo"
     )
     image_url: Optional[str] = Field(
-        None, description="URL de la imagen principal construida desde rowguid"
+        None, description="URL de la imagen principal construida desde rowguid (Profit Plus)"
     )
     has_image: bool = Field(
-        False, description="Indica si el artículo tiene al menos una imagen"
+        False, description="Indica si el artículo tiene al menos una imagen en Profit Plus"
+    )
+    # Campos de Cloudinary
+    cloudinary_image_url: Optional[str] = Field(
+        None, description="URL de la imagen principal en Cloudinary (DB local)"
+    )
+    has_cloudinary_image: bool = Field(
+        False, description="Indica si el artículo tiene imagen en Cloudinary"
     )
     description: Optional[str] = Field(
         None, description="Descripción extendida del producto"
@@ -112,7 +129,11 @@ class ArticleDetail(BaseModel):
         default_factory=list, description="Inventario agrupado por almacén"
     )
     images: List[ArticleImageResponse] = Field(
-        default_factory=list, description="Galería de imágenes del artículo"
+        default_factory=list, description="Galería de imágenes del artículo (Profit Plus)"
+    )
+    # Imágenes de Cloudinary (DB local)
+    cloudinary_images: List[CloudinaryImageInfo] = Field(
+        default_factory=list, description="Galería de imágenes en Cloudinary (DB local)"
     )
     flash_offer: Optional[FlashOfferInfo] = Field(
         None, description="Información de flash offer activa para este artículo"
