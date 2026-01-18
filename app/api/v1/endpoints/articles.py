@@ -61,6 +61,10 @@ async def list_articles(
     ),
     price_code: str = Query("01", description="Lista de precio de referencia"),
     warehouse_code: str = Query("001", description="Almacén principal para stock"),
+    in_stock_only: bool = Query(
+        False,
+        description="Si es true, filtra para traer solo artículos con stock > 0 en el almacén seleccionado",
+    ),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -82,6 +86,7 @@ async def list_articles(
         sort_by=sort_by,
         price_code=price_code,
         warehouse_code=warehouse_code,
+        in_stock_only=in_stock_only,
         db=db,
     )
 

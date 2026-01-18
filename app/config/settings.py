@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     CLOUDINARY_CLOUD_NAME: Optional[str] = os.getenv("CLOUDINARY_CLOUD_NAME", None)
     CLOUDINARY_API_KEY: Optional[str] = os.getenv("CLOUDINARY_API_KEY", None)
     CLOUDINARY_API_SECRET: Optional[str] = os.getenv("CLOUDINARY_API_SECRET", None)
+
+    # Feature flags (demo / temporal)
+    # Permite habilitar filtros temporales sin comprometer el contrato final del API
+    ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER: bool = (
+        os.getenv("ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER", "False").lower() == "true"
+    )
     
     class Config:
         env_file = ".env"

@@ -818,6 +818,7 @@ class SourceSystemService:
         sort_by: str = "art_des",
         price_code: str = "01",
         warehouse_code: str = "001",
+        in_stock_only: bool = False,
     ) -> Dict[str, Any]:
         """
         Obtiene un catálogo paginado de artículos desde Profit Plus utilizando
@@ -848,6 +849,11 @@ class SourceSystemService:
         if max_price is not None:
             filters.append("(ap.price IS NOT NULL AND ap.price <= %s)")
             params.append(Decimal(max_price))
+
+        if in_stock_only:
+            # stock_data viene de OUTER APPLY; si no hay registro, stock será NULL.
+            # Para este filtro, NULL cuenta como 0 => se excluye.
+            filters.append("(ISNULL(stock_data.stock, 0) > 0)")
 
         where_clause = " AND ".join(filters)
 

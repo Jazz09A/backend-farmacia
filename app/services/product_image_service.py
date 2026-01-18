@@ -94,7 +94,7 @@ class ProductImageService:
                 db.query(ProductImage).filter(
                     and_(
                         ProductImage.co_art_profit == co_art_normalized,
-                        ProductImage.is_main == True
+                        ProductImage.is_main
                     )
                 ).update({"is_main": False})
             
@@ -144,11 +144,10 @@ class ProductImageService:
             # También invalidar cualquier catálogo que pueda incluir este artículo
             catalog_invalidated = cache_service.invalidate_pattern("catalog:")
             logger.info(
-                f"🔄 CACHE INVALIDADO - Artículo {co_art_normalized}: "
+                f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
-                f"catálogos invalidados: {catalog_invalidated}"
+                f"catálogos invalidados={catalog_invalidated}"
             )
-            print(f"🔄 CACHE INVALIDADO - Los cambios en imágenes de {co_art_normalized} se verán inmediatamente")
             
             return {
                 "id": product_image.id,
@@ -212,7 +211,7 @@ class ProductImageService:
                 db.query(ProductImage).filter(
                     and_(
                         ProductImage.co_art_profit == co_art_normalized,
-                        ProductImage.is_main == True
+                        ProductImage.is_main
                     )
                 ).update({"is_main": False})
             
@@ -251,11 +250,10 @@ class ProductImageService:
             # También invalidar cualquier catálogo que pueda incluir este artículo
             catalog_invalidated = cache_service.invalidate_pattern("catalog:")
             logger.info(
-                f"🔄 CACHE INVALIDADO - Artículo {co_art_normalized}: "
+                f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
-                f"catálogos invalidados: {catalog_invalidated}"
+                f"catálogos invalidados={catalog_invalidated}"
             )
-            print(f"🔄 CACHE INVALIDADO - Los cambios en imágenes de {co_art_normalized} se verán inmediatamente")
             
             return {
                 "id": product_image.id,
@@ -363,7 +361,7 @@ class ProductImageService:
             image = session.query(ProductImage).filter(
                 and_(
                     ProductImage.co_art_profit == co_art_normalized,
-                    ProductImage.is_main == True
+                    ProductImage.is_main
                 )
             ).first()
             
@@ -579,11 +577,10 @@ class ProductImageService:
                 # También invalidar cualquier catálogo que pueda incluir este artículo
                 catalog_invalidated = cache_service.invalidate_pattern("catalog:")
                 logger.info(
-                    f"🔄 CACHE INVALIDADO - Artículo {co_art_normalized}: "
+                    f"Cache invalidado - artículo {co_art_normalized}: "
                     f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
-                    f"catálogos invalidados: {catalog_invalidated}"
+                    f"catálogos invalidados={catalog_invalidated}"
                 )
-                print(f"🔄 CACHE INVALIDADO - Los cambios en imágenes de {co_art_normalized} se verán inmediatamente")
             
             return {
                 "success": True,
@@ -653,11 +650,10 @@ class ProductImageService:
                 # También invalidar cualquier catálogo que pueda incluir este artículo
                 catalog_invalidated = cache_service.invalidate_pattern("catalog:")
                 logger.info(
-                    f"🔄 CACHE INVALIDADO - Artículo {co_art_normalized}: "
+                    f"Cache invalidado - artículo {co_art_normalized}: "
                     f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
-                    f"catálogos invalidados: {catalog_invalidated}"
+                    f"catálogos invalidados={catalog_invalidated}"
                 )
-                print(f"🔄 CACHE INVALIDADO - Los cambios en imágenes de {co_art_normalized} se verán inmediatamente")
             
             return {
                 "success": True,
@@ -746,11 +742,10 @@ class ProductImageService:
             # También invalidar cualquier catálogo que pueda incluir este artículo
             catalog_invalidated = cache_service.invalidate_pattern("catalog:")
             logger.info(
-                f"🔄 CACHE INVALIDADO - Artículo {co_art_normalized}: "
+                f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
-                f"catálogos invalidados: {catalog_invalidated}"
+                f"catálogos invalidados={catalog_invalidated}"
             )
-            print(f"🔄 CACHE INVALIDADO - Los cambios en imágenes de {co_art_normalized} se verán inmediatamente")
             
             return {
                 "success": True,

@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional
 from decimal import Decimal
 import json
-import os
 from pathlib import Path
 
 from fastapi import HTTPException, status
@@ -62,7 +61,7 @@ class ArticleService:
         flash_offers = db.query(FlashOffer).filter(
             and_(
                 FlashOffer.article_code.in_(normalized_codes),
-                FlashOffer.is_active == True,
+                FlashOffer.is_active,
                 FlashOffer.start_time <= now,
                 FlashOffer.end_time >= now,
                 or_(
@@ -215,6 +214,60 @@ class ArticleService:
         descriptions = self._load_descriptions()
         normalized_co_art = co_art.strip().upper()
         return descriptions.get(normalized_co_art)
+
+    def _get_all_catalog_items_for_demo_filter(
+        self,
+        *,
+        search: Optional[str],
+        line_code: Optional[str],
+        category_code: Optional[str],
+        min_price: Optional[Decimal],
+        max_price: Optional[Decimal],
+        sort_by: str,
+        price_code: str,
+        warehouse_code: str,
+        in_stock_only: bool,
+    ) -> List[Dict[str, Any]]:
+        """
+        DEMO ONLY:
+        Obtiene todos los items del catálogo (sin paginar a nivel de API),
+        para poder aplicar filtros temporales (ej: solo con imágenes Cloudinary)
+        y luego paginar sobre el resultado filtrado.
+
+        Se puede eliminar fácilmente cuando ya no se requiera para la presentación.
+        """
+        batch_size = 500
+        page_num = 1
+        all_items: List[Dict[str, Any]] = []
+
+        while True:
+            result = self._source_service.get_articles_catalog(
+                page=page_num,
+                limit=batch_size,
+                search=search,
+                line_code=line_code,
+                category_code=category_code,
+                min_price=min_price,
+                max_price=max_price,
+                sort_by=sort_by,
+                price_code=price_code,
+                warehouse_code=warehouse_code,
+                in_stock_only=in_stock_only,
+            )
+
+            items = result.get("items") or []
+            if not items:
+                break
+
+            all_items.extend(items)
+
+            total = int(result.get("total") or 0)
+            if len(all_items) >= total:
+                break
+
+            page_num += 1
+
+        return all_items
     
     @staticmethod
     def _to_decimal(value: Any) -> Optional[Decimal]:
@@ -239,9 +292,15 @@ class ArticleService:
         sort_by: str = "art_des",
         price_code: str = "01",
         warehouse_code: str = "001",
+        in_stock_only: bool = False,
         db: Optional[Session] = None,
     ) -> ArticleListResponse:
         """Obtiene el catálogo paginado directamente desde Profit Plus con cache."""
+        # Feature flag: este filtro es temporal (demo) y se controla SOLO por env var.
+        effective_cloudinary_images_only = bool(
+            getattr(settings, "ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER", False)
+        )
+
         # Generar clave de cache única basada en todos los parámetros
         cache_key = cache_service._generate_key(
             "catalog",
@@ -255,6 +314,8 @@ class ArticleService:
             sort_by=sort_by,
             price_code=price_code,
             warehouse_code=warehouse_code,
+            in_stock_only=in_stock_only,
+            cloudinary_images_only=effective_cloudinary_images_only,
         )
         
         # Intentar obtener del cache
@@ -269,33 +330,72 @@ class ArticleService:
         self.logger.debug(f"Cache miss para catálogo: {cache_key}")
         print(f"❌ CACHE MISS - Catálogo no encontrado en cache: {cache_key}")
         
-        result = self._source_service.get_articles_catalog(
-            page=page,
-            limit=limit,
-            search=search,
-            line_code=line_code,
-            category_code=category_code,
-            min_price=min_price,
-            max_price=max_price,
-            sort_by=sort_by,
-            price_code=price_code,
-            warehouse_code=warehouse_code,
-        )
+        # Si está activo el filtro demo (solo con imágenes Cloudinary), primero construimos
+        # el listado completo para filtrar y luego paginamos sobre el resultado filtrado.
+        if effective_cloudinary_images_only:
+            all_items = self._get_all_catalog_items_for_demo_filter(
+                search=search,
+                line_code=line_code,
+                category_code=category_code,
+                min_price=min_price,
+                max_price=max_price,
+                sort_by=sort_by,
+                price_code=price_code,
+                warehouse_code=warehouse_code,
+                in_stock_only=in_stock_only,
+            )
+            all_codes = [(row.get("co_art") or "").strip() for row in all_items if row.get("co_art")]
 
-        article_codes = [(row.get("co_art") or "").strip() for row in result["items"]]
+            cloudinary_images_map = product_image_service.get_main_images_by_articles_batch(
+                co_arts=all_codes,
+                db=db,
+            )
+
+            # Filtrar SOLO artículos con imagen principal en Cloudinary
+            filtered_items = [
+                row
+                for row in all_items
+                if cloudinary_images_map.get((row.get("co_art") or "").strip().upper())
+            ]
+
+            total = len(filtered_items)
+            total_pages = (total + limit - 1) // limit if total else 0
+            start = (page - 1) * limit
+            end = start + limit
+            page_items = filtered_items[start:end]
+        else:
+            result = self._source_service.get_articles_catalog(
+                page=page,
+                limit=limit,
+                search=search,
+                line_code=line_code,
+                category_code=category_code,
+                min_price=min_price,
+                max_price=max_price,
+                sort_by=sort_by,
+                price_code=price_code,
+                warehouse_code=warehouse_code,
+                in_stock_only=in_stock_only,
+            )
+            page_items = result["items"]
+            total = result.get("total", 0)
+            total_pages = (total + limit - 1) // limit if total else 0
+
+            article_codes = [(row.get("co_art") or "").strip() for row in page_items]
+            cloudinary_images_map = product_image_service.get_main_images_by_articles_batch(
+                co_arts=article_codes,
+                db=db,
+            )
+
+        # Para descuentos, solo necesitamos los códigos de la página actual
+        page_article_codes = [(row.get("co_art") or "").strip() for row in page_items]
         profit_discounts_map = self._source_service.get_active_discounts_for_articles(
-            article_codes=article_codes,
-            tip_cli=None  # Por ahora sin filtrar por tipo de cliente
-        )
-        
-        # Obtener imágenes de Cloudinary para todos los artículos en una sola consulta
-        cloudinary_images_map = product_image_service.get_main_images_by_articles_batch(
-            co_arts=article_codes,
-            db=db
+            article_codes=page_article_codes,
+            tip_cli=None,  # Por ahora sin filtrar por tipo de cliente
         )
 
         summaries: List[ArticleSummary] = []
-        for row in result["items"]:
+        for row in page_items:
             co_art = (row.get("co_art") or "").strip()
             art_des = row.get("art_des") or ""
             category_code = (row.get("category_code") or "").strip() or None
@@ -348,9 +448,6 @@ class ArticleService:
                 )
             )
 
-        total = result.get("total", 0)
-        total_pages = (total + limit - 1) // limit if total else 0
-
         filters_applied: Dict[str, Any] = {}
         if search:
             filters_applied["search"] = search
@@ -365,6 +462,8 @@ class ArticleService:
         filters_applied["sort_by"] = sort_by
         filters_applied["price_code"] = price_code
         filters_applied["warehouse_code"] = warehouse_code
+        filters_applied["in_stock_only"] = in_stock_only
+        filters_applied["cloudinary_images_only"] = effective_cloudinary_images_only
 
         response = ArticleListResponse(
             articles=summaries,
