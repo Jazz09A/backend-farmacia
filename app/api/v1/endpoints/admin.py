@@ -95,6 +95,61 @@ async def get_admin_dashboard(
     return dashboard_data
 
 
+@router.get("/pool-health")
+async def get_pool_health(
+    admin_user: User = Depends(get_admin_user)
+):
+    """
+    🔍 **Monitoreo del Pool de Conexiones Profit Plus**
+    
+    Retorna estadísticas en tiempo real del pool de conexiones a la base de datos
+    de Profit Plus para detectar problemas de conexiones agotadas.
+    
+    **Estados de salud:**
+    - `healthy`: Uso normal del pool (< 70%)
+    - `warning`: Uso alto del pool (70-90%)
+    - `critical`: Pool casi agotado (> 90%)
+    
+    **Returns:**
+        Información del estado del pool y recomendaciones
+    """
+    stats = source_system_service._pool.get_stats()
+    
+    # Calcular porcentaje de uso
+    total_capacity = stats["pool_size"] + stats["overflow_max"]
+    usage_percent = (stats["in_use"] / total_capacity * 100) if total_capacity > 0 else 0
+    
+    # Determinar estado de salud
+    if usage_percent >= 90:
+        health_status = "critical"
+        message = "⚠️ CRÍTICO: Pool de conexiones casi agotado"
+    elif usage_percent >= 70:
+        health_status = "warning"
+        message = "⚠️ ADVERTENCIA: Uso alto del pool de conexiones"
+    else:
+        health_status = "healthy"
+        message = "✅ Pool de conexiones operando normalmente"
+    
+    return {
+        "status": health_status,
+        "message": message,
+        "usage_percent": round(usage_percent, 2),
+        "pool_stats": stats,
+        "recommendations": {
+            "should_increase_pool": usage_percent > 80,
+            "suggested_pool_size": stats["pool_size"] + 10 if usage_percent > 80 else stats["pool_size"],
+            "suggested_overflow": stats["overflow_max"] + 5 if usage_percent > 80 else stats["overflow_max"]
+        },
+        "current_capacity": {
+            "pool_size": stats["pool_size"],
+            "overflow_max": stats["overflow_max"],
+            "total_capacity": total_capacity,
+            "in_use": stats["in_use"],
+            "available": stats["available"]
+        }
+    }
+
+
 # =============================================================================
 # GESTIÓN DE USUARIOS
 # =============================================================================

@@ -192,20 +192,18 @@ class QuoteService:
         tasa = Decimal('1.00')  # Tasa de cambio (1.00 para misma moneda, ajustar si es necesario)
         porc_imp_default = Decimal('16.00')  # 16% IVA por defecto
 
-        conn = None
-        cursor = None
         try:
-            conn = source_system_service.get_pooled_connection()
-            cursor = conn.cursor()
-            
-            # Limpiar cualquier transacción pendiente de la conexión reutilizada
-            try:
-                cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-            except Exception:
-                pass  # Ignorar si no hay transacción pendiente
-            
-            # Iniciar transacción explícita (manejada por pymssql)
-            cursor.execute("BEGIN TRANSACTION")
+            with source_system_service.connection() as conn:
+                cursor = conn.cursor()
+                
+                # Limpiar cualquier transacción pendiente de la conexión reutilizada
+                try:
+                    cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                except Exception:
+                    pass  # Ignorar si no hay transacción pendiente
+                
+                # Iniciar transacción explícita (manejada por pymssql)
+                cursor.execute("BEGIN TRANSACTION")
             
             # PASO 1: Generar doc_num de forma segura
             doc_num = self._generate_doc_num_safe(cursor)
@@ -795,23 +793,16 @@ class QuoteService:
                 f"tipo_error={type(e).__name__} | error={e}",
                 exc_info=True
             )
+                raise
+        except Exception as e:
+            # Log con contexto útil para debugging (capturar excepciones fuera del with)
+            logger.error(
+                f"Error creando cotización | user_id={user_id} | "
+                f"items={len(payload.items) if payload and payload.items else 0} | "
+                f"tipo_error={type(e).__name__} | error={e}",
+                exc_info=True
+            )
             raise
-        finally:
-            # Cerrar recursos solo si no se cerraron antes (en caso de éxito)
-            try:
-                if cursor:
-                    cursor.close()
-            except Exception:
-                pass
-            # Limpiar cualquier transacción pendiente antes de devolver al pool
-            if conn:
-                try:
-                    temp_cursor = conn.cursor()
-                    temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-                    temp_cursor.close()
-                except Exception:
-                    pass  # Ignorar errores al limpiar
-                source_system_service.return_connection(conn)
 
     def verify_quote_payload(
         self,
@@ -1265,20 +1256,18 @@ class QuoteService:
             customer_code = customer_code.strip() if customer_code else None
             
             # Verificar que la cotización existe y pertenece al cliente
-            conn = None
-            cursor = None
             try:
-                conn = source_system_service.get_pooled_connection()
-                cursor = conn.cursor()
-                
-                # Limpiar cualquier transacción pendiente de la conexión reutilizada
-                try:
-                    cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-                except Exception:
-                    pass  # Ignorar si no hay transacción pendiente
-                
-                # Iniciar transacción (manejada por pymssql)
-                cursor.execute("BEGIN TRANSACTION")
+                with source_system_service.connection() as conn:
+                    cursor = conn.cursor()
+                    
+                    # Limpiar cualquier transacción pendiente de la conexión reutilizada
+                    try:
+                        cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                    except Exception:
+                        pass  # Ignorar si no hay transacción pendiente
+                    
+                    # Iniciar transacción (manejada por pymssql)
+                    cursor.execute("BEGIN TRANSACTION")
                 
                 # Verificar que la cotización existe y pertenece al cliente
                 check_query = """
@@ -1316,34 +1305,13 @@ class QuoteService:
                 # Confirmar transacción
                 conn.commit()
                 
-                logger.info(f"Cotización {profit_plus_id} anulada exitosamente por usuario {user_id}")
-                return True
-                
+                    logger.info(f"Cotización {profit_plus_id} anulada exitosamente por usuario {user_id}")
+                    cursor.close()
+                    return True
+                    
             except Exception as e:
-                # Revertir transacción en caso de error
-                try:
-                    if conn:
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-                except Exception as rollback_error:
-                    logger.error(f"Error al hacer rollback: {rollback_error}")
-                
                 logger.error(f"Error anulando cotización {profit_plus_id}: {str(e)}", exc_info=True)
                 raise
-            finally:
-                if cursor:
-                    cursor.close()
-                # Limpiar cualquier transacción pendiente antes de devolver al pool
-                if conn:
-                    try:
-                        temp_cursor = conn.cursor()
-                        temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-                        temp_cursor.close()
-                    except Exception:
-                        pass  # Ignorar errores al limpiar
-                    source_system_service.return_connection(conn)
                 
         except Exception as e:
             logger.error(

@@ -450,64 +450,60 @@ class SourceSystemService:
         offset: int = 0,
         search: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
 
-            query = """
-            SELECT 
-                RTRIM(co_cli) AS customer_code,
-                RTRIM(cli_des) AS customer_name,
-                email,
-                email_alterno AS alternate_email,
-                rif,
-                telefonos AS phones,
-                direc1 AS address1,
-                direc2 AS address2,
-                RTRIM(tip_cli) AS tip_cli,
-                inactivo AS inactive,
-                juridico AS is_juridico,
-                fecha_reg AS registration_date
-            FROM saCliente WITH (NOLOCK)
-            WHERE 1=1
-            """
+                query = """
+                SELECT 
+                    RTRIM(co_cli) AS customer_code,
+                    RTRIM(cli_des) AS customer_name,
+                    email,
+                    email_alterno AS alternate_email,
+                    rif,
+                    telefonos AS phones,
+                    direc1 AS address1,
+                    direc2 AS address2,
+                    RTRIM(tip_cli) AS tip_cli,
+                    inactivo AS inactive,
+                    juridico AS is_juridico,
+                    fecha_reg AS registration_date
+                FROM saCliente WITH (NOLOCK)
+                WHERE 1=1
+                """
 
-            params = []
-            
-            if not include_inactive:
-                query += " AND inactivo = 0"
-            if only_with_email:
-                query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
-            
-            # Búsqueda en SQL en lugar de en memoria
-            if search:
-                search_pattern = f"%{search}%"
-                query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
-                params.extend([search_pattern.lower(), search_pattern.lower()])
+                params = []
                 
-            query += " ORDER BY cli_des"
+                if not include_inactive:
+                    query += " AND inactivo = 0"
+                if only_with_email:
+                    query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
+                
+                # Búsqueda en SQL en lugar de en memoria
+                if search:
+                    search_pattern = f"%{search}%"
+                    query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
+                    params.extend([search_pattern.lower(), search_pattern.lower()])
+                    
+                query += " ORDER BY cli_des"
 
-            if limit:
-                query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
+                if limit:
+                    query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
 
-            if params:
-                cursor.execute(query, tuple(params))
-            else:
-                cursor.execute(query)
-            customers = cursor.fetchall()
+                if params:
+                    cursor.execute(query, tuple(params))
+                else:
+                    cursor.execute(query)
+                customers = cursor.fetchall()
 
-            cursor.close()
-            return customers
+                cursor.close()
+                return customers
         except Exception as e:
             self.logger.error(
                 f"Error obteniendo clientes | include_inactive={include_inactive} | "
                 f"only_with_email={only_with_email} | search={search} | error={e}"
             )
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def count_customers(
         self,
@@ -519,114 +515,102 @@ class SourceSystemService:
         Cuenta el total de clientes de forma eficiente usando COUNT(*) en SQL.
         Esto evita traer todos los registros solo para contar.
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
 
-            query = """
-            SELECT COUNT(*) AS total
-            FROM saCliente WITH (NOLOCK)
-            WHERE 1=1
-            """
+                query = """
+                SELECT COUNT(*) AS total
+                FROM saCliente WITH (NOLOCK)
+                WHERE 1=1
+                """
 
-            params = []
-            
-            if not include_inactive:
-                query += " AND inactivo = 0"
-            if only_with_email:
-                query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
-            
-            # Búsqueda en SQL
-            if search:
-                search_pattern = f"%{search}%"
-                query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
-                params.extend([search_pattern.lower(), search_pattern.lower()])
+                params = []
+                
+                if not include_inactive:
+                    query += " AND inactivo = 0"
+                if only_with_email:
+                    query += " AND (email IS NOT NULL AND email != '' OR email_alterno IS NOT NULL AND email_alterno != '')"
+                
+                # Búsqueda en SQL
+                if search:
+                    search_pattern = f"%{search}%"
+                    query += " AND (LOWER(RTRIM(cli_des)) LIKE %s OR LOWER(RTRIM(co_cli)) LIKE %s)"
+                    params.extend([search_pattern.lower(), search_pattern.lower()])
 
-            if params:
-                cursor.execute(query, tuple(params))
-            else:
-                cursor.execute(query)
-            
-            result = cursor.fetchone()
-            total = result.get("total", 0) if result else 0
+                if params:
+                    cursor.execute(query, tuple(params))
+                else:
+                    cursor.execute(query)
+                
+                result = cursor.fetchone()
+                total = result.get("total", 0) if result else 0
 
-            cursor.close()
-            return total
+                cursor.close()
+                return total
         except Exception as e:
             self.logger.error(
                 f"Error contando clientes | include_inactive={include_inactive} | "
                 f"only_with_email={only_with_email} | search={search} | error={e}"
             )
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_customer_by_code(self, customer_code: str) -> Optional[Dict[str, Any]]:
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            query = """
-            SELECT 
-                RTRIM(co_cli) AS customer_code,
-                RTRIM(cli_des) AS customer_name,
-                email,
-                email_alterno AS alternate_email,
-                rif,
-                telefonos AS phones,
-                direc1 AS address1,
-                direc2 AS address2,
-                RTRIM(tip_cli) AS tip_cli,
-                inactivo AS inactive,
-                juridico AS is_juridico,
-                fecha_reg AS registration_date
-            FROM saCliente WITH (NOLOCK)
-            WHERE co_cli = %s
-            """
-            cursor.execute(query, (customer_code,))
-            customer = cursor.fetchone()
-            cursor.close()
-            return customer
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                SELECT 
+                    RTRIM(co_cli) AS customer_code,
+                    RTRIM(cli_des) AS customer_name,
+                    email,
+                    email_alterno AS alternate_email,
+                    rif,
+                    telefonos AS phones,
+                    direc1 AS address1,
+                    direc2 AS address2,
+                    RTRIM(tip_cli) AS tip_cli,
+                    inactivo AS inactive,
+                    juridico AS is_juridico,
+                    fecha_reg AS registration_date
+                FROM saCliente WITH (NOLOCK)
+                WHERE co_cli = %s
+                """
+                cursor.execute(query, (customer_code,))
+                customer = cursor.fetchone()
+                cursor.close()
+                return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente | code={customer_code} | error={e}")
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_customer_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            query = """
-            SELECT 
-                co_cli AS customer_code,
-                cli_des AS customer_name,
-                email,
-                email_alterno AS alternate_email,
-                rif,
-                telefonos AS phones,
-                direc1 AS address1,
-                direc2 AS address2,
-                inactivo AS inactive,
-                juridico AS is_juridico,
-                fecha_reg AS registration_date
-            FROM saCliente WITH (NOLOCK)
-            WHERE email = %s OR email_alterno = %s
-            """
-            cursor.execute(query, (email, email))
-            customer = cursor.fetchone()
-            cursor.close()
-            return customer
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                SELECT 
+                    co_cli AS customer_code,
+                    cli_des AS customer_name,
+                    email,
+                    email_alterno AS alternate_email,
+                    rif,
+                    telefonos AS phones,
+                    direc1 AS address1,
+                    direc2 AS address2,
+                    inactivo AS inactive,
+                    juridico AS is_juridico,
+                    fecha_reg AS registration_date
+                FROM saCliente WITH (NOLOCK)
+                WHERE email = %s OR email_alterno = %s
+                """
+                cursor.execute(query, (email, email))
+                customer = cursor.fetchone()
+                cursor.close()
+                return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente | email={email} | error={e}")
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_profit_customer_profile(self, email: str) -> Dict[str, Any]:
         """
@@ -690,9 +674,7 @@ class SourceSystemService:
         if numeric_width <= 0:
             raise ValueError("El prefijo para co_desc no puede exceder 6 caracteres")
 
-        conn = None
-        try:
-            conn = self.get_pooled_connection()
+        with self.connection() as conn:
             cursor = conn.cursor()
             like_pattern = f"{prefix_clean}%"
             query = """
@@ -717,9 +699,6 @@ class SourceSystemService:
             new_code = f"{prefix_clean}{str(next_number).zfill(numeric_width)}"
             cursor.close()
             return new_code[:max_length]
-        finally:
-            if conn:
-                self.return_connection(conn)
     
     def get_customer_addresses(self, customer_code: str) -> List[Dict[str, Any]]:
         """
@@ -731,76 +710,72 @@ class SourceSystemService:
         Returns:
             Lista de direcciones del cliente
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            query = """
-            SELECT 
-                co_cli AS customer_code,
-                RTRIM(direc1) AS address1,
-                RTRIM(dir_ent2) AS delivery_address2,
-                RTRIM(direc2) AS address2,
-                RTRIM(ciudad) AS city,
-                RTRIM(zip) AS postal_code,
-                RTRIM(telefonos) AS phones,
-                RTRIM(cli_des) AS customer_name
-            FROM dbo.saCliente WITH (NOLOCK)
-            WHERE RTRIM(co_cli) = %s
-            """
-            cursor.execute(query, (customer_code.strip(),))
-            result = cursor.fetchone()
-            cursor.close()
-            
-            if not result:
-                return []
-            
-            # Construir lista de direcciones disponibles
-            addresses = []
-            
-            # Dirección principal (direc1)
-            if result.get('address1'):
-                addresses.append({
-                    'type': 'principal',
-                    'label': 'Dirección Principal',
-                    'address': result.get('address1', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
-            
-            # Dirección de entrega 2 (dir_ent2)
-            if result.get('delivery_address2'):
-                addresses.append({
-                    'type': 'entrega',
-                    'label': 'Dirección de Entrega',
-                    'address': result.get('delivery_address2', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
-            
-            # Dirección secundaria (direc2)
-            if result.get('address2'):
-                addresses.append({
-                    'type': 'secundaria',
-                    'label': 'Dirección Secundaria',
-                    'address': result.get('address2', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
-            
-            return addresses
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                SELECT 
+                    co_cli AS customer_code,
+                    RTRIM(direc1) AS address1,
+                    RTRIM(dir_ent2) AS delivery_address2,
+                    RTRIM(direc2) AS address2,
+                    RTRIM(ciudad) AS city,
+                    RTRIM(zip) AS postal_code,
+                    RTRIM(telefonos) AS phones,
+                    RTRIM(cli_des) AS customer_name
+                FROM dbo.saCliente WITH (NOLOCK)
+                WHERE RTRIM(co_cli) = %s
+                """
+                cursor.execute(query, (customer_code.strip(),))
+                result = cursor.fetchone()
+                cursor.close()
+                
+                if not result:
+                    return []
+                
+                # Construir lista de direcciones disponibles
+                addresses = []
+                
+                # Dirección principal (direc1)
+                if result.get('address1'):
+                    addresses.append({
+                        'type': 'principal',
+                        'label': 'Dirección Principal',
+                        'address': result.get('address1', '').strip(),
+                        'city': result.get('city', '').strip() if result.get('city') else None,
+                        'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                        'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                        'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                    })
+                
+                # Dirección de entrega 2 (dir_ent2)
+                if result.get('delivery_address2'):
+                    addresses.append({
+                        'type': 'entrega',
+                        'label': 'Dirección de Entrega',
+                        'address': result.get('delivery_address2', '').strip(),
+                        'city': result.get('city', '').strip() if result.get('city') else None,
+                        'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                        'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                        'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                    })
+                
+                # Dirección secundaria (direc2)
+                if result.get('address2'):
+                    addresses.append({
+                        'type': 'secundaria',
+                        'label': 'Dirección Secundaria',
+                        'address': result.get('address2', '').strip(),
+                        'city': result.get('city', '').strip() if result.get('city') else None,
+                        'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
+                        'phones': result.get('phones', '').strip() if result.get('phones') else None,
+                        'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
+                    })
+                
+                return addresses
         except Exception as e:
             self.logger.error(f"Error obteniendo direcciones para cliente {customer_code}: {str(e)}")
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
     
     # =========================================================================
     # Artículos e Imágenes (Profit Plus)
@@ -923,104 +898,96 @@ class SourceSystemService:
             {base_query}
         """
 
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            cursor.execute(count_query, tuple(params))
-            total_row = cursor.fetchone()
-            total = total_row.get("total", 0) if total_row else 0
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(count_query, tuple(params))
+                total_row = cursor.fetchone()
+                total = total_row.get("total", 0) if total_row else 0
 
-            cursor.execute(data_query, tuple(params + [offset, limit]))
-            items = cursor.fetchall()
-            cursor.close()
+                cursor.execute(data_query, tuple(params + [offset, limit]))
+                items = cursor.fetchall()
+                cursor.close()
 
-            return {
-                "items": items or [],
-                "total": total,
-                "page": page,
-                "limit": limit,
-            }
+                return {
+                    "items": items or [],
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                }
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_article_detail(self, article_code: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene el detalle completo de un artículo, incluyendo precios,
         stock e imágenes.
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            header_query = """
-                SELECT 
-                    a.co_art,
-                    a.art_des,
-                    a.ref,
-                    a.co_lin,
-                    a.co_subl,
-                    a.co_cat,
-                    cat.cat_des AS category_name,
-                    a.tipo,
-                    a.fecha_reg,
-                    a.modelo
-                FROM dbo.saArticulo a WITH (NOLOCK)
-                LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-                WHERE a.co_art = %s AND a.anulado = 0
-            """
-            cursor.execute(header_query, (article_code,))
-            header = cursor.fetchone()
-            if not header:
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                header_query = """
+                    SELECT 
+                        a.co_art,
+                        a.art_des,
+                        a.ref,
+                        a.co_lin,
+                        a.co_subl,
+                        a.co_cat,
+                        cat.cat_des AS category_name,
+                        a.tipo,
+                        a.fecha_reg,
+                        a.modelo
+                    FROM dbo.saArticulo a WITH (NOLOCK)
+                    LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+                    WHERE a.co_art = %s AND a.anulado = 0
+                """
+                cursor.execute(header_query, (article_code,))
+                header = cursor.fetchone()
+                if not header:
+                    cursor.close()
+                    return None
+
+                price_query = """
+                    SELECT 
+                        RTRIM(ap.co_precio) AS price_code,
+                        tp.des_precio AS price_name,
+                        ap.monto AS amount,
+                        ap.co_mone AS currency,
+                        ap.desde AS desde
+                    FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                    LEFT JOIN dbo.saTipoPrecio tp WITH (NOLOCK) ON ap.co_precio = tp.co_precio
+                    WHERE ap.co_art = %s
+                    ORDER BY ap.desde DESC
+                """
+                cursor.execute(price_query, (article_code,))
+                prices = cursor.fetchall() or []
+
+                stock_query = """
+                    SELECT 
+                        RTRIM(sa.co_alma) AS warehouse_code,
+                        al.des_alma AS warehouse_name,
+                        sa.stock AS quantity
+                    FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                    LEFT JOIN dbo.saAlmacen al WITH (NOLOCK) ON sa.co_alma = al.co_alma
+                    WHERE sa.co_art = %s
+                        AND sa.tipo = 'ACT'  -- Solo stock actual
+                """
+                cursor.execute(stock_query, (article_code,))
+                stock = cursor.fetchall() or []
+
+                images = self.get_article_images(article_code, connection=(conn, cursor))
+
                 cursor.close()
-                return None
 
-            price_query = """
-                SELECT 
-                    RTRIM(ap.co_precio) AS price_code,
-                    tp.des_precio AS price_name,
-                    ap.monto AS amount,
-                    ap.co_mone AS currency,
-                    ap.desde AS desde
-                FROM dbo.saArtPrecio ap WITH (NOLOCK)
-                LEFT JOIN dbo.saTipoPrecio tp WITH (NOLOCK) ON ap.co_precio = tp.co_precio
-                WHERE ap.co_art = %s
-                ORDER BY ap.desde DESC
-            """
-            cursor.execute(price_query, (article_code,))
-            prices = cursor.fetchall() or []
-
-            stock_query = """
-                SELECT 
-                    RTRIM(sa.co_alma) AS warehouse_code,
-                    al.des_alma AS warehouse_name,
-                    sa.stock AS quantity
-                FROM dbo.saStockAlmacen sa WITH (NOLOCK)
-                LEFT JOIN dbo.saAlmacen al WITH (NOLOCK) ON sa.co_alma = al.co_alma
-                WHERE sa.co_art = %s
-                    AND sa.tipo = 'ACT'  -- Solo stock actual
-            """
-            cursor.execute(stock_query, (article_code,))
-            stock = cursor.fetchall() or []
-
-            images = self.get_article_images(article_code, connection=(conn, cursor))
-
-            cursor.close()
-
-            return {
-                "header": header,
-                "prices": prices,
-                "stock": stock,
-                "images": images,
-            }
+                return {
+                    "header": header,
+                    "prices": prices,
+                    "stock": stock,
+                    "images": images,
+                }
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_article_images(
         self,
@@ -1031,16 +998,9 @@ class SourceSystemService:
         Obtiene la lista de imágenes asociadas a un artículo desde saArtImagen.
         Puede reutilizar una conexión existente para optimizar consultas.
         """
-        own_connection = False
-        conn = None
         if connection:
+            # Usar conexión existente
             conn, cursor = connection
-        else:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            own_connection = True
-
-        try:
             query = """
                 SELECT 
                     rowguid,
@@ -1054,16 +1014,26 @@ class SourceSystemService:
             """
             cursor.execute(query, (article_code,))
             rows = cursor.fetchall() or []
-
-            if own_connection:
-                cursor.close()
-
             return rows
-        except Exception:
-            raise
-        finally:
-            if own_connection and conn:
-                self.return_connection(conn)
+        else:
+            # Crear nueva conexión con context manager
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                    SELECT 
+                        rowguid,
+                        imagen_des,
+                        tip,
+                        co_us_in,
+                        fe_us_in
+                    FROM dbo.saArtImagen WITH (NOLOCK)
+                    WHERE co_art = %s
+                    ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
+                """
+                cursor.execute(query, (article_code,))
+                rows = cursor.fetchall() or []
+                cursor.close()
+                return rows
 
     def _check_tip_exists(self, tip: str, article_code: str, cursor) -> bool:
         """
@@ -1179,75 +1149,68 @@ class SourceSystemService:
         sucursal_code = "CCS"
         
         new_guid = str(uuid4())
-        conn = None
-        cursor = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            # Determinar el código tip a usar
-            if tip is None:
-                # Si NO se proporciona tip, generar automáticamente (IMG001, IMG002, etc.)
-                tip = self._generate_unique_tip(article_code_clean, cursor)
-                self.logger.info(
-                    f"Se generó automáticamente el código tip '{tip}' para el artículo {article_code_clean}"
-                )
-            else:
-                # Si se proporciona tip (ej: "PRINC"), usar ese valor directamente
-                tip = tip.strip().upper()[:6]  # Asegurar formato char(6) y mayúsculas
-                if tip == "PRINC":
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                # Determinar el código tip a usar
+                if tip is None:
+                    # Si NO se proporciona tip, generar automáticamente (IMG001, IMG002, etc.)
+                    tip = self._generate_unique_tip(article_code_clean, cursor)
                     self.logger.info(
-                        f"Se usará el código tip 'PRINC' para la imagen principal del artículo {article_code_clean}"
+                        f"Se generó automáticamente el código tip '{tip}' para el artículo {article_code_clean}"
                     )
-                # Verificar que el tip proporcionado no exista ya
-                if self._check_tip_exists(tip, article_code_clean, cursor):
-                    raise ValueError(
-                        f"El código tip '{tip}' ya existe para el artículo {article_code_clean}. "
-                        "Por favor, use un código diferente."
+                else:
+                    # Si se proporciona tip (ej: "PRINC"), usar ese valor directamente
+                    tip = tip.strip().upper()[:6]  # Asegurar formato char(6) y mayúsculas
+                    if tip == "PRINC":
+                        self.logger.info(
+                            f"Se usará el código tip 'PRINC' para la imagen principal del artículo {article_code_clean}"
+                        )
+                    # Verificar que el tip proporcionado no exista ya
+                    if self._check_tip_exists(tip, article_code_clean, cursor):
+                        raise ValueError(
+                            f"El código tip '{tip}' ya existe para el artículo {article_code_clean}. "
+                            "Por favor, use un código diferente."
+                        )
+                
+                # INSERT completo con todos los campos de auditoría requeridos
+                insert_query = """
+                    INSERT INTO dbo.saArtImagen (
+                        co_art,
+                        imagen_des,
+                        picture,
+                        tip,
+                        co_us_in,
+                        fe_us_in,
+                        co_sucu_in,
+                        co_us_mo,
+                        fe_us_mo,
+                        co_sucu_mo,
+                        rowguid
                     )
-            
-            # INSERT completo con todos los campos de auditoría requeridos
-            insert_query = """
-                INSERT INTO dbo.saArtImagen (
-                    co_art,
-                    imagen_des,
-                    picture,
-                    tip,
-                    co_us_in,
-                    fe_us_in,
-                    co_sucu_in,
-                    co_us_mo,
-                    fe_us_mo,
-                    co_sucu_mo,
-                    rowguid
+                    VALUES (%s, %s, %s, %s, %s, GETDATE(), %s, %s, GETDATE(), %s, %s)
+                """
+                cursor.execute(
+                    insert_query,
+                    (
+                        article_code_clean,
+                        description_clean,
+                        image_bytes,
+                        tip,
+                        created_by_clean,  # co_us_in
+                        sucursal_code,      # co_sucu_in
+                        created_by_clean,  # co_us_mo = co_us_in para registros nuevos
+                        sucursal_code,      # co_sucu_mo = co_sucu_in para registros nuevos
+                        new_guid,
+                    ),
                 )
-                VALUES (%s, %s, %s, %s, %s, GETDATE(), %s, %s, GETDATE(), %s, %s)
-            """
-            cursor.execute(
-                insert_query,
-                (
-                    article_code_clean,
-                    description_clean,
-                    image_bytes,
-                    tip,
-                    created_by_clean,  # co_us_in
-                    sucursal_code,      # co_sucu_in
-                    created_by_clean,  # co_us_mo = co_us_in para registros nuevos
-                    sucursal_code,      # co_sucu_mo = co_sucu_in para registros nuevos
-                    new_guid,
-                ),
-            )
-            conn.commit()
-            cursor.close()
-            return new_guid
+                conn.commit()
+                cursor.close()
+                return new_guid
         except ValueError:
             # Re-lanzar ValueError sin modificar (ya tienen mensajes claros)
-            if conn:
-                conn.rollback()
             raise
         except Exception as e:
-            # Capturar otros errores y proporcionar contexto
-            if conn:
-                conn.rollback()
             # Si es un error de truncamiento, proporcionar más contexto
             error_msg = str(e)
             if "truncated" in error_msg.lower() or "8152" in error_msg:
@@ -1260,53 +1223,46 @@ class SourceSystemService:
                     f"Error original: {error_msg}"
                 )
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_image_by_guid(self, image_guid: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene los datos binarios de una imagen almacenada en saArtImagen.
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            # Normalizar el GUID: quitar espacios, convertir a mayúsculas, remover llaves
-            image_guid_clean = (image_guid or "").strip().upper().replace('{', '').replace('}', '')
-            if not image_guid_clean:
-                self.logger.warning("Se recibió un GUID vacío")
-                return None
-            
-            self.logger.info(f"Buscando imagen con GUID: {image_guid_clean}")
-            
-            # Usar CAST para convertir el string a UNIQUEIDENTIFIER
-            # Esta es la forma más confiable en SQL Server con pymssql
-            query = """
-                SELECT 
-                    picture,
-                    imagen_des,
-                    tip,
-                    co_art
-                FROM dbo.saArtImagen WITH (NOLOCK)
-                WHERE rowguid = CAST(%s AS UNIQUEIDENTIFIER)
-            """
-            cursor.execute(query, (image_guid_clean,))
-            row = cursor.fetchone()
-            
-            if row:
-                self.logger.info(f"Imagen encontrada para GUID: {image_guid_clean}, artículo: {row.get('co_art')}")
-            else:
-                self.logger.warning(f"No se encontró imagen con GUID: {image_guid_clean}")
-            
-            cursor.close()
-            return row
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                # Normalizar el GUID: quitar espacios, convertir a mayúsculas, remover llaves
+                image_guid_clean = (image_guid or "").strip().upper().replace('{', '').replace('}', '')
+                if not image_guid_clean:
+                    self.logger.warning("Se recibió un GUID vacío")
+                    return None
+                
+                self.logger.info(f"Buscando imagen con GUID: {image_guid_clean}")
+                
+                # Usar CAST para convertir el string a UNIQUEIDENTIFIER
+                # Esta es la forma más confiable en SQL Server con pymssql
+                query = """
+                    SELECT 
+                        picture,
+                        imagen_des,
+                        tip,
+                        co_art
+                    FROM dbo.saArtImagen WITH (NOLOCK)
+                    WHERE rowguid = CAST(%s AS UNIQUEIDENTIFIER)
+                """
+                cursor.execute(query, (image_guid_clean,))
+                row = cursor.fetchone()
+                
+                if row:
+                    self.logger.info(f"Imagen encontrada para GUID: {image_guid_clean}, artículo: {row.get('co_art')}")
+                else:
+                    self.logger.warning(f"No se encontró imagen con GUID: {image_guid_clean}")
+                
+                cursor.close()
+                return row
         except Exception as e:
             self.logger.error(f"Error obteniendo imagen por GUID {image_guid}: {str(e)}")
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def update_customer_password(self, customer_code: str, hashed_password: str) -> bool:
         """
@@ -1319,29 +1275,28 @@ class SourceSystemService:
         Returns:
             bool: True si se actualizó correctamente
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            
-            query = """
-            UPDATE saCliente
-            SET password = %s
-            WHERE co_cli = %s
-            """
-            
-            cursor.execute(query, (hashed_password, customer_code))
-            conn.commit()
-            
-            rows_affected = cursor.rowcount
-            cursor.close()
-            
-            if rows_affected > 0:
-                self.logger.info(f"Contraseña actualizada para cliente {customer_code}")
-                return True
-            else:
-                self.logger.warning(f"No se encontró cliente {customer_code} para actualizar")
-                return False
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                
+                query = """
+                UPDATE saCliente
+                SET password = %s
+                WHERE co_cli = %s
+                """
+                
+                cursor.execute(query, (hashed_password, customer_code))
+                conn.commit()
+                
+                rows_affected = cursor.rowcount
+                cursor.close()
+                
+                if rows_affected > 0:
+                    self.logger.info(f"Contraseña actualizada para cliente {customer_code}")
+                    return True
+                else:
+                    self.logger.warning(f"No se encontró cliente {customer_code} para actualizar")
+                    return False
                 
         except Exception as e:
             self.logger.error(f"Error actualizando contraseña para cliente {customer_code}: {str(e)}")
@@ -1383,24 +1338,17 @@ class SourceSystemService:
             }
             None si no hay descuento aplicable o disponible
         """
-        conn = None
-        cursor = None
-        use_existing = existing_cursor is not None
-        
-        try:
-            if use_existing:
-                cursor = existing_cursor
-                # Verificar que el cursor esté vivo
-                try:
-                    cursor.execute("SELECT 1 AS test")
-                    cursor.fetchone()
-                except Exception as e:
-                    raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
-            else:
-                conn = self.get_pooled_connection()
-                cursor = conn.cursor()
+        # Si hay cursor existente, usar directamente
+        if existing_cursor is not None:
+            cursor = existing_cursor
+            # Verificar que el cursor esté vivo
+            try:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+            except Exception as e:
+                raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
             
-            # Query para obtener descuento activo del artículo
+            # Ejecutar query con cursor existente
             query = """
                 SELECT TOP 1 co_desc, porc1, porc2, porc3, porc4, porc5,
                         hasta1, hasta2, hasta3, hasta4, hasta5,
@@ -1416,77 +1364,90 @@ class SourceSystemService:
             
             if not discount:
                 return None
-            
-            # Funciones helper para conversión segura de valores
-            def safe_decimal(val):
-                try:
-                    if val is None:
-                        return Decimal('0')
-                    s_val = str(val).strip()
-                    return Decimal(s_val) if s_val else Decimal('0')
-                except (ValueError, TypeError, InvalidOperation):
-                    return Decimal('0')
-
-            def safe_int(val):
-                try:
-                    if val is None:
-                        return 0
-                    s_val = str(val).strip()
-                    return int(float(s_val)) if s_val else 0
-                except (ValueError, TypeError):
-                    return 0
-
-            # Extraer valores de umbrales, porcentajes y contadores
-            hasta_vals = {i: safe_decimal(discount.get(f'hasta{i}')) for i in range(1, 6)}
-            porc_vals = {i: safe_decimal(discount.get(f'porc{i}')) for i in range(1, 6)}
-            campo_vals = {i: safe_int(discount.get(f'campo{i}')) for i in range(1, 6)}
-
-            # Buscar tier aplicable (del más alto al más bajo)
-            selected_tier = None
-            for i in range(5, 0, -1):
-                if hasta_vals[i] > 0 and quantity > hasta_vals[i] and porc_vals[i] > 0:
-                    selected_tier = i
-                    break
-            
-            if selected_tier is None:
-                return None
-            
-            return {
-                'co_desc': str(discount.get('co_desc', '')).strip(),
-                'discount_percentage': porc_vals[selected_tier],
-                'range_applied': f'hasta{selected_tier}',
-                'field_to_increment': f'campo{selected_tier}',
-                'disponibles': 999999,
-                'limite_total': int(hasta_vals[selected_tier]),
-                'ya_usados': campo_vals[selected_tier],
-            }
-            
-        except ConnectionError:
-            raise
-        except Exception as e:
-            error_code = getattr(e, 'args', [None])[0] if hasattr(e, 'args') and e.args else None
-            
-            # Error de conexión SQL Server - propagar para que no se cree cotización sin BD
-            if error_code in (20002, 20003, 20047):
-                self.logger.error(
-                    f"Error de conexión obteniendo descuento | "
-                    f"articulo={article_code} | error_code={error_code} | {e}"
-                )
-                raise ConnectionError(f"Error de conexión a SQL Server: {e}") from e
-            
-            # Otros errores - loguear y continuar sin descuento
-            self.logger.warning(f"No se pudo obtener descuento para {article_code}: {e}")
-            return None
-        finally:
-            if not use_existing:
-                if cursor:
-                    try:
-                        cursor.close()
-                    except Exception:
-                        pass
+        else:
+            # Crear nueva conexión con context manager
+            try:
+                with self.connection() as conn:
+                    cursor = conn.cursor()
+                    
+                    # Query para obtener descuento activo del artículo
+                    query = """
+                        SELECT TOP 1 co_desc, porc1, porc2, porc3, porc4, porc5,
+                                hasta1, hasta2, hasta3, hasta4, hasta5,
+                               campo1, campo2, campo3, campo4, campo5
+                        FROM dbo.saDescArticulo WITH (NOLOCK)
+                        WHERE co_art = %s
+                            AND (fecha_ini IS NULL OR fecha_ini <= GETDATE())
+                            AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
+                    """
+                    
+                    cursor.execute(query, (article_code.strip(),))
+                    discount = cursor.fetchone()
+                    cursor.close()
+                    
+                    if not discount:
+                        return None
+            except ConnectionError:
+                raise
+            except Exception as e:
+                error_code = getattr(e, 'args', [None])[0] if hasattr(e, 'args') and e.args else None
                 
-                # Devolver conexión al pool para reutilización
-                self.return_connection(conn)
+                # Error de conexión SQL Server - propagar para que no se cree cotización sin BD
+                if error_code in (20002, 20003, 20047):
+                    self.logger.error(
+                        f"Error de conexión obteniendo descuento | "
+                        f"articulo={article_code} | error_code={error_code} | {e}"
+                    )
+                    raise ConnectionError(f"Error de conexión a SQL Server: {e}") from e
+                
+                # Otros errores - loguear y continuar sin descuento
+                self.logger.warning(f"No se pudo obtener descuento para {article_code}: {e}")
+                return None
+        
+        # Procesamiento común de los datos del descuento
+        # Funciones helper para conversión segura de valores
+        def safe_decimal(val):
+            try:
+                if val is None:
+                    return Decimal('0')
+                s_val = str(val).strip()
+                return Decimal(s_val) if s_val else Decimal('0')
+            except (ValueError, TypeError, InvalidOperation):
+                return Decimal('0')
+
+        def safe_int(val):
+            try:
+                if val is None:
+                    return 0
+                s_val = str(val).strip()
+                return int(float(s_val)) if s_val else 0
+            except (ValueError, TypeError):
+                return 0
+
+        # Extraer valores de umbrales, porcentajes y contadores
+        hasta_vals = {i: safe_decimal(discount.get(f'hasta{i}')) for i in range(1, 6)}
+        porc_vals = {i: safe_decimal(discount.get(f'porc{i}')) for i in range(1, 6)}
+        campo_vals = {i: safe_int(discount.get(f'campo{i}')) for i in range(1, 6)}
+
+        # Buscar tier aplicable (del más alto al más bajo)
+        selected_tier = None
+        for i in range(5, 0, -1):
+            if hasta_vals[i] > 0 and quantity > hasta_vals[i] and porc_vals[i] > 0:
+                selected_tier = i
+                break
+        
+        if selected_tier is None:
+            return None
+        
+        return {
+            'co_desc': str(discount.get('co_desc', '')).strip(),
+            'discount_percentage': porc_vals[selected_tier],
+            'range_applied': f'hasta{selected_tier}',
+            'field_to_increment': f'campo{selected_tier}',
+            'disponibles': 999999,
+            'limite_total': int(hasta_vals[selected_tier]),
+            'ya_usados': campo_vals[selected_tier],
+        }
 
     def increment_discount_usage(
         self,
@@ -1509,30 +1470,18 @@ class SourceSystemService:
         if field_name not in valid_fields:
             raise ValueError(f"Campo inválido: {field_name}. Debe ser uno de: {valid_fields}")
         
-        conn = None
-        cursor = None
-        use_existing = existing_cursor is not None
-        
-        try:
-            if use_existing:
-                cursor = existing_cursor
-                try:
-                    cursor.execute("SELECT 1 AS test")
-                    cursor.fetchone()
-                except Exception as e:
-                    raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
-            else:
-                conn = self.get_pooled_connection()
-                cursor = conn.cursor()
+        # Si hay cursor existente, usar directamente
+        if existing_cursor is not None:
+            cursor = existing_cursor
+            try:
+                cursor.execute("SELECT 1 AS test")
+                cursor.fetchone()
+            except Exception as e:
+                raise ConnectionError(f"Cursor proporcionado no está conectado: {e}") from e
             
-            # Iniciar transacción si usamos nuestra propia conexión
-            if not use_existing and conn:
-                cursor.execute("BEGIN TRANSACTION")
-
-            # Timeout de 5 segundos para evitar bloqueos largos
+            # Ejecutar con cursor existente (sin transacción propia)
             cursor.execute("SET LOCK_TIMEOUT 5000")
             
-            # Incrementar contador de uso
             update_query = f"""
                 UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK)
                 SET {field_name} = CAST(
@@ -1545,51 +1494,67 @@ class SourceSystemService:
             cursor.execute(update_query, (quantity_used, co_desc.strip()))
             rows_affected = cursor.rowcount
             
-            # Restaurar timeout
             try:
                 cursor.execute("SET LOCK_TIMEOUT -1")
             except Exception:
                 pass
             
-            # Commit si usamos nuestra propia conexión
-            if not use_existing and conn:
-                cursor.execute("COMMIT TRANSACTION")
-                conn.commit()
-            
             if rows_affected == 0:
                 self.logger.warning(
                     f"Descuento no actualizado | co_desc={co_desc} no existe o no se modificó"
                 )
-                
-        except Exception as e:
-            if not use_existing and conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-            self.logger.error(
-                f"Error incrementando descuento | co_desc={co_desc} | "
-                f"field={field_name} | cantidad={quantity_used} | error={e}"
-            )
-            raise
-        finally:
-            if not use_existing:
-                if cursor:
+        else:
+            # Crear nueva conexión con context manager y transacción
+            try:
+                with self.connection() as conn:
+                    cursor = conn.cursor()
+                    
+                    # Iniciar transacción
+                    cursor.execute("BEGIN TRANSACTION")
+                    cursor.execute("SET LOCK_TIMEOUT 5000")
+                    
+                    # Incrementar contador de uso
+                    update_query = f"""
+                        UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK)
+                        SET {field_name} = CAST(
+                            ISNULL(TRY_CAST({field_name} AS INT), 0) + %s AS VARCHAR(60)
+                        ),
+                            fe_us_mo = GETDATE()
+                        WHERE co_desc = %s
+                    """
+                    
+                    cursor.execute(update_query, (quantity_used, co_desc.strip()))
+                    rows_affected = cursor.rowcount
+                    
+                    # Restaurar timeout
                     try:
-                        cursor.close()
+                        cursor.execute("SET LOCK_TIMEOUT -1")
                     except Exception:
                         pass
-                self.return_connection(conn)
+                    
+                    # Commit
+                    cursor.execute("COMMIT TRANSACTION")
+                    conn.commit()
+                    cursor.close()
+                    
+                    if rows_affected == 0:
+                        self.logger.warning(
+                            f"Descuento no actualizado | co_desc={co_desc} no existe o no se modificó"
+                        )
+            except Exception as e:
+                self.logger.error(
+                    f"Error incrementando descuento | co_desc={co_desc} | "
+                    f"field={field_name} | cantidad={quantity_used} | error={e}"
+                )
+                raise
 
     def create_article_discount(self, discount_data: Dict[str, Any]) -> bool:
         """
         Crea o actualiza un registro de descuento en saDescArticulo usando co_desc como identificador.
         """
-        conn = None
-        cursor = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
             co_desc = (discount_data.get("co_desc") or "").strip().upper()
             if not co_desc:
                 raise ValueError("co_desc es requerido para crear un descuento")
@@ -1713,70 +1678,51 @@ class SourceSystemService:
                 )
                 cursor.execute(insert_sql, tuple(params))
 
-            conn.commit()
-            return True
+                conn.commit()
+                cursor.close()
+                return True
 
         except Exception as e:
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
             self.logger.error(f"Error creating article discount: {str(e)}")
             raise
-        finally:
-            if cursor:
-                try:
-                    cursor.close()
-                except Exception:
-                    pass
-            self.return_connection(conn)
 
     def validate_tip_cli(self, tip_cli: str) -> bool:
         """
         Valida que el tip_cli exista en la tabla saTipoCliente.
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            query = """
-                SELECT COUNT(*) AS count
-                FROM dbo.saTipoCliente
-                WHERE tip_cli = %s
-            """
-            cursor.execute(query, (tip_cli.strip().upper(),))
-            result = cursor.fetchone()
-            cursor.close()
-            return result["count"] > 0 if result else False
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                    SELECT COUNT(*) AS count
+                    FROM dbo.saTipoCliente
+                    WHERE tip_cli = %s
+                """
+                cursor.execute(query, (tip_cli.strip().upper(),))
+                result = cursor.fetchone()
+                cursor.close()
+                return result["count"] > 0 if result else False
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_valid_tip_cli_codes(self) -> list:
         """
         Obtiene todos los códigos de tipo de cliente válidos.
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            query = """
-                SELECT tip_cli, des_tipo
-                FROM dbo.saTipoCliente
-                ORDER BY tip_cli
-            """
-            cursor.execute(query)
-            results = cursor.fetchall()
-            cursor.close()
-            return results or []
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                query = """
+                    SELECT tip_cli, des_tipo
+                    FROM dbo.saTipoCliente
+                    ORDER BY tip_cli
+                """
+                cursor.execute(query)
+                results = cursor.fetchall()
+                cursor.close()
+                return results or []
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_active_discounts_for_articles(
         self,
@@ -1796,10 +1742,9 @@ class SourceSystemService:
         if not article_codes:
             return {}
         
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
             
             # Normalizar códigos
             normalized_codes = [code.strip().upper() for code in article_codes if code]
@@ -1844,24 +1789,21 @@ class SourceSystemService:
                 ORDER BY d.co_art, d.porc1 DESC
             """
             
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall() or []
-            cursor.close()
-            
-            # Organizar por artículo (tomar el primer descuento por artículo)
-            discounts_map = {}
-            for row in results:
-                co_art = (row.get("co_art") or "").strip().upper()
-                if co_art and co_art not in discounts_map:
-                    discounts_map[co_art] = row
-            
-            return discounts_map
-            
+                cursor.execute(query, tuple(params))
+                results = cursor.fetchall() or []
+                cursor.close()
+                
+                # Organizar por artículo (tomar el primer descuento por artículo)
+                discounts_map = {}
+                for row in results:
+                    co_art = (row.get("co_art") or "").strip().upper()
+                    if co_art and co_art not in discounts_map:
+                        discounts_map[co_art] = row
+                
+                return discounts_map
+                
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_article_discounts(
         self,
@@ -1884,12 +1826,11 @@ class SourceSystemService:
         Returns:
             Dict con items, total, page, limit, has_active, has_expired
         """
-        conn = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            
-            # Construir WHERE clause dinámicamente
+            with self.connection() as conn:
+                cursor = conn.cursor()
+                
+                # Construir WHERE clause dinámicamente
             where_conditions = []
             params = []
             
@@ -1969,27 +1910,24 @@ class SourceSystemService:
                 FROM dbo.saDescArticulo d
                 {where_clause}
             """
-            cursor.execute(stats_query, tuple(params))
-            stats = cursor.fetchone()
-            has_active = stats["active_count"] if stats else 0
-            has_expired = stats["expired_count"] if stats else 0
-            
-            cursor.close()
-            
-            return {
-                "items": items,
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "has_active": has_active,
-                "has_expired": has_expired
-            }
-            
+                cursor.execute(stats_query, tuple(params))
+                stats = cursor.fetchone()
+                has_active = stats["active_count"] if stats else 0
+                has_expired = stats["expired_count"] if stats else 0
+                
+                cursor.close()
+                
+                return {
+                    "items": items,
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "has_active": has_active,
+                    "has_expired": has_expired
+                }
+                
         except Exception:
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_all_active_flash_offers(
         self,
@@ -2005,9 +1943,9 @@ class SourceSystemService:
         1. Fechas vigentes (fecha_ini <= NOW <= fecha_fin)
         2. Disponibilidad (campo1 - campo2 > 0)
         """
-        conn = self.get_pooled_connection()
         try:
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
             
             where_conditions = [
                 "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
@@ -2066,31 +2004,21 @@ class SourceSystemService:
                     item['max_quantity'] = 0
                     item['remaining_quantity'] = 0
                 
-                results.append(item)
+                    results.append(item)
+                    
+                cursor.close()
                 
-            cursor.close()
-            
-            return results, total
-            
+                return results, total
+                
         except Exception as e:
-            if cursor:
-                try:
-                    cursor.close()
-                except Exception:
-                    pass
             self.logger.error(f"Error getting flash offers from source: {e}")
             raise
-        finally:
-            if conn:
-                self.return_connection(conn)
 
     def get_article_discount_by_code(self, co_desc: str) -> Optional[Dict[str, Any]]:
         """Obtiene un descuento por su código único"""
-        conn = None
-        cursor = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
+            with self.connection() as conn:
+                cursor = conn.cursor()
             
             query = """
                 SELECT 
@@ -2126,72 +2054,60 @@ class SourceSystemService:
                 if row.get(f'campo{i}'):
                     try:
                         row[f'campo{i}'] = int(str(row[f'campo{i}']))
+                        row[f'campo{i}'] = int(str(row[f'campo{i}']))
                     except:
                         row[f'campo{i}'] = 0
+                
+                cursor.close()
+                return row
             
-            return row
-            
-        finally:
-            if cursor:
-                try: cursor.close()
-                except: pass
-            if conn:
-                self.return_connection(conn)
+        except Exception:
+            raise
 
     def update_article_discount(self, co_desc: str, data: Dict[str, Any]) -> bool:
         """Actualiza un descuento existente"""
-        conn = None
-        cursor = None
         try:
-            conn = self.get_pooled_connection()
-            cursor = conn.cursor()
-            
-            # Construir query dinámica
-            set_clauses = []
-            params = []
-            
-            valid_fields = [
-                "des_des", "fecha_ini", "fecha_fin", "tip_cli",
-                "hasta1", "porc1", "hasta2", "porc2", "hasta3", "porc3",
-                "hasta4", "porc4", "hasta5", "porc5",
-                "campo1", "campo2"
-            ]
-            
-            for field in valid_fields:
-                if field in data:
-                    set_clauses.append(f"{field} = %s")
-                    params.append(data[field])
-            
-            set_clauses.append("fe_us_mo = GETDATE()")
-            # co_us_mo debería venir en data o usarse uno por defecto
-            
-            if not set_clauses:
-                return False
+            with self.connection() as conn:
+                cursor = conn.cursor()
                 
-            query = f"""
-                UPDATE dbo.saDescArticulo
-                SET {', '.join(set_clauses)}
-                WHERE co_desc = %s
-            """
-            params.append(co_desc)
-            
-            cursor.execute(query, tuple(params))
-            conn.commit()
-            
-            return cursor.rowcount > 0
-            
+                # Construir query dinámica
+                set_clauses = []
+                params = []
+                
+                valid_fields = [
+                    "des_des", "fecha_ini", "fecha_fin", "tip_cli",
+                    "hasta1", "porc1", "hasta2", "porc2", "hasta3", "porc3",
+                    "hasta4", "porc4", "hasta5", "porc5",
+                    "campo1", "campo2"
+                ]
+                
+                for field in valid_fields:
+                    if field in data:
+                        set_clauses.append(f"{field} = %s")
+                        params.append(data[field])
+                
+                set_clauses.append("fe_us_mo = GETDATE()")
+                # co_us_mo debería venir en data o usarse uno por defecto
+                
+                if not set_clauses:
+                    return False
+                    
+                query = f"""
+                    UPDATE dbo.saDescArticulo
+                    SET {', '.join(set_clauses)}
+                    WHERE co_desc = %s
+                """
+                params.append(co_desc)
+                
+                cursor.execute(query, tuple(params))
+                conn.commit()
+                cursor.close()
+                
+                return cursor.rowcount > 0
+                
         except Exception as e:
-            if conn:
-                try: conn.rollback()
-                except: pass
             self.logger.error(f"Error updating discount {co_desc}: {e}")
             raise
-        finally:
-            if cursor:
-                try: cursor.close()
-                except: pass
-            if conn:
-                self.return_connection(conn)
 
 # Singleton instance
 source_system_service = SourceSystemService()
