@@ -1789,15 +1789,15 @@ class SourceSystemService:
                 ORDER BY d.co_art, d.porc1 DESC
             """
             
-                cursor.execute(query, tuple(params))
-                results = cursor.fetchall() or []
-                cursor.close()
+            cursor.execute(query, tuple(params))
+            results = cursor.fetchall() or []
+            cursor.close()
                 
                 # Organizar por artículo (tomar el primer descuento por artículo)
-                discounts_map = {}
-                for row in results:
-                    co_art = (row.get("co_art") or "").strip().upper()
-                    if co_art and co_art not in discounts_map:
+            discounts_map = {}
+            for row in results:
+                co_art = (row.get("co_art") or "").strip().upper()
+                if co_art and co_art not in discounts_map:
                         discounts_map[co_art] = row
                 
                 return discounts_map
@@ -1910,22 +1910,20 @@ class SourceSystemService:
                 FROM dbo.saDescArticulo d
                 {where_clause}
             """
-                cursor.execute(stats_query, tuple(params))
-                stats = cursor.fetchone()
-                has_active = stats["active_count"] if stats else 0
-                has_expired = stats["expired_count"] if stats else 0
-                
-                cursor.close()
-                
-                return {
-                    "items": items,
-                    "total": total,
-                    "page": page,
-                    "limit": limit,
-                    "has_active": has_active,
-                    "has_expired": has_expired
-                }
-                
+            cursor.execute(stats_query, tuple(params))
+            stats = cursor.fetchone()
+            has_active = stats["active_count"] if stats else 0
+            has_expired = stats["expired_count"] if stats else 0
+            cursor.close()
+            
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "has_active": has_active,
+                "has_expired": has_expired
+            }
         except Exception:
             raise
 
