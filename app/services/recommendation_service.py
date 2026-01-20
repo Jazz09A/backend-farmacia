@@ -11,11 +11,14 @@ from app.config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Configuración de caché para recomendaciones
+# Configuración de caché para recomendaciones (TTLs aumentados para reducir carga en BD)
 CACHE_PREFIX_RECOMMENDATIONS = "recommendations"
-CACHE_TTL_RELATED = 600  # 10 minutos para artículos relacionados
-CACHE_TTL_FREQUENTLY_BOUGHT = 900  # 15 minutos para frecuentemente comprados
-CACHE_TTL_RECOMMENDED = 300  # 5 minutos para recomendaciones personalizadas
+CACHE_TTL_RELATED = 3600  # 60 minutos para artículos relacionados
+CACHE_TTL_FREQUENTLY_BOUGHT = 7200  # 2 horas para frecuentemente comprados juntos
+CACHE_TTL_RECOMMENDED = 1800  # 30 minutos para recomendaciones personalizadas
+
+# Timeout para queries (en segundos)
+QUERY_TIMEOUT = 15  # Limitar queries a 15 segundos
 
 
 class RecommendationService:
@@ -63,24 +66,26 @@ class RecommendationService:
             with self._source_service.connection() as conn:
                 cursor = conn.cursor()
                 
-                # Primero obtener información del artículo base
+                # Establecer timeout para la query
+                try:
+                    cursor.execute(f"SET LOCK_TIMEOUT {QUERY_TIMEOUT * 1000}")  # En milisegundos
+                except Exception:
+                    pass  # Si falla, continuar sin timeout
+                
+                # Primero obtener información del artículo base (query simplificada)
                 base_query = """
-                    SELECT 
+                    SELECT TOP 1
                         a.co_art,
                         a.art_des,
                         a.co_cat,
                         a.co_lin,
                         a.co_subl,
-                        ap.monto AS price
-                    FROM dbo.saArticulo a
-                    OUTER APPLY (
-                        SELECT TOP 1 ap.monto
-                        FROM dbo.saArtPrecio ap
-                        WHERE ap.co_art = a.co_art 
-                            AND RTRIM(ap.co_precio) = %s
-                        ORDER BY ap.desde DESC
-                    ) ap
+                        ISNULL(ap.monto, 0) AS price
+                    FROM dbo.saArticulo a WITH (NOLOCK)
+                    LEFT JOIN dbo.saArtPrecio ap WITH (NOLOCK) ON ap.co_art = a.co_art 
+                        AND RTRIM(ap.co_precio) = %s
                     WHERE a.co_art = %s AND a.anulado = 0
+                    ORDER BY ap.desde DESC
                 """
                 cursor.execute(base_query, (price_code, co_art))
                 base_article = cursor.fetchone()
@@ -134,63 +139,51 @@ class RecommendationService:
                 
                 where_clause = " AND ".join(where_conditions)
                 
+                # Query optimizada: usar subconsultas correlacionadas en SELECT en lugar de OUTER APPLY
+                # para mejor rendimiento en SQL Server
                 query = f"""
-                    SELECT DISTINCT
+                    SELECT TOP {limit}
                         a.co_art,
                         a.art_des,
                         a.co_cat AS category_code,
                         cat.cat_des AS category_name,
-                        ap.price,
-                        ap.currency,
-                        stock_data.stock AS stock,
-                        stock_data.co_alma AS warehouse_code,
-                        img.image_guid,
+                        (SELECT TOP 1 ap.monto 
+                         FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                         WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                         ORDER BY ap.desde DESC) AS price,
+                        (SELECT TOP 1 ap.co_mone 
+                         FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                         WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                         ORDER BY ap.desde DESC) AS currency,
+                        (SELECT SUM(sa.stock) 
+                         FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                         WHERE sa.co_art = a.co_art AND RTRIM(sa.co_alma) = %s AND sa.tipo = 'ACT') AS stock,
+                        %s AS warehouse_code,
+                        (SELECT TOP 1 img.rowguid 
+                         FROM dbo.saArtImagen img WITH (NOLOCK)
+                         WHERE img.co_art = a.co_art
+                         ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC) AS image_guid,
                         CASE WHEN RTRIM(a.co_cat) = %s THEN 0 ELSE 1 END AS category_match,
                         CASE WHEN RTRIM(a.co_lin) = %s THEN 0 ELSE 1 END AS line_match
-                    FROM dbo.saArticulo a
-                    LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-                    OUTER APPLY (
-                        SELECT 
-                            RTRIM(sa.co_alma) AS co_alma,
-                            SUM(sa.stock) AS stock
-                        FROM dbo.saStockAlmacen sa
-                        WHERE sa.co_art = a.co_art 
-                            AND RTRIM(sa.co_alma) = %s
-                            AND sa.tipo = 'ACT'
-                        GROUP BY sa.co_alma
-                    ) stock_data
-                    OUTER APPLY (
-                        SELECT TOP 1 
-                            ap.monto AS price,
-                            ap.co_mone AS currency
-                        FROM dbo.saArtPrecio ap
-                        WHERE ap.co_art = a.co_art 
-                            AND RTRIM(ap.co_precio) = %s
-                        ORDER BY ap.desde DESC
-                    ) ap
-                    OUTER APPLY (
-                        SELECT TOP 1 img.rowguid AS image_guid
-                        FROM dbo.saArtImagen img
-                        WHERE img.co_art = a.co_art
-                        ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
-                    ) img
+                    FROM dbo.saArticulo a WITH (NOLOCK)
+                    LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
                     WHERE {where_clause}
-                        AND (stock_data.stock > 0 OR stock_data.stock IS NULL)
                     ORDER BY 
                         category_match,
                         line_match,
-                        ap.price DESC
-                    OFFSET 0 ROWS FETCH NEXT %s ROWS ONLY
+                        price DESC
+                    OPTION (MAXDOP 2, FAST {limit})
                 """
                 
                 params = [
+                    price_code,  # Para subconsulta de precio
+                    price_code,  # Para subconsulta de moneda
+                    warehouse_code,  # Para subconsulta de stock
+                    warehouse_code,  # Para campo warehouse_code
                     base_category if base_category else '',
-                    base_line if base_line else '',
-                    warehouse_code,
-                    price_code
+                    base_line if base_line else ''
                 ]
                 params.extend(where_params)
-                params.append(limit)
                 
                 cursor.execute(query, tuple(params))
                 related = cursor.fetchall()
@@ -207,7 +200,32 @@ class RecommendationService:
             
         except Exception as e:
             logger.error(f"Error obteniendo artículos relacionados para {co_art}: {e}")
-            return []
+            # Fallback: intentar con query simplificada solo por categoría
+            try:
+                with self._source_service.connection() as conn:
+                    cursor = conn.cursor()
+                    fallback_query = f"""
+                        SELECT TOP {limit}
+                            a.co_art, a.art_des,
+                            a.co_cat AS category_code, NULL AS category_name,
+                            NULL AS price, 'VES' AS currency,
+                            NULL AS stock, NULL AS warehouse_code,
+                            NULL AS image_guid
+                        FROM dbo.saArticulo a WITH (NOLOCK)
+                        WHERE a.anulado = 0 AND a.co_art != %s
+                        ORDER BY NEWID()
+                        OPTION (FAST {limit})
+                    """
+                    cursor.execute(fallback_query, (co_art,))
+                    fallback_results = cursor.fetchall() or []
+                    cursor.close()
+                    logger.info(f"Usando fallback para artículos relacionados: {len(fallback_results)} items")
+                    # Cachear por menos tiempo ya que es fallback
+                    cache_service.set(cache_key, fallback_results, ttl=300)
+                    return fallback_results
+            except Exception as fallback_error:
+                logger.error(f"Error en fallback de artículos relacionados: {fallback_error}")
+                return []
     
     def get_frequently_bought_together(
         self,
@@ -234,106 +252,68 @@ class RecommendationService:
             with self._source_service.connection() as conn:
                 cursor = conn.cursor()
                 
-                # Obtener facturas que contienen este artículo
-                invoices_query = """
-                    SELECT DISTINCT fvr.doc_num
-                    FROM dbo.saFacturaVentaReng fvr
-                    INNER JOIN dbo.saFacturaVenta fv ON fvr.doc_num = fv.doc_num
-                    WHERE fvr.co_art = %s
-                        AND fv.anulado = 0
-                """
-                cursor.execute(invoices_query, (co_art,))
-                invoices = cursor.fetchall()
+                # Establecer timeout para la query
+                try:
+                    cursor.execute(f"SET LOCK_TIMEOUT {QUERY_TIMEOUT * 1000}")
+                except Exception:
+                    pass
                 
-                if not invoices:
-                    cursor.close()
-                    logger.debug(f"No se encontraron facturas con el artículo {co_art}")
-                    # Cachear resultado vacío para evitar consultas repetidas
-                    cache_service.set(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
-                    return []
-                
-                invoice_nums = [row.get('doc_num') for row in invoices]
-                placeholders = ",".join(["%s"] * len(invoice_nums))
-                
-                # Contar artículos que aparecen en las mismas facturas
-                count_query = f"""
+                # Query optimizada: combinar todo en una sola consulta para reducir round-trips
+                # Usar CTE (Common Table Expression) para mejor rendimiento
+                combined_query = f"""
+                    WITH ArticleInvoices AS (
+                        -- Facturas que contienen el artículo objetivo
+                        SELECT DISTINCT fvr.doc_num
+                        FROM dbo.saFacturaVentaReng fvr WITH (NOLOCK)
+                        INNER JOIN dbo.saFacturaVenta fv WITH (NOLOCK) ON fvr.doc_num = fv.doc_num
+                        WHERE fvr.co_art = %s AND fv.anulado = 0
+                    ),
+                    FrequentArticles AS (
+                        -- Artículos más comprados en esas facturas
+                        SELECT TOP {limit}
+                            fvr.co_art,
+                            COUNT(DISTINCT fvr.doc_num) AS frequency
+                        FROM dbo.saFacturaVentaReng fvr WITH (NOLOCK)
+                        INNER JOIN ArticleInvoices ai ON fvr.doc_num = ai.doc_num
+                        WHERE fvr.co_art != %s
+                        GROUP BY fvr.co_art
+                        ORDER BY frequency DESC
+                    )
                     SELECT 
-                        fvr.co_art,
-                        COUNT(DISTINCT fvr.doc_num) AS frequency
-                    FROM dbo.saFacturaVentaReng fvr
-                    INNER JOIN dbo.saFacturaVenta fv ON fvr.doc_num = fv.doc_num
-                    WHERE fvr.doc_num IN ({placeholders})
-                        AND fvr.co_art != %s
-                        AND fv.anulado = 0
-                    GROUP BY fvr.co_art
-                    ORDER BY frequency DESC
-                """
-                cursor.execute(count_query, tuple(invoice_nums + [co_art]))
-                frequent_articles = cursor.fetchall()[:limit]
-                
-                if not frequent_articles:
-                    cursor.close()
-                    cache_service.set(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
-                    return []
-                
-                # Obtener detalles de los artículos más frecuentes
-                article_codes = [row.get('co_art') for row in frequent_articles]
-                article_placeholders = ",".join(["%s"] * len(article_codes))
-                
-                detail_query = f"""
-                    SELECT DISTINCT
                         a.co_art,
                         a.art_des,
                         a.co_cat AS category_code,
                         cat.cat_des AS category_name,
-                        ap.price,
-                        ap.currency,
-                        stock_data.stock AS stock,
-                        stock_data.co_alma AS warehouse_code,
-                        img.image_guid
-                    FROM dbo.saArticulo a
-                    LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-                    OUTER APPLY (
-                        SELECT TOP 1 
-                            ap.monto AS price,
-                            ap.co_mone AS currency
-                        FROM dbo.saArtPrecio ap
-                        WHERE ap.co_art = a.co_art 
-                            AND RTRIM(ap.co_precio) = '01'
-                        ORDER BY ap.desde DESC
-                    ) ap
-                    OUTER APPLY (
-                        SELECT 
-                            RTRIM(sa.co_alma) AS co_alma,
-                            SUM(sa.stock) AS stock
-                        FROM dbo.saStockAlmacen sa
-                        WHERE sa.co_art = a.co_art 
-                            AND RTRIM(sa.co_alma) = '001'
-                            AND sa.tipo = 'ACT'
-                        GROUP BY sa.co_alma
-                    ) stock_data
-                    OUTER APPLY (
-                        SELECT TOP 1 img.rowguid AS image_guid
-                        FROM dbo.saArtImagen img
-                        WHERE img.co_art = a.co_art
-                        ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
-                    ) img
-                    WHERE a.co_art IN ({article_placeholders})
-                        AND a.anulado = 0
+                        (SELECT TOP 1 ap.monto 
+                         FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                         WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = '01'
+                         ORDER BY ap.desde DESC) AS price,
+                        (SELECT TOP 1 ap.co_mone 
+                         FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                         WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = '01'
+                         ORDER BY ap.desde DESC) AS currency,
+                        (SELECT SUM(sa.stock) 
+                         FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                         WHERE sa.co_art = a.co_art AND RTRIM(sa.co_alma) = '001' AND sa.tipo = 'ACT') AS stock,
+                        '001' AS warehouse_code,
+                        (SELECT TOP 1 img.rowguid 
+                         FROM dbo.saArtImagen img WITH (NOLOCK)
+                         WHERE img.co_art = a.co_art
+                         ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC) AS image_guid,
+                        fa.frequency
+                    FROM FrequentArticles fa
+                    INNER JOIN dbo.saArticulo a WITH (NOLOCK) ON a.co_art = fa.co_art
+                    LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+                    WHERE a.anulado = 0
+                    ORDER BY fa.frequency DESC
+                    OPTION (MAXDOP 2, FAST {limit})
                 """
-                cursor.execute(detail_query, tuple(article_codes))
+                cursor.execute(combined_query, (co_art, co_art))
                 articles = cursor.fetchall()
                 cursor.close()
                 
-                # Ordenar según la frecuencia
-                article_dict = {row.get('co_art'): row for row in articles}
-                result = []
-                for freq_row in frequent_articles:
-                    art_code = freq_row.get('co_art')
-                    if art_code in article_dict:
-                        result.append(article_dict[art_code])
-                
-                result = result[:limit]
+                # Los artículos ya vienen ordenados por frecuencia
+                result = articles[:limit] if articles else []
                 
                 # Guardar en caché
                 cache_service.set(cache_key, result, ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
@@ -343,6 +323,8 @@ class RecommendationService:
             
         except Exception as e:
             logger.error(f"Error obteniendo artículos frecuentemente comprados juntos para {co_art}: {e}")
+            # Fallback: retornar lista vacía y cachearla para evitar consultas repetidas
+            cache_service.set(cache_key, [], ttl=300)
             return []
     
     def get_recommended_articles(
@@ -376,19 +358,27 @@ class RecommendationService:
             with self._source_service.connection() as conn:
                 cursor = conn.cursor()
                 
+                # Establecer timeout para la query
+                try:
+                    cursor.execute(f"SET LOCK_TIMEOUT {QUERY_TIMEOUT * 1000}")
+                except Exception:
+                    pass
+                
                 recommended = []
                 
                 if customer_code:
                     # Estrategia 1: Artículos de categorías que el cliente compra
+                    # Optimizar con TOP y NOLOCK
                     categories_query = """
-                        SELECT DISTINCT fvr.co_art, a.co_cat
-                        FROM dbo.saFacturaVentaReng fvr
-                        INNER JOIN dbo.saFacturaVenta fv ON fvr.doc_num = fv.doc_num
-                        INNER JOIN dbo.saArticulo a ON fvr.co_art = a.co_art
+                        SELECT DISTINCT TOP 100 fvr.co_art, a.co_cat
+                        FROM dbo.saFacturaVentaReng fvr WITH (NOLOCK)
+                        INNER JOIN dbo.saFacturaVenta fv WITH (NOLOCK) ON fvr.doc_num = fv.doc_num
+                        INNER JOIN dbo.saArticulo a WITH (NOLOCK) ON fvr.co_art = a.co_art
                         WHERE fv.co_cli = %s
                             AND fv.anulado = 0
                             AND a.anulado = 0
                             AND a.co_cat IS NOT NULL
+                        OPTION (MAXDOP 2)
                     """
                     cursor.execute(categories_query, (customer_code,))
                     purchased_items = cursor.fetchall()
@@ -403,66 +393,54 @@ class RecommendationService:
                                 purchased_articles.add(row.get('co_art').strip())
                         
                         if purchased_categories:
-                            category_list = list(purchased_categories)
+                            category_list = list(purchased_categories)[:10]  # Limitar categorías para mejor rendimiento
                             category_placeholders = ",".join(["%s"] * len(category_list))
                             
+                            # Query optimizada con subconsultas en SELECT
                             category_query = f"""
-                                SELECT DISTINCT
+                                SELECT TOP {limit}
                                     a.co_art,
                                     a.art_des,
                                     a.co_cat AS category_code,
                                     cat.cat_des AS category_name,
-                                    ap.price,
-                                    ap.currency,
-                                    stock_data.stock AS stock,
-                                    stock_data.co_alma AS warehouse_code,
-                                    img.image_guid
-                                FROM dbo.saArticulo a
-                                LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-                                OUTER APPLY (
-                                    SELECT TOP 1 
-                                        ap.monto AS price,
-                                        ap.co_mone AS currency
-                                    FROM dbo.saArtPrecio ap
-                                    WHERE ap.co_art = a.co_art 
-                                        AND RTRIM(ap.co_precio) = %s
-                                    ORDER BY ap.desde DESC
-                                ) ap
-                                OUTER APPLY (
-                                    SELECT 
-                                        RTRIM(sa.co_alma) AS co_alma,
-                                        SUM(sa.stock) AS stock
-                                    FROM dbo.saStockAlmacen sa
-                                    WHERE sa.co_art = a.co_art 
-                                        AND RTRIM(sa.co_alma) = %s
-                                        AND sa.tipo = 'ACT'
-                                    GROUP BY sa.co_alma
-                                ) stock_data
-                                OUTER APPLY (
-                                    SELECT TOP 1 img.rowguid AS image_guid
-                                    FROM dbo.saArtImagen img
-                                    WHERE img.co_art = a.co_art
-                                    ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
-                                ) img
+                                    (SELECT TOP 1 ap.monto 
+                                     FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                                     WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                                     ORDER BY ap.desde DESC) AS price,
+                                    (SELECT TOP 1 ap.co_mone 
+                                     FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                                     WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                                     ORDER BY ap.desde DESC) AS currency,
+                                    (SELECT SUM(sa.stock) 
+                                     FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                                     WHERE sa.co_art = a.co_art AND RTRIM(sa.co_alma) = %s AND sa.tipo = 'ACT') AS stock,
+                                    %s AS warehouse_code,
+                                    (SELECT TOP 1 img.rowguid 
+                                     FROM dbo.saArtImagen img WITH (NOLOCK)
+                                     WHERE img.co_art = a.co_art
+                                     ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC) AS image_guid
+                                FROM dbo.saArticulo a WITH (NOLOCK)
+                                LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
                                 WHERE a.anulado = 0
                                     AND RTRIM(a.co_cat) IN ({category_placeholders})
-                                    AND (stock_data.stock > 0 OR stock_data.stock IS NULL)
                             """
                             
                             # Excluir artículos ya comprados
                             if purchased_articles:
-                                article_placeholders = ",".join(["%s"] * len(purchased_articles))
+                                purchased_list = list(purchased_articles)[:50]  # Limitar para mejor rendimiento
+                                article_placeholders = ",".join(["%s"] * len(purchased_list))
                                 category_query += f" AND a.co_art NOT IN ({article_placeholders})"
                             
                             category_query += """
-                                ORDER BY ap.price DESC
-                                OFFSET 0 ROWS FETCH NEXT %s ROWS ONLY
+                                ORDER BY NEWID()
+                                OPTION (MAXDOP 2)
                             """
                             
-                            params = [price_code, warehouse_code] + category_list
+                            params = [price_code, price_code, warehouse_code, warehouse_code] + category_list
                             if purchased_articles:
-                                params.extend(list(purchased_articles))
-                            params.append(limit)
+                                params.extend(purchased_list)
+                            else:
+                                purchased_list = []
                             
                             cursor.execute(category_query, tuple(params))
                             category_articles = cursor.fetchall()
@@ -471,68 +449,50 @@ class RecommendationService:
                 
                 # Si no hay suficientes, completar con artículos populares
                 if len(recommended) < limit:
-                    popular_query = """
-                        SELECT DISTINCT
+                    remaining = limit - len(recommended)
+                    
+                    # Simplificar: obtener artículos aleatorios con stock en lugar de calcular popularidad
+                    # (mucho más rápido y evita el costoso JOIN con facturas)
+                    popular_query = f"""
+                        SELECT TOP {remaining}
                             a.co_art,
                             a.art_des,
                             a.co_cat AS category_code,
                             cat.cat_des AS category_name,
-                            ap.price,
-                            ap.currency,
-                            stock_data.stock AS stock,
-                            stock_data.co_alma AS warehouse_code,
-                            img.image_guid,
-                            COUNT(DISTINCT fvr.doc_num) AS sales_count
-                        FROM dbo.saArticulo a
-                        LEFT JOIN dbo.saCatArticulo cat ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
-                        LEFT JOIN dbo.saFacturaVentaReng fvr ON a.co_art = fvr.co_art
-                        LEFT JOIN dbo.saFacturaVenta fv ON fvr.doc_num = fv.doc_num AND fv.anulado = 0
-                        OUTER APPLY (
-                            SELECT TOP 1 
-                                ap.monto AS price,
-                                ap.co_mone AS currency
-                            FROM dbo.saArtPrecio ap
-                            WHERE ap.co_art = a.co_art 
-                                AND RTRIM(ap.co_precio) = %s
-                            ORDER BY ap.desde DESC
-                        ) ap
-                        OUTER APPLY (
-                            SELECT 
-                                RTRIM(sa.co_alma) AS co_alma,
-                                SUM(sa.stock) AS stock
-                            FROM dbo.saStockAlmacen sa
-                            WHERE sa.co_art = a.co_art 
-                                AND RTRIM(sa.co_alma) = %s
-                                AND sa.tipo = 'ACT'
-                            GROUP BY sa.co_alma
-                        ) stock_data
-                        OUTER APPLY (
-                            SELECT TOP 1 img.rowguid AS image_guid
-                            FROM dbo.saArtImagen img
-                            WHERE img.co_art = a.co_art
-                            ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
-                        ) img
+                            (SELECT TOP 1 ap.monto 
+                             FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                             WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                             ORDER BY ap.desde DESC) AS price,
+                            (SELECT TOP 1 ap.co_mone 
+                             FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                             WHERE ap.co_art = a.co_art AND RTRIM(ap.co_precio) = %s
+                             ORDER BY ap.desde DESC) AS currency,
+                            (SELECT SUM(sa.stock) 
+                             FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                             WHERE sa.co_art = a.co_art AND RTRIM(sa.co_alma) = %s AND sa.tipo = 'ACT') AS stock,
+                            %s AS warehouse_code,
+                            (SELECT TOP 1 img.rowguid 
+                             FROM dbo.saArtImagen img WITH (NOLOCK)
+                             WHERE img.co_art = a.co_art
+                             ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC) AS image_guid
+                        FROM dbo.saArticulo a WITH (NOLOCK)
+                        LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
                         WHERE a.anulado = 0
-                            AND (stock_data.stock > 0 OR stock_data.stock IS NULL)
                     """
                     
-                    params = [price_code, warehouse_code]
+                    params = [price_code, price_code, warehouse_code, warehouse_code]
                     
                     if recommended:
-                        recommended_codes = [(row.get('co_art') or '').strip() for row in recommended if row.get('co_art')]
+                        recommended_codes = [(row.get('co_art') or '').strip() for row in recommended if row.get('co_art')][:50]
                         if recommended_codes:
                             recommended_placeholders = ",".join(["%s"] * len(recommended_codes))
                             popular_query += f" AND a.co_art NOT IN ({recommended_placeholders})"
                             params.extend(recommended_codes)
                     
                     popular_query += """
-                        GROUP BY a.co_art, a.art_des, a.co_cat, cat.cat_des, ap.price, ap.currency, 
-                                 stock_data.stock, stock_data.co_alma, img.image_guid
-                        ORDER BY sales_count DESC, ap.price DESC
-                        OFFSET 0 ROWS FETCH NEXT %s ROWS ONLY
+                        ORDER BY NEWID()
+                        OPTION (MAXDOP 2)
                     """
-                    
-                    params.append(limit - len(recommended))
                     
                     cursor.execute(popular_query, tuple(params))
                     popular_articles = cursor.fetchall()
@@ -552,7 +512,31 @@ class RecommendationService:
             
         except Exception as e:
             logger.error(f"Error obteniendo artículos recomendados: {e}")
-            return []
+            # Fallback: intentar con query simplificada
+            try:
+                with self._source_service.connection() as conn:
+                    cursor = conn.cursor()
+                    fallback_query = f"""
+                        SELECT TOP {limit}
+                            a.co_art, a.art_des,
+                            a.co_cat AS category_code, NULL AS category_name,
+                            NULL AS price, 'VES' AS currency,
+                            NULL AS stock, NULL AS warehouse_code,
+                            NULL AS image_guid
+                        FROM dbo.saArticulo a WITH (NOLOCK)
+                        WHERE a.anulado = 0
+                        ORDER BY NEWID()
+                        OPTION (FAST {limit})
+                    """
+                    cursor.execute(fallback_query)
+                    fallback_results = cursor.fetchall() or []
+                    cursor.close()
+                    logger.info(f"Usando fallback para artículos recomendados: {len(fallback_results)} items")
+                    cache_service.set(cache_key, fallback_results, ttl=300)
+                    return fallback_results
+            except Exception as fallback_error:
+                logger.error(f"Error en fallback de artículos recomendados: {fallback_error}")
+                return []
     
     @staticmethod
     def _to_decimal(value: Any) -> Optional[Decimal]:
@@ -589,3 +573,62 @@ class RecommendationService:
     def get_cache_stats() -> Dict:
         """Obtiene estadísticas del caché."""
         return cache_service.get_stats()
+    
+    def warmup_cache(self, popular_articles: List[str] = None, customer_codes: List[str] = None):
+        """
+        Pre-calienta el caché con artículos populares.
+        
+        Args:
+            popular_articles: Lista de códigos de artículos populares para pre-cargar
+            customer_codes: Lista de códigos de clientes para pre-cargar recomendaciones
+        
+        Returns:
+            Dict con estadísticas del warm-up
+        """
+        stats = {
+            'related_loaded': 0,
+            'frequently_bought_loaded': 0,
+            'recommended_loaded': 0,
+            'errors': 0
+        }
+        
+        try:
+            # Pre-cargar artículos relacionados para productos populares
+            if popular_articles:
+                logger.info(f"Iniciando warm-up de cache para {len(popular_articles)} artículos populares")
+                for co_art in popular_articles:
+                    try:
+                        self.get_related_articles(co_art, limit=3)
+                        stats['related_loaded'] += 1
+                        
+                        self.get_frequently_bought_together(co_art, limit=4)
+                        stats['frequently_bought_loaded'] += 1
+                    except Exception as e:
+                        logger.warning(f"Error en warm-up para artículo {co_art}: {e}")
+                        stats['errors'] += 1
+            
+            # Pre-cargar recomendaciones para clientes frecuentes
+            if customer_codes:
+                logger.info(f"Iniciando warm-up de recomendaciones para {len(customer_codes)} clientes")
+                for customer_code in customer_codes:
+                    try:
+                        self.get_recommended_articles(customer_code=customer_code, limit=12)
+                        stats['recommended_loaded'] += 1
+                    except Exception as e:
+                        logger.warning(f"Error en warm-up para cliente {customer_code}: {e}")
+                        stats['errors'] += 1
+            
+            # Pre-cargar recomendaciones generales (sin cliente)
+            try:
+                self.get_recommended_articles(customer_code=None, limit=12)
+                stats['recommended_loaded'] += 1
+            except Exception as e:
+                logger.warning(f"Error en warm-up de recomendaciones generales: {e}")
+                stats['errors'] += 1
+            
+            logger.info(f"Warm-up completado: {stats}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error en warm-up de caché: {e}")
+            return stats

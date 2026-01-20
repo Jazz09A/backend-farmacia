@@ -827,3 +827,67 @@ async def toggle_cache(
         "message": message,
         "enabled": cache_service._enabled
     }
+
+
+class CacheWarmupRequest(BaseModel):
+    """Request para warm-up de caché."""
+    popular_articles: Optional[List[str]] = None
+    customer_codes: Optional[List[str]] = None
+
+
+class CacheWarmupResponse(BaseModel):
+    """Response para warm-up de caché."""
+    success: bool
+    message: str
+    stats: dict
+
+
+@router.post("/cache/warmup", response_model=CacheWarmupResponse)
+async def warmup_cache(
+    request: CacheWarmupRequest = None,
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    🔥 **Pre-calentar caché de recomendaciones**
+    
+    Pre-carga el caché con artículos y clientes populares para mejorar el rendimiento.
+    Útil ejecutar después de limpiar el caché o al iniciar el sistema.
+    
+    **Artículos populares sugeridos:** Si no se especifican, se cargan algunos por defecto.
+    """
+    from app.services.recommendation_service import RecommendationService
+    
+    recommendation_service = RecommendationService()
+    
+    # Si no se proporcionan artículos, usar algunos por defecto
+    popular_articles = request.popular_articles if request else None
+    customer_codes = request.customer_codes if request else None
+    
+    # Si no hay artículos especificados, pre-cargar solo recomendaciones generales
+    if not popular_articles and not customer_codes:
+        popular_articles = []
+        # Se cargará solo la recomendación general
+    
+    logger.info(f"Iniciando warm-up de caché por {current_user.email}")
+    stats = recommendation_service.warmup_cache(
+        popular_articles=popular_articles,
+        customer_codes=customer_codes
+    )
+    
+    total_loaded = (
+        stats.get('related_loaded', 0) + 
+        stats.get('frequently_bought_loaded', 0) + 
+        stats.get('recommended_loaded', 0)
+    )
+    
+    message = f"Caché pre-calentado: {total_loaded} entradas cargadas"
+    if stats.get('errors', 0) > 0:
+        message += f" ({stats['errors']} errores)"
+    
+    logger.info(f"Warm-up completado: {stats}")
+    
+    return CacheWarmupResponse(
+        success=True,
+        message=message,
+        stats=stats
+    )
