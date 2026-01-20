@@ -128,3 +128,4 @@ wsproto==1.2.0
 yarl==1.20.1
 yt-dlp==2025.1.15
 cloudinary==1.40.0
+resend==2.19.0
