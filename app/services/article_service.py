@@ -418,7 +418,8 @@ class ArticleService:
             # Obtener descuento de Profit Plus desde saDescArticulo si existe
             profit_discount = None
             normalized_co_art = co_art.upper().strip()
-            profit_discount_row = profit_discounts_map.get(normalized_co_art)
+            print(f"profit_discounts_map : {profit_discounts_map}")
+            profit_discount_row = profit_discounts_map.get(normalized_co_art, None)
             if profit_discount_row:
                 profit_discount = self._build_profit_discount_info(profit_discount_row)
             
@@ -426,7 +427,7 @@ class ArticleService:
             description = self._get_description(co_art)
             
             # Obtener imagen de Cloudinary si existe
-            cloudinary_image_url = cloudinary_images_map.get(normalized_co_art)
+            cloudinary_image_url = cloudinary_images_map.get(normalized_co_art, None)
             
             summaries.append(
                 ArticleSummary(
@@ -583,11 +584,19 @@ class ArticleService:
         profit_discount = None
         normalized_co_art = (co_art or "").upper().strip()
         
+        print(f"🔍 DEBUG get_article_detail: Buscando descuentos para co_art={normalized_co_art}")
         profit_discounts_map = self._source_service.get_active_discounts_for_articles(
             article_codes=[normalized_co_art],
             tip_cli=None
         )
-        profit_discount_row = profit_discounts_map.get(normalized_co_art)
+        print(f"🔍 DEBUG get_article_detail: profit_discounts_map type={type(profit_discounts_map)}, value={profit_discounts_map}")
+        
+        if profit_discounts_map is None:
+            print(f"❌ ERROR: profit_discounts_map es None! Retornando diccionario vacío como fallback")
+            profit_discounts_map = {}
+        
+        profit_discount_row = profit_discounts_map.get(normalized_co_art) if profit_discounts_map else None
+        print(f"🔍 DEBUG get_article_detail: profit_discount_row={profit_discount_row}")
         if profit_discount_row:
             profit_discount = self._build_profit_discount_info(profit_discount_row)
 

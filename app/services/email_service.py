@@ -1,32 +1,34 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.header import Header
-from email.utils import formataddr
 from typing import Dict, Any
 from app.config.settings import Settings
-from app.config.logging_config import get_logger, log_error
+from app.config.logging_config import get_logger
 import os
 from jinja2 import Environment, FileSystemLoader
-import socket
 from app.utils.timezone import get_ve_now
+import resend
+
 
 settings = Settings()
+
+
 class EmailService:
     def __init__(self):
-        self.smtp_server = settings.SMTP_HOST
-        self.smtp_port = settings.SMTP_PORT
-        self.smtp_user = settings.SMTP_USER
-        self.smtp_password = settings.SMTP_PASSWORD
-        self.from_email = settings.SMTP_FROM
-        self.from_name = settings.SMTP_FROM_NAME
+        self.resend_api_key = settings.RESEND_API_KEY
+        self.from_email = settings.EMAIL_FROM
+        self.from_name = settings.EMAIL_FROM_NAME
         self.email_logger = get_logger("email")
-        self.error_logger = get_logger("errors")
-
+        
         # Setup Jinja2 for HTML templates
         self.template_env = Environment(
             loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), '..', 'templates', 'emails'))
         )
+        # Verificar configuración
+        if not self.resend_api_key:
+            self.email_logger.error("RESEND_API_KEY not configured - emails will fail")
+            raise ValueError("RESEND_API_KEY not configured in environment variables")
+        
+        # Configurar Resend
+        resend.api_key = self.resend_api_key
+        self.email_logger.info("Email service initialized with Resend API")
 
     def _render_template(self, template_name: str, context: Dict[str, Any]) -> str:
         """Renders an email template with the given context."""
@@ -35,162 +37,78 @@ class EmailService:
 
     async def send_email(self, to_email: str, subject: str, template_name: str, context: Dict[str, Any]):
         """
-        Sends an email using an HTML template.
+        Envía un email usando Resend API.
+        
+        Args:
+            to_email: Destinatario
+            subject: Asunto del email
+            template_name: Nombre del template HTML (ej: 'welcome.html')
+            context: Variables para el template
         """
         self.email_logger.info(
-            "Attempting to send email",
+            f"📧 Sending email to {to_email}",
             extra={
                 'to_email': to_email,
-                'user_email': to_email,  # El destinatario es el usuario
+                'user_email': to_email,
                 'subject': subject,
                 'template': template_name,
                 'event': 'email_send_attempt'
             }
         )
         
-        if not all([self.smtp_server, self.smtp_port, self.smtp_user, self.smtp_password, self.from_email]):
+        # Verificar que está configurado
+        if not self.resend_api_key:
             self.email_logger.error(
-                "Email service not configured - missing SMTP settings",
+                "❌ Cannot send email - RESEND_API_KEY not configured",
                 extra={
                     'to_email': to_email,
-                    'user_email': to_email,
                     'template': template_name,
-                    'reason': 'smtp_not_configured',
                     'event': 'email_send_failed'
                 }
             )
-            return
-
-        message = MIMEMultipart("alternative")
-        message["Subject"] = subject
-        message["From"] = formataddr((str(Header(self.from_name, 'utf-8')), self.from_email))
-        message["To"] = to_email
-
-        # Render the HTML content from the template
-        html_body = self._render_template(template_name, context)
+            raise ValueError("RESEND_API_KEY not configured in environment variables")
         
-        # Attach the HTML part
-        message.attach(MIMEText(html_body, "html"))
-
         try:
-            # Configurar timeout más corto para fallar rápido en caso de problemas de red
-            self.email_logger.info(
-                f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}",
-                extra={
-                    'smtp_server': self.smtp_server,
-                    'smtp_port': self.smtp_port,
-                    'to_email': to_email,
-                    'event': 'smtp_connection_attempt'
-                }
-            )
+            # Render HTML template
+            html_body = self._render_template(template_name, context)
             
-            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
-                self.email_logger.info("SMTP connection established, starting TLS...")
-                
-                server.starttls()  # Secure the connection
-                self.email_logger.info("TLS started, attempting login...")
-                
-                server.login(self.smtp_user, self.smtp_password)
-                self.email_logger.info("Login successful, sending email...")
-                
-                server.sendmail(self.from_email, to_email, message.as_string())
-                
-                self.email_logger.info(
-                    "Email sent successfully",
-                    extra={
-                        'to_email': to_email,
-                        'user_email': to_email,
-                        'subject': subject,
-                        'template': template_name,
-                        'event': 'email_sent_successfully'
-                    }
-                )
-        except (socket.timeout, socket.error, OSError) as e:
-            # Errores de red - logear con más detalles y relanzar el error
-            error_details = {
-                'to_email': to_email,
-                'user_email': to_email,
-                'subject': subject,
-                'template': template_name,
-                'error_type': 'network_error',
-                'error_class': type(e).__name__,
-                'error_message': str(e),
-                'smtp_server': self.smtp_server,
-                'smtp_port': self.smtp_port,
-                'event': 'email_send_network_error'
+            # Preparar parámetros para Resend
+            params = {
+                "from": f"{self.from_name} <{self.from_email}>",
+                "to": [settings.EMAIL_TEST],
+                "subject": subject,
+                "html": html_body,
             }
             
-            # Agregar información específica del error
-            if hasattr(e, 'errno'):
-                error_details['error_errno'] = e.errno
-            if hasattr(e, 'strerror'):
-                error_details['error_strerror'] = e.strerror
+            # Enviar email
+            response = resend.Emails.send(params)
             
-            self.email_logger.error(
-                f"Network error sending email - {type(e).__name__}: {str(e)}",
-                extra=error_details
-            )
-            
-            # Log adicional con traceback completo para debugging
-            import traceback
-            self.email_logger.debug(
-                f"Full traceback for network error:\n{traceback.format_exc()}",
-                extra={'to_email': to_email, 'event': 'email_network_error_traceback'}
-            )
-            
-            # Relanzar el error para que el código que llama pueda manejarlo
-            raise
-        except smtplib.SMTPException as e:
-            # Errores SMTP específicos
-            log_error(
-                self.error_logger,
-                e,
-                context={
-                    'to_email': to_email,
-                    'subject': subject,
-                    'template': template_name,
-                    'operation': 'email_sending',
-                    'error_type': 'smtp_error'
-                },
-                user_email=to_email
-            )
-            self.email_logger.error(
-                "SMTP error sending email",
+            # Log éxito
+            self.email_logger.info(
+                "✅ Email sent successfully",
                 extra={
                     'to_email': to_email,
                     'user_email': to_email,
                     'subject': subject,
                     'template': template_name,
-                    'error': str(e),
-                    'event': 'email_send_smtp_error'
+                    'email_id': response.get('id') if isinstance(response, dict) else str(response),
+                    'event': 'email_sent_successfully'
                 }
             )
-            # Relanzar el error para que el código que llama pueda manejarlo
-            raise
+            
         except Exception as e:
-            log_error(
-                self.error_logger,
-                e,
-                context={
-                    'to_email': to_email,
-                    'subject': subject,
-                    'template': template_name,
-                    'operation': 'email_sending'
-                },
-                user_email=to_email
-            )
             self.email_logger.error(
-                "Failed to send email",
+                f"❌ Failed to send email: {str(e)}",
                 extra={
                     'to_email': to_email,
                     'user_email': to_email,
                     'subject': subject,
                     'template': template_name,
-                    'error': str(e),
+                    'error_type': type(e).__name__,
+                    'error_message': str(e),
                     'event': 'email_send_failed'
                 }
             )
-            # Relanzar el error para que el código que llama pueda manejarlo
             raise
 
     async def send_order_tracking_email(self, to_email: str, order_data: Dict[str, Any]):
@@ -199,16 +117,8 @@ class EmailService:
         
         Args:
             to_email: Customer's email address
-            order_data: Dictionary containing order information with keys:
-                - order_number: Order ID/number
-                - order_date: Date when order was placed
-                - order_total: Total amount of the order
-                - order_status: Current status of the order
-                - payment_method: Payment method used
-                - estimated_delivery: Estimated delivery date (optional)
-                - tracking_link: URL to the order tracking page
+            order_data: Dictionary containing order information
         """
-        # Prepare context for the template
         current_time = get_ve_now()
         context = {
             "order_number": order_data.get("order_number", "N/A"),
@@ -325,6 +235,7 @@ class EmailService:
             template_name="password_reset.html",
             context=context
         )
+
 
 # Singleton instance
 email_service = EmailService()

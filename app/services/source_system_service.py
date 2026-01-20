@@ -1739,70 +1739,83 @@ class SourceSystemService:
         Returns:
             Dict[str, Dict]: Mapa de article_code -> discount_info
         """
+        print(f"🔍 DEBUG get_active_discounts_for_articles: article_codes={article_codes}, tip_cli={tip_cli}")
+        
         if not article_codes:
+            print("⚠️ DEBUG: article_codes está vacío, retornando {}")
             return {}
         
         try:
-            with self.connection() as conn:
-                cursor = conn.cursor()
-            
-            # Normalizar códigos
+            # Normalizar códigos ANTES de abrir conexión
             normalized_codes = [code.strip().upper() for code in article_codes if code]
+            print(f"🔍 DEBUG: normalized_codes={normalized_codes}")
+            
             if not normalized_codes:
+                print("⚠️ DEBUG: normalized_codes está vacío después de normalizar, retornando {}")
                 return {}
             
-            # Construir placeholders para IN clause
-            placeholders = ','.join(['%s'] * len(normalized_codes))
-            
-            # Query para obtener descuentos activos
-            where_conditions = [
-                f"RTRIM(d.co_art) IN ({placeholders})",
-                "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
-                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
-            ]
-            params = list[str](normalized_codes)
-            
-            if tip_cli:
-                where_conditions.append("RTRIM(d.tip_cli) = %s")
-                params.append(tip_cli.strip().upper())
-            
-            where_clause = " AND ".join(where_conditions)
-            
-            query = f"""
-                SELECT 
-                    d.co_desc,
-                    d.co_art,
-                    d.tip_cli,
-                    tc.des_tipo,
-                    d.des_des,
-                    d.fecha_ini,
-                    d.fecha_fin,
-                    d.hasta1, d.porc1,
-                    d.hasta2, d.porc2,
-                    d.hasta3, d.porc3,
-                    d.hasta4, d.porc4,
-                    d.hasta5, d.porc5,
-                    d.porc6
-                FROM dbo.saDescArticulo d
-                LEFT JOIN dbo.saTipoCliente tc ON RTRIM(d.tip_cli) = RTRIM(tc.tip_cli)
-                WHERE {where_clause}
-                ORDER BY d.co_art, d.porc1 DESC
-            """
-            
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall() or []
-            cursor.close()
+            with self.connection() as conn:
+                print(f"✅ DEBUG: Conexión establecida para get_active_discounts_for_articles")
+                cursor = conn.cursor()
+                
+                # Construir placeholders para IN clause
+                placeholders = ','.join(['%s'] * len(normalized_codes))
+                
+                # Query para obtener descuentos activos
+                where_conditions = [
+                    f"RTRIM(d.co_art) IN ({placeholders})",
+                    "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
+                    "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
+                ]
+                params = list[str](normalized_codes)
+                
+                if tip_cli:
+                    where_conditions.append("RTRIM(d.tip_cli) = %s")
+                    params.append(tip_cli.strip().upper())
+                
+                where_clause = " AND ".join(where_conditions)
+                
+                query = f"""
+                    SELECT 
+                        d.co_desc,
+                        d.co_art,
+                        d.tip_cli,
+                        tc.des_tipo,
+                        d.des_des,
+                        d.fecha_ini,
+                        d.fecha_fin,
+                        d.hasta1, d.porc1,
+                        d.hasta2, d.porc2,
+                        d.hasta3, d.porc3,
+                        d.hasta4, d.porc4,
+                        d.hasta5, d.porc5,
+                        d.porc6
+                    FROM dbo.saDescArticulo d
+                    LEFT JOIN dbo.saTipoCliente tc ON RTRIM(d.tip_cli) = RTRIM(tc.tip_cli)
+                    WHERE {where_clause}
+                    ORDER BY d.co_art, d.porc1 DESC
+                """
+                
+                print(f"🔍 DEBUG: Ejecutando query con params={params}")
+                cursor.execute(query, tuple(params))
+                results = cursor.fetchall() or []
+                print(f"🔍 DEBUG: Query retornó {len(results)} resultados")
+                cursor.close()
                 
                 # Organizar por artículo (tomar el primer descuento por artículo)
-            discounts_map = {}
-            for row in results:
-                co_art = (row.get("co_art") or "").strip().upper()
-                if co_art and co_art not in discounts_map:
+                discounts_map = {}
+                for row in results:
+                    co_art = (row.get("co_art") or "").strip().upper()
+                    if co_art and co_art not in discounts_map:
                         discounts_map[co_art] = row
                 
+                print(f"✅ DEBUG: discounts_map final tiene {len(discounts_map)} artículos: {list(discounts_map.keys())}")
                 return discounts_map
                 
-        except Exception:
+        except Exception as e:
+            print(f"❌ DEBUG: Excepción en get_active_discounts_for_articles: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"❌ DEBUG: Traceback completo:\n{traceback.format_exc()}")
             raise
 
     def get_article_discounts(

@@ -31,14 +31,11 @@ class Settings(BaseSettings):
     # CORS
     ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
     
-    # Email Settings
-    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT: Optional[int] = os.getenv("SMTP_PORT", 587)
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER", "programatevzla@gmail.com")
-    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD", "crpg cagx zyyg hgys")
-    SMTP_FROM: Optional[str] = os.getenv("SMTP_FROM", "programatevzla@gmail.com")
-    SMTP_FROM_NAME: Optional[str] = os.getenv("SMTP_FROM_NAME", "Grupo Drozainka")
-    
+    # Email Settings - Resend
+    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY", None)
+    EMAIL_FROM: Optional[str] = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
+    EMAIL_FROM_NAME: Optional[str] = os.getenv("EMAIL_FROM_NAME", "Grupo Drozainka")
+    EMAIL_TEST: Optional[str] = os.getenv("EMAIL_TEST", "resend.dev@gmail.com")
     # Frontend URL
     FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
