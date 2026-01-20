@@ -27,6 +27,7 @@ from app.schemas.role import UserRole
 from app.config.settings import Settings
 from app.services.email_service import email_service # Import the service instance
 from app.services.source_system_service import source_system_service
+from app.services.cache_service import cache_service
 from app.services.source_system_user_creation_service import SourceSystemUserCreationService
 from app.utils.timezone import get_ve_now
 settings = Settings()
@@ -523,8 +524,86 @@ class AuthService:
     
     @staticmethod
     def get_user_info(db_user: User) -> UserResponse:
-        """Get user information as UserResponse."""
-        return UserResponse.model_validate(db_user)
+        """
+        Get user information as UserResponse.
+
+        Enriquecimiento (sin cambiar contrato):
+        - Busca el cliente/establecimiento en SourceSystem (Profit Plus) por email.
+        - Si existe, rellena campos existentes en la respuesta SOLO si vienen vacíos en la BD local.
+        - Si SourceSystem está caído, retorna la info local sin fallar.
+        """
+        base = UserResponse.model_validate(db_user)
+
+        # Normalizar email para cache/lookup
+        email = (getattr(db_user, "email", None) or "").strip().lower()
+        if not email:
+            return base
+
+        cache_key = f"user_me:source_system_customer:{email}"
+
+        try:
+            cached = cache_service.get(cache_key)
+            if cached is None:
+                # Cache miss: consultar SourceSystem
+                customer = source_system_service.get_customer_by_email(email)
+
+                # Cachear también "no encontrado" para evitar golpear la BD en cada request
+                cache_service.set(
+                    cache_key,
+                    customer if customer else {"_not_found": True},
+                    ttl=900,  # 15 minutos
+                )
+            else:
+                # Cache hit
+                customer = None if cached.get("_not_found") else cached
+        except Exception as e:
+            # Cualquier fallo (cache o SourceSystem): no bloquear /me
+            log_error(
+                get_logger("errors"),
+                e,
+                context={"operation": "auth_me_source_system_enrichment", "email": email},
+                user_email=email,
+            )
+            return base
+
+        if not customer:
+            return base
+
+        def _clean_str(val):
+            if val is None:
+                return None
+            s = str(val).strip()
+            return s or None
+
+        customer_name = _clean_str(customer.get("customer_name"))
+        rif = _clean_str(customer.get("rif"))
+        phones = _clean_str(customer.get("phones"))
+        address1 = _clean_str(customer.get("address1"))
+        address2 = _clean_str(customer.get("address2"))
+
+        # Construir dirección legible (sin duplicar)
+        direccion_parts = []
+        if address1:
+            direccion_parts.append(address1)
+        if address2 and address2 != address1:
+            direccion_parts.append(address2)
+        direccion = " - ".join(direccion_parts) if direccion_parts else None
+
+        # Rellenar SOLO si viene vacío del DB local (mantener contrato/compatibilidad)
+        data = base.model_dump()
+        if not _clean_str(data.get("company_name")) and customer_name:
+            data["company_name"] = customer_name
+        if not _clean_str(data.get("rif")) and rif:
+            data["rif"] = rif
+        if not _clean_str(data.get("direccion_establecimiento")) and direccion:
+            data["direccion_establecimiento"] = direccion
+
+        # Phone local es requerido; solo rellenar si viene raro/vacío
+        phone_local = _clean_str(data.get("phone"))
+        if (not phone_local or len(phone_local) < 5) and phones:
+            data["phone"] = phones
+
+        return UserResponse(**data)
 
     @staticmethod   
     async def get_email_verification(db: Session, email: str) -> dict:

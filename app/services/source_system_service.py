@@ -556,6 +556,34 @@ class SourceSystemService:
             raise
 
     def get_customer_by_code(self, customer_code: str) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene cliente por código con caché para reducir presión en el pool.
+        
+        Cache TTL: 15 minutos
+        - Cachea tanto hits (cliente encontrado) como misses (no encontrado)
+        - Reduce drásticamente hits a la BD cuando se llama frecuentemente
+        """
+        # Importación lazy para evitar ciclos
+        from app.services.cache_service import cache_service
+        
+        # Normalizar código para cache key
+        code_normalized = (customer_code or "").strip().upper()
+        if not code_normalized:
+            return None
+        
+        cache_key = f"source_system:customer_by_code:{code_normalized}"
+        
+        # Intentar obtener del caché
+        try:
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                # Cache hit: devolver o None si fue miss cacheado
+                return None if cached.get("_not_found") else cached
+        except Exception:
+            # Si falla el caché, continuar con la consulta normal
+            pass
+        
+        # Cache miss: consultar BD
         try:
             with self.connection() as conn:
                 cursor = conn.cursor()
@@ -579,12 +607,52 @@ class SourceSystemService:
                 cursor.execute(query, (customer_code,))
                 customer = cursor.fetchone()
                 cursor.close()
+                
+                # Cachear resultado (tanto hit como miss)
+                try:
+                    cache_service.set(
+                        cache_key,
+                        customer if customer else {"_not_found": True},
+                        ttl=900  # 15 minutos
+                    )
+                except Exception:
+                    # Si falla cachear, no es crítico
+                    pass
+                
                 return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente | code={customer_code} | error={e}")
             raise
 
     def get_customer_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene cliente por email con caché para reducir presión en el pool.
+        
+        Cache TTL: 15 minutos
+        - Cachea tanto hits (cliente encontrado) como misses (no encontrado)
+        - Reduce drásticamente hits a la BD cuando se llama frecuentemente
+        """
+        # Importación lazy para evitar ciclos
+        from app.services.cache_service import cache_service
+        
+        # Normalizar email para cache key
+        email_normalized = (email or "").strip().lower()
+        if not email_normalized:
+            return None
+        
+        cache_key = f"source_system:customer_by_email:{email_normalized}"
+        
+        # Intentar obtener del caché
+        try:
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                # Cache hit: devolver o None si fue miss cacheado
+                return None if cached.get("_not_found") else cached
+        except Exception:
+            # Si falla el caché, continuar con la consulta normal
+            pass
+        
+        # Cache miss: consultar BD
         try:
             with self.connection() as conn:
                 cursor = conn.cursor()
@@ -607,6 +675,18 @@ class SourceSystemService:
                 cursor.execute(query, (email, email))
                 customer = cursor.fetchone()
                 cursor.close()
+                
+                # Cachear resultado (tanto hit como miss)
+                try:
+                    cache_service.set(
+                        cache_key,
+                        customer if customer else {"_not_found": True},
+                        ttl=900  # 15 minutos
+                    )
+                except Exception:
+                    # Si falla cachear, no es crítico
+                    pass
+                
                 return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente | email={email} | error={e}")
@@ -702,7 +782,9 @@ class SourceSystemService:
     
     def get_customer_addresses(self, customer_code: str) -> List[Dict[str, Any]]:
         """
-        Obtiene las direcciones de un cliente desde Profit Plus (saCliente).
+        Obtiene las direcciones de un cliente desde Profit Plus (saCliente) con caché.
+        
+        Cache TTL: 30 minutos (las direcciones cambian raramente)
         
         Args:
             customer_code: Código de cliente (co_cli)
@@ -710,6 +792,25 @@ class SourceSystemService:
         Returns:
             Lista de direcciones del cliente
         """
+        # Importación lazy para evitar ciclos
+        from app.services.cache_service import cache_service
+        
+        # Normalizar código para cache key
+        code_normalized = (customer_code or "").strip().upper()
+        if not code_normalized:
+            return []
+        
+        cache_key = f"source_system:customer_addresses:{code_normalized}"
+        
+        # Intentar obtener del caché
+        try:
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                return cached
+        except Exception:
+            pass
+        
+        # Cache miss: consultar BD
         try:
             with self.connection() as conn:
                 cursor = conn.cursor()
@@ -731,6 +832,11 @@ class SourceSystemService:
                 cursor.close()
                 
                 if not result:
+                    # Cachear lista vacía para evitar consultas repetidas
+                    try:
+                        cache_service.set(cache_key, [], ttl=1800)  # 30 minutos
+                    except Exception:
+                        pass
                     return []
                 
                 # Construir lista de direcciones disponibles
@@ -771,6 +877,12 @@ class SourceSystemService:
                         'phones': result.get('phones', '').strip() if result.get('phones') else None,
                         'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
                     })
+                
+                # Cachear resultado
+                try:
+                    cache_service.set(cache_key, addresses, ttl=1800)  # 30 minutos
+                except Exception:
+                    pass
                 
                 return addresses
         except Exception as e:
