@@ -1,49 +1,10 @@
 from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.types import TypeDecorator, JSON
 from app.config.database import Base
+from app.models.types import ArrayType
 import uuid
-import json
 from decimal import Decimal
 from app.utils.timezone import get_ve_now
-
-# Custom array type that works with both SQLite and PostgreSQL
-class ArrayType(TypeDecorator):
-    """Custom type that stores arrays as JSON in SQLite and as ARRAY in PostgreSQL"""
-    
-    impl = JSON
-    cache_ok = True
-    
-    def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
-            return dialect.type_descriptor(ARRAY(String))
-        else:
-            return dialect.type_descriptor(JSON())
-    
-    def process_bind_param(self, value, dialect):
-        if dialect.name == 'postgresql':
-            return value
-        else:
-            # For SQLite, store as JSON string
-            if value is None:
-                return None
-            return json.dumps(value) if isinstance(value, list) else value
-    
-    def process_result_value(self, value, dialect):
-        if dialect.name == 'postgresql':
-            return value
-        else:
-            # For SQLite, parse from JSON string
-            if value is None:
-                return None
-            if isinstance(value, str):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    pass
-
-            return value if isinstance(value, list) else []
 
 class Product(Base):
     __tablename__ = "products"

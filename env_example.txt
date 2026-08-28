@@ -1,0 +1,52 @@
+# App
+DEBUG=True
+ENVIRONMENT=development
+API_URL=http://localhost:8000
+PORT=8000
+FRONTEND_URL=http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173
+
+# Database (local sqlite por defecto)
+DATABASE_URL=sqlite:///./db.sqlite3
+
+# Auth — placeholder; cambiar en producción
+SECRET_KEY=change-me-in-production
+
+# Tokens / paginación
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+DEFAULT_PAGE_SIZE=20
+MAX_PAGE_SIZE=100
+MIN_PAGE_SIZE=1
+
+# SMTP — credenciales vacías (rellenar localmente; no versionar secretos)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+SMTP_FROM_NAME=Grupo Drozainka
+
+# Source system (SQL Server externo) — credenciales vacías
+SOURCE_SYSTEM_SERVER=localhost
+SOURCE_SYSTEM_PORT=49571
+SOURCE_SYSTEM_DATABASE=GDROZAINK_A
+SOURCE_SYSTEM_USER=
+SOURCE_SYSTEM_PASSWORD=
+SOURCE_POOL_SIZE=15
+SOURCE_MAX_OVERFLOW=10
+SOURCE_POOL_TIMEOUT=30
+SOURCE_POOL_RECYCLE=300
+
+# Cache
+CACHE_ENABLED=True
+CACHE_CATALOG_TTL=1800
+CACHE_DETAIL_TTL=3600
+CACHE_STATIC_TTL=7200
+CACHE_DEFAULT_TTL=1800
+
+# Cloudinary — placeholders
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER=False

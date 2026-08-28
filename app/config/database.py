@@ -4,14 +4,24 @@ from sqlalchemy.orm import sessionmaker
 from app.config.settings import Settings
 
 settings = Settings()
+
+_engine_kwargs: dict = {}
+if not settings.DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs.update(
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
+elif settings.DATABASE_URL.startswith("sqlite"):
+    # SQLite no soporta pool_size/max_overflow; usar StaticPool en tests
+    # (vía conftest) o NullPool en runtime.
+    from sqlalchemy.pool import NullPool
+
+    _engine_kwargs["poolclass"] = NullPool
+
 # Create SQLAlchemy engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=300
-)
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -36,4 +46,4 @@ def create_tables():
         PromotionUsage, UserFavorite, CreditPayment,
         BlogPost, BlogCategory, BlogImage, ProductImage
     )
-    Base.metadata.create_all(bind=engine) 
+    Base.metadata.create_all(bind=engine)

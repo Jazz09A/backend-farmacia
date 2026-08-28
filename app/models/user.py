@@ -117,13 +117,7 @@ class User(Base):
     def display_name(self):
         """Return display name for UI."""
         return self.full_name
-    
-    def is_authenticated(self):
-        return True
-    
-    def is_anonymous(self):
-        return False
-    
+
     # Role hierarchy system
     ROLE_HIERARCHY = {
         "user": 0,           # Usuario normal

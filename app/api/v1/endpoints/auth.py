@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.schemas.auth import (
@@ -10,18 +10,22 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     ResendVerificationRequest,
     AuthResponse,
+    ChangePasswordRequest,
 )
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 from app.core.dependencies import get_current_active_user, get_current_user
 from app.models.user import User
 from app.config.logging_config import get_logger, log_error
+from app.core.rate_limit import limiter
 
 router = APIRouter()
 logger = get_logger("auth")
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 async def register_user(
+    request: Request,
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
 ):
@@ -58,7 +62,9 @@ async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
@@ -125,13 +131,24 @@ async def get_email_verification(
     db: Session = Depends(get_db)
 ):
     """
-    Obtener email de verificación.
+    Endpoint intencionalmente opaco: la respuesta es idéntica exista o no el
+    usuario, para no permitir enumeración. El contenido útil debe obtenerse
+    únicamente por canales autenticados.
     """
-    logger.info("Solicitud de verificación por email recibida", extra={"email": email})
-    return await AuthService.get_email_verification(db, email) 
+    # Log sin PII. Misma latencia, mismo mensaje.
+    logger.info("Solicitud de verificación por email recibida", extra={"email_hash": hash(email)})
+    return AuthResponse(
+        message=(
+            "Si las credenciales son correctas pero no tienes cuenta, "
+            "recibirás un email de activación"
+        ),
+        success=True,
+    )
 
 @router.post("/forgot-password", response_model=AuthResponse)
+@limiter.limit("3/hour")
 async def forgot_password(
+    request: Request,
     forgot_data: ForgotPasswordRequest,
     db: Session = Depends(get_db)
 ):
@@ -154,8 +171,7 @@ async def reset_password(
 
 @router.post("/change-password", response_model=AuthResponse)
 async def change_password(
-    current_password: str,
-    new_password: str,
+    payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -163,10 +179,10 @@ async def change_password(
     Cambiar contraseña del usuario autenticado.
     """
     return await AuthService.change_password(
-        db, 
-        current_user.id, 
-        current_password, 
-        new_password
+        db,
+        current_user.id,
+        payload.current_password,
+        payload.new_password,
     )
 
 @router.post("/logout", response_model=AuthResponse)

@@ -1,46 +1,10 @@
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.types import TypeDecorator, JSON
 from app.config.database import Base
+from app.models.types import ArrayType
 import uuid
-import json
 import enum
 from app.utils.timezone import get_ve_now
-
-# Custom array type for SQLite compatibility
-class ArrayType(TypeDecorator):
-    """Custom type that stores arrays as JSON in SQLite and as ARRAY in PostgreSQL"""
-
-    impl = JSON
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
-            return dialect.type_descriptor(ARRAY(String))
-        else:
-            return dialect.type_descriptor(JSON())
-
-    def process_bind_param(self, value, dialect):
-        if dialect.name == 'postgresql':
-            return value
-        else:
-            if value is None:
-                return None
-            return json.dumps(value) if isinstance(value, list) else value
-
-    def process_result_value(self, value, dialect):
-        if dialect.name == 'postgresql':
-            return value
-        else:
-            if value is None:
-                return None
-            if isinstance(value, str):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    return []
-            return value if isinstance(value, list) else []
 
 class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"

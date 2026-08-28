@@ -93,4 +93,21 @@ class ResendVerificationRequest(BaseModel):
 
 class AuthResponse(BaseModel):
     message: str
-    success: bool = True 
+    success: bool = True
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+    @field_validator('new_password')
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('La contraseña debe tener al menos 8 caracteres')
+        if not any(c.isupper() for c in v):
+            raise ValueError('La contraseña debe tener al menos una mayúscula')
+        if not any(c.islower() for c in v):
+            raise ValueError('La contraseña debe tener al menos una minúscula')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('La contraseña debe tener al menos un número')
+        return v

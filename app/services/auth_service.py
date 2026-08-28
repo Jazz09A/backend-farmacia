@@ -125,18 +125,23 @@ class AuthService:
 
     @staticmethod
     async def authenticate_user(db: Session, login_data: LoginRequest) -> Token:
-        """Authenticate user and return tokens."""
+        """Authenticate user and return tokens.
+
+        Anti-enumeration: this method always returns a generic
+        ``InvalidCredentialsException`` regardless of whether the email
+        exists locally, exists only in DEMOA, or does not exist at all.
+        """
         auth_logger = get_logger("auth")
         error_logger = get_logger("errors")
         auth_logger.info(
             f"Authentication attempt for email: {login_data.email}",
             extra={
-                'email': login_data.email, 
-                'user_email': login_data.email, 
+                'email': login_data.email,
+                'user_email': login_data.email,
                 'event': 'login_attempt'
             }
         )
-        
+
         try:
             user = db.query(User).filter(User.email == login_data.email).first()
             auth_logger.debug(
@@ -174,51 +179,50 @@ class AuthService:
                             f"Auto-provision from DEMOA failed for {login_data.email}: {_e}",
                             extra={'email': login_data.email, 'event': 'auto_provision_demoa_failed'}
                         )
-                    # En cualquier caso, indicar al usuario que revise su email
-                    raise InvalidCredentialsException(
-                        "No tenías cuenta en el sistema. La hemos creado y enviamos una contraseña temporal a tu correo. Intenta nuevamente tras revisar tu email."
-                    )
+                # Sea DEMOA existente o no, devolver el mismo mensaje genérico
+                # sin filtrar existencia. El branch DEMOA-real enviará el email
+                # de activación como efecto secundario silencioso.
                 auth_logger.warning(
                     f"Login failed - user not found: {login_data.email}",
                     extra={
-                        'email': login_data.email, 
-                        'user_email': login_data.email, 
-                        'reason': 'user_not_found', 
+                        'email': login_data.email,
+                        'user_email': login_data.email,
+                        'reason': 'user_not_found',
                         'event': 'login_failed'
                     }
                 )
                 raise InvalidCredentialsException()
-            
+
             if not verify_password(login_data.password, user.hashed_password):
                 auth_logger.warning(
                     f"Login failed - invalid password: {login_data.email}",
                     extra={
-                        'email': login_data.email, 
-                        'user_email': login_data.email, 
-                        'user_id': user.id, 
-                        'reason': 'invalid_password', 
+                        'email': login_data.email,
+                        'user_email': login_data.email,
+                        'user_id': user.id,
+                        'reason': 'invalid_password',
                         'event': 'login_failed'
                     }
                 )
                 raise InvalidCredentialsException()
-            
+
             if not user.is_active:
                 auth_logger.warning(
                     f"Login failed - account disabled: {login_data.email}",
                     extra={
-                        'email': login_data.email, 
-                        'user_email': login_data.email, 
-                        'user_id': user.id, 
-                        'reason': 'account_disabled', 
+                        'email': login_data.email,
+                        'user_email': login_data.email,
+                        'user_id': user.id,
+                        'reason': 'account_disabled',
                         'event': 'login_failed'
                     }
                 )
                 raise InvalidCredentialsException("Cuenta desactivada")
-            
+
             # TODO: Verify email if not verified
             user.last_login = get_ve_now()
             db.commit()
-            
+
             auth_logger.info(
                 f"User successfully authenticated: {user.email}",
                 extra={
@@ -230,11 +234,11 @@ class AuthService:
                     'last_login': user.last_login.isoformat()
                 }
             )
-            
+
             # Create tokens
             access_token = create_access_token(data={"sub": user.email})
             refresh_token = create_refresh_token(data={"sub": user.email})
-            
+
             return Token(
                 access_token=access_token,
                 refresh_token=refresh_token,
@@ -242,7 +246,7 @@ class AuthService:
                 expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
                 role=user.role
             )
-            
+
         except InvalidCredentialsException:
             # Re-raise InvalidCredentialsException as is
             raise

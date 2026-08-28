@@ -1,79 +1,104 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
 from typing import Optional
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Settings(BaseSettings):
-    # Base
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
     PROJECT_NAME: str = "FarmaPlus API"
     VERSION: str = "1.0.0"
-    DEBUG: bool = os.getenv("DEBUG", True)
-    
-    # API URL
-    API_URL: str = os.getenv("API_URL", "http://localhost:8000")
-    
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./db.sqlite3")
-    
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production")
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
-    REFRESH_TOKEN_EXPIRE_DAYS: int = os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7)
-    
-    # Pagination Settings
-    DEFAULT_PAGE_SIZE: int = os.getenv("DEFAULT_PAGE_SIZE", 20)
-    MAX_PAGE_SIZE: int = os.getenv("MAX_PAGE_SIZE", 100)
-    MIN_PAGE_SIZE: int = os.getenv("MIN_PAGE_SIZE", 1)
-    
-    # CORS
-    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
-    
-    # Email Settings
-    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT: Optional[int] = os.getenv("SMTP_PORT", 587)
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER", "programatevzla@gmail.com")
-    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD", "crpg cagx zyyg hgys")
-    SMTP_FROM: Optional[str] = os.getenv("SMTP_FROM", "programatevzla@gmail.com")
-    SMTP_FROM_NAME: Optional[str] = os.getenv("SMTP_FROM_NAME", "Grupo Drozainka")
-    
-    # Frontend URL
-    FRONTEND_URL: Optional[str] = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    DEBUG: bool = True
 
-    
-    # SourceSystem Database Configuration
-    SOURCE_SYSTEM_SERVER: Optional[str] = os.getenv("SOURCE_SYSTEM_SERVER", "localhost")
-    SOURCE_SYSTEM_PORT: Optional[int] = int(os.getenv("SOURCE_SYSTEM_PORT", "49571"))
-    SOURCE_SYSTEM_DATABASE: Optional[str] = os.getenv("SOURCE_SYSTEM_DATABASE", "GDROZAINK_A")
-    SOURCE_SYSTEM_USER: Optional[str] = os.getenv("SOURCE_SYSTEM_USER", None)
-    SOURCE_SYSTEM_PASSWORD: Optional[str] = os.getenv("SOURCE_SYSTEM_PASSWORD", None)
-    
-    # SourceSystem Connection Pool Configuration
-    SOURCE_POOL_SIZE: int = int(os.getenv("SOURCE_POOL_SIZE", "15"))
-    SOURCE_MAX_OVERFLOW: int = int(os.getenv("SOURCE_MAX_OVERFLOW", "10"))
-    SOURCE_POOL_TIMEOUT: int = int(os.getenv("SOURCE_POOL_TIMEOUT", "30"))
-    SOURCE_POOL_RECYCLE: int = int(os.getenv("SOURCE_POOL_RECYCLE", "300"))
-    
-    # Cache TTL Configuration (seconds)
-    CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "True").lower() == "true"
-    CACHE_CATALOG_TTL: int = int(os.getenv("CACHE_CATALOG_TTL", "1800"))  # 30 minutos
-    CACHE_DETAIL_TTL: int = int(os.getenv("CACHE_DETAIL_TTL", "3600"))  # 60 minutos
-    CACHE_STATIC_TTL: int = int(os.getenv("CACHE_STATIC_TTL", "7200"))  # 2 horas
-    CACHE_DEFAULT_TTL: int = int(os.getenv("CACHE_DEFAULT_TTL", "1800"))  # 30 minutos por defecto
-    
-    # Cloudinary Configuration
-    CLOUDINARY_CLOUD_NAME: Optional[str] = os.getenv("CLOUDINARY_CLOUD_NAME", None)
-    CLOUDINARY_API_KEY: Optional[str] = os.getenv("CLOUDINARY_API_KEY", None)
-    CLOUDINARY_API_SECRET: Optional[str] = os.getenv("CLOUDINARY_API_SECRET", None)
+    API_URL: str = "http://localhost:8000"
 
-    # Feature flags (demo / temporal)
-    # Permite habilitar filtros temporales sin comprometer el contrato final del API
-    ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER: bool = (
-        os.getenv("ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER", "False").lower() == "true"
+    DATABASE_URL: str = Field(
+        default="sqlite:///./db.sqlite3",
+        description="SQLAlchemy database URL.",
     )
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+
+    SECRET_KEY: str = Field(
+        ...,
+        min_length=32,
+        description="JWT signing secret. Required, min 32 chars.",
+    )
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(..., gt=0)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, gt=0)
+
+    DEFAULT_PAGE_SIZE: int = Field(default=20, gt=0)
+    MAX_PAGE_SIZE: int = Field(default=100, gt=0)
+    MIN_PAGE_SIZE: int = Field(default=1, gt=0)
+
+    ALLOWED_ORIGINS: str = "http://localhost:5173"
+
+    SMTP_HOST: Optional[str] = "smtp.gmail.com"
+    SMTP_PORT: int = Field(default=587, gt=0)
+    SMTP_USER: Optional[str] = "programatevzla@gmail.com"
+    SMTP_PASSWORD: str = Field(
+        ...,
+        min_length=1,
+        description="SMTP password. Required (no default).",
+    )
+    SMTP_FROM: Optional[str] = "programatevzla@gmail.com"
+    SMTP_FROM_NAME: Optional[str] = "Grupo Drozainka"
+
+    FRONTEND_URL: Optional[str] = "http://localhost:5173"
+
+    SOURCE_SYSTEM_SERVER: Optional[str] = "localhost"
+    SOURCE_SYSTEM_PORT: int = Field(default=49571, gt=0)
+    SOURCE_SYSTEM_DATABASE: Optional[str] = "GDROZAINK_A"
+    SOURCE_SYSTEM_USER: Optional[str] = None
+    SOURCE_SYSTEM_PASSWORD: Optional[str] = None
+
+    SOURCE_POOL_SIZE: int = Field(default=15, gt=0)
+    SOURCE_MAX_OVERFLOW: int = Field(default=10, ge=0)
+    SOURCE_POOL_TIMEOUT: int = Field(default=30, gt=0)
+    SOURCE_POOL_RECYCLE: int = Field(default=300, gt=0)
+
+    CACHE_ENABLED: bool = True
+    CACHE_CATALOG_TTL: int = 1800
+    CACHE_DETAIL_TTL: int = 3600
+    CACHE_STATIC_TTL: int = 7200
+    CACHE_DEFAULT_TTL: int = 1800
+
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
+
+    ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER: bool = False
+
+    @field_validator("ACCESS_TOKEN_EXPIRE_MINUTES")
+    @classmethod
+    def _validate_token_expire_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be > 0")
+        return v
+
+    @field_validator("SMTP_PORT")
+    @classmethod
+    def _validate_smtp_port(cls, v: int) -> int:
+        if v <= 0 or v > 65535:
+            raise ValueError("SMTP_PORT must be a valid TCP port (1-65535)")
+        return v
+
+    @field_validator("ALLOWED_ORIGINS")
+    @classmethod
+    def _strip_origins(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+
+settings = Settings()

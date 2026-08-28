@@ -5,11 +5,14 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import time
 import os
+import re
 from contextlib import asynccontextmanager
 
 from app.config.settings import Settings
 from app.core.exceptions import FarmaException
-# from app.core.middleware import LoggingMiddleware, SecurityMiddleware
+from app.core.rate_limit import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from app.config.logging_config import (
     get_logger,
     log_request_info,
@@ -19,6 +22,55 @@ from app.config.logging_config import (
 
 settings = Settings()
 logger = get_logger(__name__)
+
+# Patterns used to scrub secrets from log payloads. Keep this list
+# conservative: only redact values, never keys, and only when the key
+# strongly suggests a credential. The goal is to avoid leaking SMTP
+# passwords, DB passwords or token tails via unhandled exceptions.
+_SECRET_QUERY_KEYS = {
+    "password",
+    "pass",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "smtp_password",
+    "source_system_password",
+    "api_key",
+    "apikey",
+}
+_LONG_ALNUM = re.compile(r"[A-Za-z0-9_\-]{24,}")
+
+
+def _redact_query_params(params: dict) -> dict:
+    redacted = {}
+    for key, value in params.items():
+        if key.lower() in _SECRET_QUERY_KEYS:
+            redacted[key] = "[REDACTED]"
+        elif isinstance(value, str) and _LONG_ALNUM.fullmatch(value):
+            redacted[key] = "[REDACTED]"
+        else:
+            redacted[key] = value
+    return redacted
+
+
+def _redact_message(message: str) -> str:
+    """Best-effort scrub of credential-like substrings in error messages."""
+    if not message:
+        return message
+    for pattern in (
+        r"(?i)password\s*=\s*[^;,\s]+",
+        r"(?i)user\s*=\s*[^;,\s]+",
+        r"(?i)uid\s*=\s*[^;,\s]+",
+        r"(?i)pwd\s*=\s*[^;,\s]+",
+        r"(?i)server\s*=\s*[^;,\s]+",
+    ):
+        message = re.sub(pattern, lambda m: m.group(0).split("=", 1)[0] + "=[REDACTED]", message)
+    message = _LONG_ALNUM.sub("[REDACTED]", message)
+    return message
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,76 +103,78 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-origins = [
-    "https://farmacia-frontend-ten.vercel.app",
-    "http://localhost:3000",
-    "http://localhost:5173",
-]
+# Registrar limiter para slowapi (S2-T6)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Demasiadas solicitudes. Por favor intente de nuevo más tarde.",
+            "success": False,
+        },
+    )
+
+origins = settings.cors_origins_list
+
+# Only enable credentials when an origin is explicitly allowed. With a single
+# origin in the list the browser permits cookies; with `["*"]` the spec forbids
+# it, so we set the value to False unless at least one explicit origin is set.
+allow_credentials = bool(origins) and "*" not in origins
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Debug middleware para capturar todos los requests
-@app.middleware("http")
-async def debug_middleware(request: Request, call_next):
-    start_time = time.perf_counter()
-    log_request_info(logger, request)
+# Debug middleware - only active when DEBUG is True. Never log Authorization
+# header tails in production. Tokens must never appear in logs.
+if settings.DEBUG:
+    @app.middleware("http")
+    async def debug_middleware(request: Request, call_next):
+        start_time = time.perf_counter()
+        log_request_info(logger, request)
 
-    auth_header = request.headers.get('authorization')
-    x_source_system = request.headers.get('x-source-system')
-    content_type = request.headers.get('content-type')
+        content_type = request.headers.get('content-type')
+        x_source_system = request.headers.get('x-source-system')
 
-    logger.debug(
-        "Detalles adicionales del request",
-        extra={
-            "authorization_tail": auth_header[-10:] if auth_header and len(auth_header) > 10 else auth_header,
-            "authorization_present": bool(auth_header),
-            "x_source_system": x_source_system,
-            "content_type": content_type,
-        },
-    )
+        logger.debug(
+            "Detalles adicionales del request",
+            extra={
+                "authorization_present": bool(request.headers.get('authorization')),
+                "x_source_system": x_source_system,
+                "content_type": content_type,
+            },
+        )
 
-    response = await call_next(request)
+        response = await call_next(request)
 
-    duration_ms = (time.perf_counter() - start_time) * 1000
-    log_response_info(logger, request, response, duration_ms=duration_ms)
-    logger.debug(
-        "Detalles de respuesta",
-        extra={
-            "status_code": response.status_code,
-            "has_body": hasattr(response, 'body'),
-            "duration_ms": f"{duration_ms:.2f}",
-        },
-    )
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        log_response_info(logger, request, response, duration_ms=duration_ms)
+        logger.debug(
+            "Detalles de respuesta",
+            extra={
+                "status_code": response.status_code,
+                "has_body": hasattr(response, 'body'),
+                "duration_ms": f"{duration_ms:.2f}",
+            },
+        )
 
-    return response
-
-# Add other middlewares
-# app.add_middleware(LoggingMiddleware)
-# app.add_middleware(SecurityMiddleware)
-
-# Request timing middleware - temporarily disabled
-# @app.middleware("http")
-# async def add_process_time_header(request: Request, call_next):
-#     start_time = time.time()
-#     response = await call_next(request)
-#     process_time = time.time() - start_time
-#     response.headers["X-Process-Time"] = str(process_time)
-#     print("TIEMPO DE PROCESO: " + str(process_time))
-#     return response
-
-# @app.middleware("http")
-# async def log_options_requests(request: Request, call_next):
-#     if request.method == "OPTIONS":
-#         print(f"OPTIONS request to: {request.url}")
-#         print(f"Headers: {dict(request.headers)}")
-#     response = await call_next(request)
-#     return response
+        return response
+else:
+    @app.middleware("http")
+    async def request_timing_middleware(request: Request, call_next):
+        start_time = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        response.headers["X-Process-Time"] = f"{duration_ms:.2f}"
+        return response
 
 # Global exception handlers
 @app.exception_handler(FarmaException)
@@ -164,10 +218,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "detail": exc.detail,
             "path": request.url.path,
             "method": request.method,
-            "query_params": dict(request.query_params),
-            "authorization_tail": request.headers.get('authorization', '')[-10:]
-            if request.headers.get('authorization')
-            else None,
+            "query_params": _redact_query_params(dict(request.query_params)),
+            "authorization_present": bool(request.headers.get('authorization')),
             "x_source_system": request.headers.get('x-source-system'),
             "content_type": request.headers.get('content-type'),
         },
@@ -180,23 +232,41 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
+    redacted_message = _redact_message(str(exc))
+
     log_error(
         logger,
         exc,
         context={
             "path": request.url.path,
             "method": request.method,
-            "query_params": dict(request.query_params),
+            "query_params": _redact_query_params(dict(request.query_params)),
+            "exception_type": exc.__class__.__name__,
+            "redacted_message": redacted_message,
         },
     )
+
+    detail = "Error interno del servidor"
+    if _is_database_exception(exc):
+        detail = "Error al acceder a la base de datos"
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "detail": "Error interno del servidor",
+            "detail": detail,
             "success": False
         }
     )
+
+
+def _is_database_exception(exc: BaseException) -> bool:
+    module = getattr(exc.__class__, "__module__", "") or ""
+    name = exc.__class__.__name__
+    if module.startswith("pymssql") or module.startswith("_mssql"):
+        return True
+    if name in {"OperationalError", "DatabaseError", "InterfaceError"}:
+        return True
+    return False
 
 # Include routers
 from app.api.v1.router import api_router
