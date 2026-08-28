@@ -489,7 +489,10 @@ class SourceSystemService:
             query += " ORDER BY cli_des"
 
             if limit:
-                query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
+                # Parametrizar el LIMIT/OFFSET (no confiar en f-strings para
+                # valores numéricos incluso si vienen tipados).
+                query += " OFFSET %s ROWS FETCH NEXT %s ROWS ONLY"
+                params.extend([offset, limit])
 
             if params:
                 cursor.execute(query, tuple(params))
@@ -1532,16 +1535,21 @@ class SourceSystemService:
             # Timeout de 5 segundos para evitar bloqueos largos
             cursor.execute("SET LOCK_TIMEOUT 5000")
             
-            # Incrementar contador de uso
-            update_query = f"""
-                UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK)
-                SET {field_name} = CAST(
-                    ISNULL(TRY_CAST({field_name} AS INT), 0) + %s AS VARCHAR(60)
-                ),
-                    fe_us_mo = GETDATE()
-                WHERE co_desc = %s
-            """
-            
+            # Incrementar contador de uso.
+            # `field_name` está validado contra una whitelist cerrada
+            # (`valid_fields` arriba), por lo que es seguro interpolarlo
+            # en el query. De todos modos, se construye con `", ".join`
+            # para que la intención sea explícita y resistente a f-strings
+            # accidentales con datos no validados.
+            field_name = field_name.strip()
+            update_query = (
+                "UPDATE dbo.saDescArticulo WITH (UPDLOCK, ROWLOCK) "
+                f"SET {field_name} = CAST("
+                f"ISNULL(TRY_CAST({field_name} AS INT), 0) + %s AS VARCHAR(60)"
+                "), fe_us_mo = GETDATE() "
+                "WHERE co_desc = %s"
+            )
+
             cursor.execute(update_query, (quantity_used, co_desc.strip()))
             rows_affected = cursor.rowcount
             

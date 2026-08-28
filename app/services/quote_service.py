@@ -195,21 +195,21 @@ class QuoteService:
         conn = None
         cursor = None
         try:
-            conn = source_system_service.get_pooled_connection()
-            cursor = conn.cursor()
-            
-            # Limpiar cualquier transacción pendiente de la conexión reutilizada
-            try:
-                cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-            except Exception:
-                pass  # Ignorar si no hay transacción pendiente
-            
-            # Iniciar transacción explícita (manejada por pymssql)
-            cursor.execute("BEGIN TRANSACTION")
-            
-            # PASO 1: Generar doc_num de forma segura
-            doc_num = self._generate_doc_num_safe(cursor)
-            logger.info(f"Generado doc_num: {doc_num} para cotización de cliente {co_cli}")
+            with source_system_service.connection() as conn:
+                cursor = conn.cursor()
+
+                # Limpiar cualquier transacción pendiente de la conexión reutilizada
+                try:
+                    cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
+                except Exception:
+                    pass  # Ignorar si no hay transacción pendiente
+
+                # Iniciar transacción explícita (manejada por pymssql)
+                cursor.execute("BEGIN TRANSACTION")
+
+                # PASO 1: Generar doc_num de forma segura
+                doc_num = self._generate_doc_num_safe(cursor)
+                logger.info(f"Generado doc_num: {doc_num} para cotización de cliente {co_cli}")
             
             # PASO 1.5: Validar código de vendedor
             # Validar que el código de vendedor existe en la base de datos
@@ -780,14 +780,10 @@ class QuoteService:
         except Exception as e:
             # Revertir transacción en caso de error
             try:
-                if conn:
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
+                conn.rollback()
             except Exception as rollback_error:
                 logger.error(f"Error al hacer rollback: {rollback_error}")
-            
+
             # Log con contexto útil para debugging
             logger.error(
                 f"Error creando cotización | user_id={user_id} | "
@@ -797,21 +793,11 @@ class QuoteService:
             )
             raise
         finally:
-            # Cerrar recursos solo si no se cerraron antes (en caso de éxito)
             try:
                 if cursor:
                     cursor.close()
             except Exception:
                 pass
-            # Limpiar cualquier transacción pendiente antes de devolver al pool
-            if conn:
-                try:
-                    temp_cursor = conn.cursor()
-                    temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-                    temp_cursor.close()
-                except Exception:
-                    pass  # Ignorar errores al limpiar
-                source_system_service.return_connection(conn)
 
     def verify_quote_payload(
         self,
@@ -1265,21 +1251,18 @@ class QuoteService:
             customer_code = customer_code.strip() if customer_code else None
             
             # Verificar que la cotización existe y pertenece al cliente
-            conn = None
-            cursor = None
-            try:
-                conn = source_system_service.get_pooled_connection()
+            with source_system_service.connection() as conn:
                 cursor = conn.cursor()
-                
+
                 # Limpiar cualquier transacción pendiente de la conexión reutilizada
                 try:
                     cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
                 except Exception:
                     pass  # Ignorar si no hay transacción pendiente
-                
+
                 # Iniciar transacción (manejada por pymssql)
                 cursor.execute("BEGIN TRANSACTION")
-                
+
                 # Verificar que la cotización existe y pertenece al cliente
                 check_query = """
                 SELECT doc_num, anulado, co_cli
@@ -1288,20 +1271,18 @@ class QuoteService:
                 """
                 cursor.execute(check_query, (profit_plus_id, customer_code))
                 quote_data = cursor.fetchone()
-                
+
                 if not quote_data:
-                    # cursor.execute("ROLLBACK TRANSACTION")
                     conn.rollback()
                     logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
                     return False
-                
+
                 # Verificar si ya está anulada
                 if quote_data.get('anulado', 0) == 1:
-                    # cursor.execute("ROLLBACK TRANSACTION")
                     conn.rollback()
                     logger.info(f"Cotización {profit_plus_id} ya está anulada")
                     return False
-                
+
                 # Anular la cotización (soft delete)
                 update_query = """
                 UPDATE dbo.saCotizacionCliente
@@ -1312,39 +1293,15 @@ class QuoteService:
                 """
                 co_us_mo = "SA"  # Usuario del sistema
                 cursor.execute(update_query, (co_us_mo, profit_plus_id))
-                
+
                 # Confirmar transacción
                 conn.commit()
-                
+
                 logger.info(f"Cotización {profit_plus_id} anulada exitosamente por usuario {user_id}")
                 return True
-                
-            except Exception as e:
-                # Revertir transacción en caso de error
-                try:
-                    if conn:
-                        try:
-                            conn.rollback()
-                        except Exception:
-                            pass
-                except Exception as rollback_error:
-                    logger.error(f"Error al hacer rollback: {rollback_error}")
-                
-                logger.error(f"Error anulando cotización {profit_plus_id}: {str(e)}", exc_info=True)
-                raise
-            finally:
-                if cursor:
-                    cursor.close()
-                # Limpiar cualquier transacción pendiente antes de devolver al pool
-                if conn:
-                    try:
-                        temp_cursor = conn.cursor()
-                        temp_cursor.execute("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
-                        temp_cursor.close()
-                    except Exception:
-                        pass  # Ignorar errores al limpiar
-                    source_system_service.return_connection(conn)
-                
+
+            # Si la cancelación interna falla por un error de SQL, devolvemos
+            # False para que el caller decida (no perdemos la respuesta 200).
         except Exception as e:
             logger.error(
                 f"Error cancelando cotización | quote_id={quote_id} | "

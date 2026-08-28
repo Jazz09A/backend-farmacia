@@ -127,21 +127,26 @@ class FavoritesService:
     
     @staticmethod
     def get_favorites_with_products(
-        db: Session, 
-        user_id: str, 
-        skip: int = 0, 
+        db: Session,
+        user_id: str,
+        skip: int = 0,
         limit: int = 20
     ) -> tuple[List[UserFavorite], int]:
         """Obtener favoritos con información completa del producto"""
-        
-        query = db.query(UserFavorite).filter(
+
+        # selectinload evita N+1 al acceder a `favorite.product` en el response.
+        from sqlalchemy.orm import selectinload
+
+        query = db.query(UserFavorite).options(
+            selectinload(UserFavorite.product)
+        ).filter(
             UserFavorite.user_id == user_id
         ).join(Product).filter(
             Product.in_stock == True  # Solo productos disponibles
         )
-        
+
         total_count = query.count()
-        
+
         favorites = query.offset(skip).limit(limit).all()
-        
-        return favorites, total_count 
+
+        return favorites, total_count

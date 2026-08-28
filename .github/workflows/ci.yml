@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, Security, Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Test environment variables (S0-T2 requires non-empty secrets;
+      # these are placeholders safe for CI, NOT real secrets).
+      TESTING: "1"
+      DATABASE_URL: "sqlite:///:memory:"
+      SECRET_KEY: "ci-test-secret-key-at-least-32-chars-long-XXXX"
+      SMTP_PASSWORD: "ci-test-smtp-password"
+      ALLOWED_ORIGINS: "http://localhost:5173"
+      CACHE_ENABLED: "False"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Ruff lint
+        run: uv run ruff check app/ main.py
+
+      - name: Secret scan (fail on SMTP_PASSWORD literal)
+        run: |
+          if grep -rEn 'crpg cagx|change-me-in-production' app/ main.py; then
+            echo "Hardcoded secret detected in source"
+            exit 1
+          fi
+
+      - name: Pytest
+        run: uv run pytest app/tests/ -q --tb=short
