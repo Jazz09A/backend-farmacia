@@ -1,13 +1,16 @@
 """Implementación del repositorio de artículos (saArticulo, saArtPrecio, saStockAlmacen, saArtImagen)."""
+from __future__ import annotations
 from decimal import Decimal
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from app.repositories.protocols import ArticleRepositoryProtocol, _CursorProtocol
-from app.services.source_system_service import SourceSystemService
+
+if TYPE_CHECKING:
+    from app.services.source_system_service import SourceSystemService
 
 
 class ArticleRepository(ArticleRepositoryProtocol):
-    """Repositorio para operaciones sobre artículos en Profit Plus."""
+    """Repositorio para operaciones sobre artículos en Profit plus."""
 
     def __init__(self, source_service: SourceSystemService):
         self._source = source_service
@@ -24,46 +27,56 @@ class ArticleRepository(ArticleRepositoryProtocol):
         """Obtiene detalle completo: header, precios, stock, imágenes."""
         conn, cursor = self._cursor()
         try:
-            # Header del artículo
             header_query = """
-                SELECT co_art, art_des, ref, modelo, co_lin, co_subl, co_cat, tipo,
-                       fecha_reg, anulado, co_und, co_imp
-                FROM saArticulo WITH (NOLOCK)
-                WHERE co_art = %s AND anulado = 0
+                SELECT
+                    a.co_art,
+                    a.art_des,
+                    a.ref,
+                    a.co_lin,
+                    a.co_subl,
+                    a.co_cat,
+                    cat.cat_des AS category_name,
+                    a.tipo,
+                    a.fecha_reg,
+                    a.modelo
+                FROM dbo.saArticulo a WITH (NOLOCK)
+                LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+                WHERE a.co_art = %s AND a.anulado = 0
             """
             cursor.execute(header_query, (article_code,))
             header = cursor.fetchone()
             if not header:
                 return None
 
-            # Precios
-            prices_query = """
-                SELECT co_precio, co_mone, monto, desde
-                FROM saArtPrecio WITH (NOLOCK)
-                WHERE co_art = %s
-                ORDER BY co_precio
+            price_query = """
+                SELECT
+                    RTRIM(ap.co_precio) AS price_code,
+                    tp.des_precio AS price_name,
+                    ap.monto AS amount,
+                    ap.co_mone AS currency,
+                    ap.desde AS desde
+                FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                LEFT JOIN dbo.saTipoPrecio tp WITH (NOLOCK) ON ap.co_precio = tp.co_precio
+                WHERE ap.co_art = %s
+                ORDER BY ap.desde DESC
             """
-            cursor.execute(prices_query, (article_code,))
-            prices = cursor.fetchall()
+            cursor.execute(price_query, (article_code,))
+            prices = cursor.fetchall() or []
 
-            # Stock por almacén
             stock_query = """
-                SELECT co_alma, stock
-                FROM saStockAlmacen WITH (NOLOCK)
-                WHERE co_art = %s AND tipo = 'ACT'
+                SELECT
+                    RTRIM(sa.co_alma) AS warehouse_code,
+                    al.des_alma AS warehouse_name,
+                    sa.stock AS quantity
+                FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                LEFT JOIN dbo.saAlmacen al WITH (NOLOCK) ON sa.co_alma = al.co_alma
+                WHERE sa.co_art = %s
+                    AND sa.tipo = 'ACT'
             """
             cursor.execute(stock_query, (article_code,))
-            stock = cursor.fetchall()
+            stock = cursor.fetchall() or []
 
-            # Imágenes
-            images_query = """
-                SELECT rowguid, tip, imagen_des, fe_us_in
-                FROM saArtImagen WITH (NOLOCK)
-                WHERE co_art = %s
-                ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
-            """
-            cursor.execute(images_query, (article_code,))
-            images = cursor.fetchall()
+            images = self.get_images(article_code, connection=(conn, cursor))
 
             return {
                 "header": header,
@@ -81,13 +94,13 @@ class ArticleRepository(ArticleRepositoryProtocol):
         quantity: Decimal = Decimal("1.00"),
         existing_cursor: _CursorProtocol | None = None,
     ) -> dict[str, Any] | None:
-        """Obtiene descuento aplicable para artículo y cantidad."""
-        # Reutiliza la lógica existente en source_system_service
-        # que ya maneja la lógica compleja de descuentos por volumen
-        from app.services.source_system_service import source_system_service
-        # Nota: esta implementación delega al servicio existente
-        # En una refactorización completa, moveríamos toda la lógica aquí
-        return source_system_service.get_article_discount(
+        """Obtiene descuento aplicable para un artículo y cantidad.
+
+        Delega a DiscountRepository para evitar duplicación.
+        """
+        from app.repositories import DiscountRepository
+        discount_repo = DiscountRepository(self._source)
+        return discount_repo.get_discount_for_article(
             article_code=article_code,
             quantity=quantity,
             existing_cursor=existing_cursor,
@@ -107,22 +120,117 @@ class ArticleRepository(ArticleRepositoryProtocol):
         warehouse_code: str = "001",
         in_stock_only: bool = False,
     ) -> dict[str, Any]:
-        """Busca artículos con filtros - delega al servicio existente."""
+        """Busca artículos con filtros y paginación."""
         offset = (page - 1) * limit
-        # Delegar al método existente que ya tiene la lógica compleja con OUTER APPLY
-        return self._source.get_articles_catalog(
-            page=page,
-            limit=limit,
-            search=search,
-            line_code=line_code,
-            category_code=category_code,
-            min_price=min_price,
-            max_price=max_price,
-            sort_by=sort_by,
-            price_code=price_code,
-            warehouse_code=warehouse_code,
-            in_stock_only=in_stock_only,
-        )
+        filters = ["a.anulado = 0"]
+        params: list[Any] = [warehouse_code, price_code]
+
+        if search:
+            filters.append("(a.art_des LIKE %s OR a.co_art LIKE %s)")
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param])
+
+        if line_code:
+            filters.append("RTRIM(a.co_lin) = %s")
+            params.append(line_code)
+
+        if category_code:
+            filters.append("RTRIM(a.co_cat) = %s")
+            params.append(category_code)
+
+        if min_price is not None:
+            filters.append("(ap.price IS NOT NULL AND ap.price >= %s)")
+            params.append(Decimal(min_price))
+
+        if max_price is not None:
+            filters.append("(ap.price IS NOT NULL AND ap.price <= %s)")
+            params.append(Decimal(max_price))
+
+        if in_stock_only:
+            filters.append("(ISNULL(stock_data.stock, 0) > 0)")
+
+        where_clause = " AND ".join(filters)
+
+        sort_mapping = {
+            "art_des": "a.art_des ASC",
+            "art_des_desc": "a.art_des DESC",
+            "price_asc": "ap.price ASC",
+            "price_desc": "ap.price DESC",
+            "stock_asc": "stock_data.stock ASC",
+            "stock_desc": "stock_data.stock DESC",
+        }
+        order_by = sort_mapping.get(sort_by, "a.art_des ASC")
+
+        base_query = f"""
+            FROM dbo.saArticulo a WITH (NOLOCK)
+            LEFT JOIN dbo.saCatArticulo cat WITH (NOLOCK) ON RTRIM(a.co_cat) = RTRIM(cat.co_cat)
+            OUTER APPLY (
+                SELECT
+                    RTRIM(sa.co_alma) AS co_alma,
+                    SUM(sa.stock) AS stock
+                FROM dbo.saStockAlmacen sa WITH (NOLOCK)
+                WHERE sa.co_art = a.co_art
+                    AND RTRIM(sa.co_alma) = %s
+                    AND sa.tipo = 'ACT'
+                GROUP BY sa.co_alma
+            ) stock_data
+            OUTER APPLY (
+                SELECT TOP 1
+                    ap.monto AS price,
+                    ap.co_mone AS currency
+                FROM dbo.saArtPrecio ap WITH (NOLOCK)
+                WHERE ap.co_art = a.co_art
+                    AND RTRIM(ap.co_precio) = %s
+                ORDER BY ap.desde DESC
+            ) ap
+            OUTER APPLY (
+                SELECT TOP 1 img.rowguid AS image_guid
+                FROM dbo.saArtImagen img WITH (NOLOCK)
+                WHERE img.co_art = a.co_art
+                ORDER BY CASE WHEN img.tip = 'PRINC' THEN 0 ELSE 1 END, img.fe_us_in DESC
+            ) img
+            WHERE {where_clause}
+        """
+
+        data_query = f"""
+            SELECT DISTINCT
+                a.co_art,
+                a.art_des,
+                a.co_cat AS category_code,
+                cat.cat_des AS category_name,
+                ap.price,
+                ap.currency,
+                stock_data.stock AS stock,
+                stock_data.co_alma AS warehouse_code,
+                img.image_guid
+            {base_query}
+            ORDER BY {order_by}
+            OFFSET %s ROWS FETCH NEXT %s ROWS ONLY
+        """
+
+        count_query = f"""
+            SELECT COUNT(DISTINCT a.co_art) AS total
+            {base_query}
+        """
+
+        conn, cursor = self._cursor()
+        try:
+            cursor.execute(count_query, tuple(params))
+            total_row = cursor.fetchone()
+            total = total_row.get("total", 0) if total_row else 0
+
+            cursor.execute(data_query, tuple(params + [offset, limit]))
+            items = cursor.fetchall()
+
+            return {
+                "items": items or [],
+                "total": total,
+                "page": page,
+                "limit": limit,
+            }
+        finally:
+            cursor.close()
+            self._release(conn)
 
     def get_images(
         self,
@@ -131,25 +239,25 @@ class ArticleRepository(ArticleRepositoryProtocol):
     ) -> list[dict[str, Any]]:
         if connection:
             _, cursor = connection
-            query = """
-                SELECT rowguid, tip, imagen_des, fe_us_in
-                FROM saArtImagen WITH (NOLOCK)
+            cursor.execute("""
+                SELECT
+                    rowguid, imagen_des, tip, co_us_in, fe_us_in
+                FROM dbo.saArtImagen WITH (NOLOCK)
                 WHERE co_art = %s
                 ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
-            """
-            cursor.execute(query, (article_code,))
-            return cursor.fetchall()
+            """, (article_code,))
+            return cursor.fetchall() or []
         else:
             conn, cursor = self._cursor()
             try:
-                query = """
-                    SELECT rowguid, tip, imagen_des, fe_us_in
-                    FROM saArtImagen WITH (NOLOCK)
+                cursor.execute("""
+                    SELECT
+                        rowguid, imagen_des, tip, co_us_in, fe_us_in
+                    FROM dbo.saArtImagen WITH (NOLOCK)
                     WHERE co_art = %s
                     ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
-                """
-                cursor.execute(query, (article_code,))
-                return cursor.fetchall()
+                """, (article_code,))
+                return cursor.fetchall() or []
             finally:
                 cursor.close()
                 self._release(conn)

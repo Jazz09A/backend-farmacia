@@ -1,9 +1,12 @@
 """Implementación del repositorio de cotizaciones (saCotizacionCliente, saCotizacionClienteReng)."""
+from __future__ import annotations
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from app.repositories.protocols import _CursorProtocol
-from app.services.source_system_service import SourceSystemService
+
+if TYPE_CHECKING:
+    from app.services.source_system_service import SourceSystemService
 
 
 class QuoteRepository:
