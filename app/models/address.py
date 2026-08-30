@@ -1,8 +1,11 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class Address(Base):
     __tablename__ = "addresses"

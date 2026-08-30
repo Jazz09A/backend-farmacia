@@ -1,6 +1,9 @@
-from pydantic import BaseModel, EmailStr, field_validator, Field
-from typing import Optional, Literal, List
+from typing import Literal
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
 from app.schemas.user import UserCreate
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -15,7 +18,7 @@ class RegisterRequest(UserCreate):
     # Representantes legales
     representante_legal_cedula: str
     representante_legal_nombre: str
-    representantes_adicionales: Optional[List[str]]
+    representantes_adicionales: list[str] | None
     
     # Referencias comerciales y bancarias
     referencia_comercial_proveedor: str
@@ -25,25 +28,25 @@ class RegisterRequest(UserCreate):
     direccion_establecimiento: str
     
     # Contactos especializados
-    dueno_telefono: Optional[str] = None
-    dueno_email: Optional[str] = None
-    dueno_cumpleanos: Optional[str] = None
+    dueno_telefono: str | None = None
+    dueno_email: str | None = None
+    dueno_cumpleanos: str | None = None
     
-    encargado_compra_telefono: Optional[str] = None
-    encargado_compra_email: Optional[str] = None
-    encargado_compra_cumpleanos: Optional[str] = None
+    encargado_compra_telefono: str | None = None
+    encargado_compra_email: str | None = None
+    encargado_compra_cumpleanos: str | None = None
     
-    encargado_cobranza_telefono: Optional[str] = None
-    encargado_cobranza_email: Optional[str] = None
-    encargado_cobranza_cumpleanos: Optional[str] = None
+    encargado_cobranza_telefono: str | None = None
+    encargado_cobranza_email: str | None = None
+    encargado_cobranza_cumpleanos: str | None = None
     
     # Información adicional
-    redes_sociales: Optional[str] = None
-    pagina_web: Optional[str] = None
-    codigo_sicm: Optional[str] = None
+    redes_sociales: str | None = None
+    pagina_web: str | None = None
+    codigo_sicm: str | None = None
     
     # Fotos del establecimiento
-    fotos_establecimiento: Optional[List[str]] = None   
+    fotos_establecimiento: list[str] | None = None   
 
 class Token(BaseModel):
     access_token: str
@@ -53,8 +56,8 @@ class Token(BaseModel):
     role: str
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
-    user_id: Optional[str] = None
+    email: str | None = None
+    user_id: str | None = None
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str

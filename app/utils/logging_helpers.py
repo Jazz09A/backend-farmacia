@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 from contextvars import ContextVar
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import Request
 from starlette.responses import Response
@@ -27,9 +27,9 @@ from app.config.logging_config import get_logger
 # ContextVar que vive durante todo el ciclo de un request (incluyendo
 # tareas en background lanzadas con asyncio.create_task dentro del mismo
 # request, mientras no se crucen event loops).
-_request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
-_user_id_var: ContextVar[Optional[str]] = ContextVar("user_id", default=None)
-_user_email_var: ContextVar[Optional[str]] = ContextVar("user_email", default=None)
+_request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
+_user_id_var: ContextVar[str | None] = ContextVar("user_id", default=None)
+_user_email_var: ContextVar[str | None] = ContextVar("user_email", default=None)
 
 
 ACCESS_LOGGER_NAME = "access"
@@ -62,9 +62,9 @@ def new_request_id() -> str:
 
 
 def set_request_context(
-    request_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    user_email: Optional[str] = None,
+    request_id: str | None = None,
+    user_id: str | None = None,
+    user_email: str | None = None,
 ) -> str:
     """Inicializa el contexto del request actual. Devuelve el request_id."""
     rid = request_id or new_request_id()
@@ -82,20 +82,20 @@ def clear_request_context() -> None:
     _user_email_var.set(None)
 
 
-def get_current_request_id() -> Optional[str]:
+def get_current_request_id() -> str | None:
     return _request_id_var.get()
 
 
-def get_current_user_id() -> Optional[str]:
+def get_current_user_id() -> str | None:
     return _user_id_var.get()
 
 
-def get_current_user_email() -> Optional[str]:
+def get_current_user_email() -> str | None:
     return _user_email_var.get()
 
 
-def _base_extra(request: Optional[Request] = None) -> Dict[str, Any]:
-    extra: Dict[str, Any] = {
+def _base_extra(request: Request | None = None) -> dict[str, Any]:
+    extra: dict[str, Any] = {
         "request_id": get_current_request_id(),
         "user_id": get_current_user_id(),
         "user_email": get_current_user_email(),
@@ -174,10 +174,10 @@ def redact_message(message: str) -> str:
 
 
 def log_internal_error(
-    request: Optional[Request],
+    request: Request | None,
     exc: BaseException,
     *,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> str:
     """
     Loggea un error interno (5xx) con todos los detalles para debugging,
@@ -190,7 +190,7 @@ def log_internal_error(
     tracking_id = get_current_request_id() or new_request_id()
     logger = get_logger(INTERNAL_ERROR_LOGGER_NAME)
 
-    safe_context: Dict[str, Any] = {"tracking_id": tracking_id}
+    safe_context: dict[str, Any] = {"tracking_id": tracking_id}
     if context:
         for k, v in context.items():
             if isinstance(v, str):
@@ -217,7 +217,6 @@ def log_internal_error(
             "redacted_message": _truncate(redact_message(str(exc)), 500),
             "context": safe_context,
         },
-        exc_info=True,
     )
     return tracking_id
 
@@ -225,9 +224,9 @@ def log_internal_error(
 def log_security_event(
     event: str,
     *,
-    request: Optional[Request] = None,
-    user_email: Optional[str] = None,
-    extra: Optional[Dict[str, Any]] = None,
+    request: Request | None = None,
+    user_email: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """
     Loggea eventos de seguridad (login fallido, rate limit, intento

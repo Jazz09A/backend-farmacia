@@ -1,10 +1,10 @@
-import time
 import hashlib
-import json
-from typing import Any, Optional, Dict
+import time
 from threading import RLock
-from app.config.settings import Settings
+from typing import Any
+
 from app.config.logging_config import get_logger
+from app.config.settings import Settings
 
 settings = Settings()
 
@@ -55,7 +55,7 @@ class CacheService:
             return
         
         self.logger = get_logger("cache")
-        self._cache: Dict[str, CacheEntry] = {}
+        self._cache: dict[str, CacheEntry] = {}
         self._lock = RLock()
         self._enabled = getattr(settings, 'CACHE_ENABLED', True)
         
@@ -111,7 +111,7 @@ class CacheService:
         
         return key_string
     
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """
         Obtiene un valor del cache.
         
@@ -140,7 +140,7 @@ class CacheService:
             self._stats['hits'] += 1
             return entry.value
     
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """
         Almacena un valor en el cache.
         
@@ -166,7 +166,7 @@ class CacheService:
             return getattr(settings, 'CACHE_CATALOG_TTL', 1800)  # 30 minutos
         elif key.startswith('article:'):
             return getattr(settings, 'CACHE_DETAIL_TTL', 3600)  # 60 minutos
-        elif key.startswith('categories:') or key.startswith('lines:'):
+        elif key.startswith(('categories:', 'lines:')):
             return getattr(settings, 'CACHE_STATIC_TTL', 7200)  # 2 horas
         else:
             return getattr(settings, 'CACHE_DEFAULT_TTL', 1800)  # 30 minutos por defecto
@@ -200,7 +200,7 @@ class CacheService:
         """
         count = 0
         with self._lock:
-            keys_to_remove = [key for key in self._cache.keys() if key.startswith(pattern)]
+            keys_to_remove = [key for key in self._cache if key.startswith(pattern)]
             for key in keys_to_remove:
                 del self._cache[key]
                 count += 1
@@ -243,7 +243,7 @@ class CacheService:
         
         return count
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Obtiene estadísticas del cache.
         

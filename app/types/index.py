@@ -1,4 +1,6 @@
 from enum import Enum
+
+
 class PaymentMethod(Enum):
     CREDIT = "credit"
     DEBIT = "debit"

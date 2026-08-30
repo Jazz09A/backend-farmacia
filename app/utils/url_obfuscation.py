@@ -1,7 +1,5 @@
 import base64
-import hashlib
-from typing import Optional
-from urllib.parse import quote, unquote
+
 
 class URLObfuscator:
     """Utility class for obfuscating and deobfuscating product URLs."""
@@ -35,7 +33,7 @@ class URLObfuscator:
             return product_id  # Fallback to original ID
     
     @staticmethod
-    def decode_url(obfuscated_url: str) -> Optional[str]:
+    def decode_url(obfuscated_url: str) -> str | None:
         """
         Decode obfuscated URL back to product ID.
         

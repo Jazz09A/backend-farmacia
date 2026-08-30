@@ -180,6 +180,10 @@ async def request_middleware(request: Request, call_next):
     clear_request_context()
     return response
 
+from typing import Optional, Mapping
+
+# ... (keep other imports)
+
 # ============================================================================
 # EXCEPTION HANDLERS
 # ============================================================================
@@ -188,16 +192,16 @@ def _error_response(
     status_code: int,
     detail,
     *,
-    headers: Optional[dict] = None,
+    headers: Optional[Mapping[str, str]] = None,
     extra: Optional[dict] = None,
 ) -> JSONResponse:
     rid = getattr(request.state, "request_id", None) or new_request_id()
     content = {"detail": detail, "success": False, "request_id": rid}
     if extra:
         content.update(extra)
-    out_headers = {"X-Request-ID": rid}
+    out_headers: dict[str, str] = {"X-Request-ID": rid}
     if headers:
-        out_headers.update(headers)
+        out_headers.update(dict(headers))
     return JSONResponse(status_code=status_code, content=content, headers=out_headers)
 
 

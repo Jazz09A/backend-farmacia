@@ -1,17 +1,21 @@
-from sqlalchemy.orm import Session, joinedload, load_only
-from sqlalchemy import desc, or_, func, text
-from typing import List, Optional, Tuple
+import re
+
 from fastapi import HTTPException, status
-from app.models.blog import BlogPost, BlogCategory
-from app.models.user import User
-from app.schemas.blog import (
-    BlogPostCreate, BlogPostUpdate, BlogCategoryCreate, BlogCategoryUpdate
-)
+from sqlalchemy import desc, func, or_, text
+from sqlalchemy.orm import Session, joinedload
+
 from app.config.logging_config import get_logger
 from app.config.settings import Settings
-from app.utils.timezone import get_ve_now
+from app.models.blog import BlogCategory, BlogPost
+from app.models.user import User
+from app.schemas.blog import (
+    BlogCategoryCreate,
+    BlogCategoryUpdate,
+    BlogPostCreate,
+    BlogPostUpdate,
+)
 from app.services.cache_service import cache_service
-import re
+from app.utils.timezone import get_ve_now
 
 logger = get_logger("blog")
 settings = Settings()
@@ -91,7 +95,7 @@ class BlogService:
         return slug
 
     @staticmethod
-    def _normalize_featured_image(value: Optional[str]) -> Optional[str]:
+    def _normalize_featured_image(value: str | None) -> str | None:
         """
         Guarda solo la ruta relativa para imágenes internas.
         - Si viene vacía, retorna None.
@@ -124,7 +128,7 @@ class BlogService:
         
         return trimmed
     
-    def generate_unique_slug(self, base_slug: str, exclude_id: Optional[str] = None) -> str:
+    def generate_unique_slug(self, base_slug: str, exclude_id: str | None = None) -> str:
         """Genera un slug único. Si ya existe, agrega un número incremental."""
         slug = base_slug
         counter = 1
@@ -177,14 +181,14 @@ class BlogService:
         logger.info(f"Categoría de blog creada: {category.name} (slug: {category.slug})")
         return category
     
-    def get_category_by_id(self, category_id: str, include_deleted: bool = False) -> Optional[BlogCategory]:
+    def get_category_by_id(self, category_id: str, include_deleted: bool = False) -> BlogCategory | None:
         """Obtener categoría por ID."""
         query = self.db.query(BlogCategory).filter(BlogCategory.id == category_id)
         if not include_deleted:
             query = query.filter(BlogCategory.deleted == False)
         return query.first()
     
-    def get_category_by_slug(self, slug: str, include_deleted: bool = False, use_cache: bool = True) -> Optional[BlogCategory]:
+    def get_category_by_slug(self, slug: str, include_deleted: bool = False, use_cache: bool = True) -> BlogCategory | None:
         """Obtener categoría por slug (con caché opcional)."""
         # Intentar obtener del caché
         cache_key = None
@@ -205,14 +209,14 @@ class BlogService:
         
         return category
     
-    def get_all_categories(self, include_deleted: bool = False, use_cache: bool = True) -> List[BlogCategory]:
+    def get_all_categories(self, include_deleted: bool = False, use_cache: bool = True) -> list[BlogCategory]:
         """Obtener todas las categorías (optimizado con caché)."""
         # Intentar obtener del caché si está habilitado y no incluye eliminadas
         if use_cache and not include_deleted:
             cache_key = f"{CACHE_PREFIX_BLOG_CATEGORIES}:all"
             cached = cache_service.get(cache_key)
             if cached is not None:
-                logger.debug(f"Cache HIT para categorías del blog")
+                logger.debug("Cache HIT para categorías del blog")
                 return cached
         
         query = self.db.query(BlogCategory)
@@ -241,7 +245,7 @@ class BlogService:
         update_data = category_data.model_dump(exclude_unset=True)
         
         # Si se actualiza el nombre, generar nuevo slug automáticamente
-        if 'name' in update_data and update_data['name']:
+        if update_data.get('name'):
             new_name = update_data['name']
             # Generar slug desde el nuevo nombre
             base_slug = self.generate_slug_from_name(new_name)
@@ -307,7 +311,7 @@ class BlogService:
     # BLOG POST METHODS
     # =============================================================================
     
-    def generate_unique_post_slug(self, base_slug: str, exclude_id: Optional[str] = None) -> str:
+    def generate_unique_post_slug(self, base_slug: str, exclude_id: str | None = None) -> str:
         """Genera un slug único para posts. Si ya existe, agrega un número incremental."""
         slug = base_slug
         counter = 1
@@ -384,7 +388,7 @@ class BlogService:
         logger.info(f"Post de blog creado: {post.title} (slug: {post.slug})")
         return post
     
-    def get_post_by_id(self, post_id: str, include_relations: bool = True, include_deleted: bool = False) -> Optional[BlogPost]:
+    def get_post_by_id(self, post_id: str, include_relations: bool = True, include_deleted: bool = False) -> BlogPost | None:
         """Obtener post por ID."""
         query = self.db.query(BlogPost)
         
@@ -402,7 +406,7 @@ class BlogService:
         
         return query.first()
     
-    def get_post_by_slug(self, slug: str, include_relations: bool = True) -> Optional[BlogPost]:
+    def get_post_by_slug(self, slug: str, include_relations: bool = True) -> BlogPost | None:
         """Obtener post por slug (solo no eliminados)."""
         query = self.db.query(BlogPost)
         
@@ -421,10 +425,10 @@ class BlogService:
         self,
         page: int = 1,
         limit: int = 10,
-        category_slug: Optional[str] = None,
-        search: Optional[str] = None,
+        category_slug: str | None = None,
+        search: str | None = None,
         use_cache: bool = True
-    ) -> Tuple[List[BlogPost], int]:
+    ) -> tuple[list[BlogPost], int]:
         """Obtener posts publicados (para usuarios públicos) - Optimizado con caché y proyección."""
         # Intentar obtener del caché si no hay búsqueda (búsquedas no se cachean)
         cache_key = None
@@ -477,7 +481,6 @@ class BlogService:
             return [], total
         
         # Query optimizada con SQL para cargar solo preview del contenido
-        from sqlalchemy import literal_column
         posts_data = self.db.execute(
             text("""
                 SELECT 
@@ -550,12 +553,12 @@ class BlogService:
         self,
         page: int = 1,
         limit: int = 10,
-        status_filter: Optional[str] = None,
-        category_id: Optional[str] = None,
-        search: Optional[str] = None,
+        status_filter: str | None = None,
+        category_id: str | None = None,
+        search: str | None = None,
         include_deleted: bool = False,
         use_cache: bool = True
-    ) -> Tuple[List[BlogPost], int]:
+    ) -> tuple[list[BlogPost], int]:
         """Obtener todos los posts (para admin) - Optimizado con SQL directo y caché."""
         # Intentar obtener del caché si no hay búsqueda y no incluye eliminados
         cache_key = None

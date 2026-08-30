@@ -3,11 +3,12 @@ Servicio de recomendaciones de artículos sin ML.
 Implementa estrategias basadas en reglas y análisis de datos desde source_system (DEMOA).
 Optimizado con pool de conexiones y caché.
 """
-from typing import List, Optional, Dict, Any
 from decimal import Decimal
-from app.services.source_system_service import source_system_service
-from app.services.cache_service import cache_service
+from typing import Any
+
 from app.config.logging_config import get_logger
+from app.services.cache_service import cache_service
+from app.services.source_system_service import source_system_service
 
 logger = get_logger(__name__)
 
@@ -37,7 +38,7 @@ class RecommendationService:
         limit: int = 3,
         price_code: str = "01",
         warehouse_code: str = "001"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Obtiene artículos relacionados basado en el artículo actual.
         Optimizado con context manager y caché.
@@ -213,7 +214,7 @@ class RecommendationService:
         self,
         co_art: str,
         limit: int = 4
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Obtiene artículos frecuentemente comprados junto con el artículo dado.
         Basado en análisis de facturas (saFacturaVentaReng).
@@ -347,11 +348,11 @@ class RecommendationService:
     
     def get_recommended_articles(
         self,
-        customer_code: Optional[str] = None,
+        customer_code: str | None = None,
         limit: int = 12,
         price_code: str = "01",
         warehouse_code: str = "001"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Obtiene artículos recomendados basado en el historial del cliente.
         Optimizado con context manager y caché.
@@ -573,7 +574,7 @@ class RecommendationService:
             return []
     
     @staticmethod
-    def _to_decimal(value: Any) -> Optional[Decimal]:
+    def _to_decimal(value: Any) -> Decimal | None:
         """Convierte un valor a Decimal de forma segura."""
         if value is None:
             return None
@@ -604,6 +605,6 @@ class RecommendationService:
         return count
     
     @staticmethod
-    def get_cache_stats() -> Dict:
+    def get_cache_stats() -> dict:
         """Obtiene estadísticas del caché."""
         return cache_service.get_stats()

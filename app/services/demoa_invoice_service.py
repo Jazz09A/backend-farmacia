@@ -1,11 +1,10 @@
 """
 Servicio para consultar facturas y pagos desde DEMOA (SourceSystem)
 """
-from typing import List, Optional, Dict, Any
 from decimal import Decimal
-from datetime import datetime
-from app.services.source_system_service import source_system_service
+
 from app.config.logging_config import get_logger
+from app.services.source_system_service import source_system_service
 
 logger = get_logger(__name__)
 
@@ -17,7 +16,7 @@ class DEMOAInvoiceService:
         # Reutilizamos la conexión del source_system_service ya que es la misma base de datos
         pass
     
-    def get_customer_code_by_email(self, email: str) -> Optional[str]:
+    def get_customer_code_by_email(self, email: str) -> str | None:
         """
         Obtiene el código de cliente en DEMOA por email
         El código se normaliza (sin espacios) antes de devolverlo.
@@ -40,7 +39,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo código de cliente por email {email}: {e}")
             return None
     
-    def get_all_invoices(self, customer_code: str) -> List[Dict]:
+    def get_all_invoices(self, customer_code: str) -> list[dict]:
         """
         Obtiene todas las facturas de un cliente (pagadas y pendientes)
         Consulta optimizada usando RTRIM para normalizar códigos de cliente.
@@ -100,7 +99,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo facturas para cliente {customer_code}: {e}", exc_info=True)
             return []
     
-    def get_pending_invoices(self, customer_code: str) -> List[Dict]:
+    def get_pending_invoices(self, customer_code: str) -> list[dict]:
         """
         Obtiene facturas pendientes de pago
         Consulta optimizada usando RTRIM para normalizar códigos de cliente.
@@ -156,7 +155,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo facturas pendientes para cliente {customer_code}: {e}", exc_info=True)
             return []
     
-    def get_paid_invoices(self, customer_code: str) -> List[Dict]:
+    def get_paid_invoices(self, customer_code: str) -> list[dict]:
         """
         Obtiene facturas pagadas
         Consulta optimizada usando RTRIM para normalizar códigos de cliente.
@@ -209,7 +208,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo facturas pagadas para cliente {customer_code}: {e}", exc_info=True)
             return []
     
-    def get_invoice_details(self, invoice_number: str, customer_code: Optional[str] = None) -> Optional[Dict]:
+    def get_invoice_details(self, invoice_number: str, customer_code: str | None = None) -> dict | None:
         """
         Obtiene detalles de una factura específica, incluyendo items
         
@@ -303,7 +302,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo detalles de factura {invoice_number}: {e}")
             return None
     
-    def get_payment_history(self, customer_code: str) -> List[Dict]:
+    def get_payment_history(self, customer_code: str) -> list[dict]:
         """
         Obtiene historial de pagos aplicados a facturas
         Consulta optimizada usando RTRIM para normalizar códigos de cliente.
@@ -352,7 +351,7 @@ class DEMOAInvoiceService:
             logger.error(f"Error obteniendo historial de pagos para cliente {customer_code}: {e}", exc_info=True)
             return []
     
-    def get_invoices_summary(self, customer_code: str) -> Dict:
+    def get_invoices_summary(self, customer_code: str) -> dict:
         """
         Obtiene resumen de facturas del cliente
         Consulta optimizada usando RTRIM para normalizar códigos de cliente.
@@ -424,14 +423,14 @@ class DEMOAInvoiceService:
                 'total_invoiced': Decimal('0.00')
             }
     
-    def _transform_invoices(self, invoices: List[Dict]) -> List[Dict]:
+    def _transform_invoices(self, invoices: list[dict]) -> list[dict]:
         """Transforma facturas de DEMOA al formato del sistema"""
         transformed = []
         for inv in invoices:
             transformed.append(self._transform_invoice_header(inv))
         return transformed
     
-    def _transform_invoice_header(self, invoice: Dict) -> Dict:
+    def _transform_invoice_header(self, invoice: dict) -> dict:
         """Transforma el header de una factura"""
         return {
             'invoice_number': str(invoice.get('invoice_number', '')),
@@ -446,7 +445,7 @@ class DEMOAInvoiceService:
             'is_printed': bool(invoice.get('is_printed', 0))
         }
     
-    def _transform_invoice_items(self, items: List[Dict]) -> List[Dict]:
+    def _transform_invoice_items(self, items: list[dict]) -> list[dict]:
         """Transforma items de factura sin exponer códigos, con nombre del artículo"""
         transformed = []
         for item in items:
@@ -462,7 +461,7 @@ class DEMOAInvoiceService:
             })
         return transformed
     
-    def _transform_payments(self, payments: List[Dict]) -> List[Dict]:
+    def _transform_payments(self, payments: list[dict]) -> list[dict]:
         """Transforma pagos de DEMOA al formato del sistema"""
         transformed = []
         for payment in payments:

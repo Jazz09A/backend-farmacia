@@ -3,20 +3,20 @@ Configuración centralizada de logging para la aplicación.
 Implementa buenas prácticas de logging con diferentes niveles y formateo estructurado.
 """
 
+import json
 import logging
 import logging.handlers
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
-import json
-from app.utils.timezone import get_ve_now
+from typing import Any
 
 from app.config.settings import Settings
+from app.utils.timezone import get_ve_now
 
 settings = Settings()
 
 
-def _current_request_id() -> Optional[str]:
+def _current_request_id() -> str | None:
     """Lee el request_id del ContextVar si está disponible."""
     try:
         from app.utils.logging_helpers import get_current_request_id
@@ -25,7 +25,7 @@ def _current_request_id() -> Optional[str]:
         return None
 
 
-def _current_user_id() -> Optional[str]:
+def _current_user_id() -> str | None:
     try:
         from app.utils.logging_helpers import get_current_user_id
         return get_current_user_id()
@@ -33,7 +33,7 @@ def _current_user_id() -> Optional[str]:
         return None
 
 
-def _current_user_email() -> Optional[str]:
+def _current_user_email() -> str | None:
     try:
         from app.utils.logging_helpers import get_current_user_email
         return get_current_user_email()
@@ -117,7 +117,7 @@ class ColoredFormatter(logging.Formatter):
         return formatted
 
 
-def setup_logging() -> Dict[str, logging.Logger]:
+def setup_logging() -> dict[str, logging.Logger]:
     """
     Configura el sistema de logging de la aplicación.
 
@@ -289,7 +289,7 @@ def get_logger(name: str = "farmaplus") -> logging.Logger:
     return logging.getLogger(f"farmaplus.{name}")
 
 
-def log_request_info(logger: logging.Logger, request, user_id: str = None, user_email: str = None, request_id: str = None):
+def log_request_info(logger: logging.Logger, request, user_id: str | None = None, user_email: str | None = None, request_id: str | None = None):
     """
     DEPRECATED: usar `app.utils.logging_helpers.log_request` que además
     inyecta request_id en contextvars para correlación automática.
@@ -310,7 +310,7 @@ def log_request_info(logger: logging.Logger, request, user_id: str = None, user_
     )
 
 
-def log_response_info(logger: logging.Logger, request, response, duration_ms: float, user_id: str = None, user_email: str = None, request_id: str = None):
+def log_response_info(logger: logging.Logger, request, response, duration_ms: float, user_id: str | None = None, user_email: str | None = None, request_id: str | None = None):
     """
     DEPRECATED: usar `app.utils.logging_helpers.log_response`.
     """
@@ -331,7 +331,7 @@ def log_response_info(logger: logging.Logger, request, response, duration_ms: fl
     )
 
 
-def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] = None, user_id: str = None, user_email: str = None):
+def log_error(logger: logging.Logger, error: Exception, context: dict[str, Any] | None = None, user_id: str | None = None, user_email: str | None = None):
     """
     DEPRECATED: usar `app.utils.logging_helpers.log_internal_error` que
     genera un tracking_id y aplica redacción de secretos.
@@ -343,9 +343,8 @@ def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] 
         **(context or {})
     }
     logger.error(
-        f"Error: {str(error)}",
-        extra=extra,
-        exc_info=True
+        f"Error: {error!s}",
+        extra=extra
     )
 
 

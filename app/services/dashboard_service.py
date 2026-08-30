@@ -1,21 +1,29 @@
 from datetime import timedelta
-from typing import List, Dict, Optional
-from sqlalchemy.orm import Session
+
+# from app.schemas.order import PaymentStatusEnum
+# from app.schemas.order import UpdatePaymentStatus
+from decimal import Decimal
+
+# Order schemas eliminados - Order no se usa con Profit Plus
+# from app.schemas.order import OrderStatus
+from fastapi import HTTPException
 from sqlalchemy import func
-from app.models.user import User
+from sqlalchemy.orm import Session
+
 # Order models eliminados - Order no se usa con Profit Plus
 # from app.models.order import Order
 # from app.models.order_discount import OrderDiscount
 from app.config.logging_config import get_logger
-from app.schemas.dashboard import DashboardStats, OrderStatusSummary, RecentOrder, DashboardData, DiscountBreakdown
-# Order schemas eliminados - Order no se usa con Profit Plus
-# from app.schemas.order import OrderStatus
-from fastapi import HTTPException
-# from app.schemas.order import PaymentStatusEnum
-# from app.schemas.order import UpdatePaymentStatus
-from decimal import Decimal
-from app.utils.timezone import get_ve_now, VENEZUELA_TZ
+from app.models.user import User
+from app.schemas.dashboard import (
+    DashboardData,
+    DashboardStats,
+    DiscountBreakdown,
+    OrderStatusSummary,
+    RecentOrder,
+)
 from app.services.source_system_service import source_system_service
+from app.utils.timezone import VENEZUELA_TZ, get_ve_now
 
 # OrderDiscount schemas eliminados - Order no se usa con Profit Plus
 # from app.schemas.order_discount import OrderDiscountSummary, OrderDiscountResponse
@@ -61,7 +69,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
     error_logger = get_logger("errors")
     
     perf_logger.info(
-        f"Dashboard data calculation started",
+        "Dashboard data calculation started",
         extra={
             'days_filter': days_filter, 
             'event': 'dashboard_calculation_started',
@@ -90,7 +98,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
             error_logger.info("Dashboard: Connection to source system established")
         except Exception as conn_error:
             error_logger.error(
-                f"Failed to connect to source system: {str(conn_error)}",
+                f"Failed to connect to source system: {conn_error!s}",
                 exc_info=True
             )
             raise
@@ -116,7 +124,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
                 total_revenue = Decimal(str(revenue_result.get('total_revenue', 0) or 0))
             error_logger.info(f"Dashboard: Total revenue = {total_revenue}")
         except Exception as query_error:
-            error_logger.error(f"Dashboard: Error executing revenue query: {str(query_error)}", exc_info=True)
+            error_logger.error(f"Dashboard: Error executing revenue query: {query_error!s}", exc_info=True)
             raise
         
         # 2.2 Total orders
@@ -166,7 +174,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
                 conversion_rate = Decimal(str(invoice_count)) / Decimal(str(total_orders)) * 100
             error_logger.info(f"Dashboard: Conversion rate = {conversion_rate}% (Invoices: {invoice_count}, Orders: {total_orders})")
         except Exception as conv_error:
-            error_logger.warning(f"Dashboard: Error calculating conversion rate: {str(conv_error)}")
+            error_logger.warning(f"Dashboard: Error calculating conversion rate: {conv_error!s}")
             conversion_rate = Decimal('0.00')
         
         # 2.5 Discount statistics (optimizadas)
@@ -353,7 +361,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
                 if dispatch_cancelled_result:
                     status_counts['cancelled'] = (status_counts.get('cancelled', 0) or 0) + (dispatch_cancelled_result.get('count', 0) or 0)
             except Exception as dispatch_error:
-                error_logger.warning(f"Dashboard: Error querying dispatch notes: {str(dispatch_error)}")
+                error_logger.warning(f"Dashboard: Error querying dispatch notes: {dispatch_error!s}")
             
             # 5.3 Notas de Entrega (delivered) - solo si hay datos recientes
             try:
@@ -382,10 +390,10 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
                 if delivery_cancelled_result:
                     status_counts['cancelled'] = (status_counts.get('cancelled', 0) or 0) + (delivery_cancelled_result.get('count', 0) or 0)
             except Exception as delivery_error:
-                error_logger.warning(f"Dashboard: Error querying delivery notes: {str(delivery_error)}")
+                error_logger.warning(f"Dashboard: Error querying delivery notes: {delivery_error!s}")
                 
         except Exception as status_error:
-            error_logger.warning(f"Dashboard: Error calculating status summary: {str(status_error)}")
+            error_logger.warning(f"Dashboard: Error calculating status summary: {status_error!s}")
         
         order_status_summary = OrderStatusSummary(
             pending=status_counts['pending'],
@@ -447,7 +455,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         )
         
         perf_logger.info(
-            f"Dashboard data calculated successfully from source system",
+            "Dashboard data calculated successfully from source system",
             extra={
                 'days_filter': days_filter,
                 'total_revenue': float(total_revenue),
@@ -470,7 +478,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         
     except Exception as e:
         error_logger.error(
-            f"Error calculating dashboard data from source system: {str(e)}",
+            f"Error calculating dashboard data from source system: {e!s}",
             extra={
                 'days_filter': days_filter,
                 'event': 'dashboard_calculation_error',
@@ -486,7 +494,7 @@ def get_dashboard_data(db: Session, days_filter: int = 7) -> DashboardData:
         if os.getenv("ENVIRONMENT", "development") == "development":
             raise HTTPException(
                 status_code=500,
-                detail=f"Error calculating dashboard data: {str(e)}. Check logs for details."
+                detail=f"Error calculating dashboard data: {e!s}. Check logs for details."
             )
         # Return empty/default data on error for production
         return DashboardData(
@@ -529,8 +537,9 @@ def get_all_quotes_paginated(
     Returns:
         Dict con results (lista de cotizaciones) y pagination (info de paginación)
     """
-    from app.schemas.quote import QuoteListItem, QuoteListResponse, Pagination
     from datetime import datetime
+
+    from app.schemas.quote import Pagination, QuoteListItem, QuoteListResponse
     
     logger = get_logger("dashboard")
     
@@ -602,7 +611,7 @@ def get_all_quotes_paginated(
             expiration_date = quote.get('expiration_date')
             
             # Mapear status de Profit Plus a status del schema
-            status_code = str(quote.get('status', '0')).strip()
+            str(quote.get('status', '0')).strip()
             anulado = quote.get('anulado', 0)
             
             if anulado == 1:
@@ -668,7 +677,7 @@ def get_all_quotes_paginated(
         
     except Exception as e:
         logger.error(
-            f"Error obteniendo cotizaciones paginadas: {str(e)}",
+            f"Error obteniendo cotizaciones paginadas: {e!s}",
             exc_info=True
         )
         # Retornar respuesta vacía en caso de error
@@ -698,8 +707,14 @@ def get_quote_detail_for_admin(
     Returns:
         QuoteDetailResponse con todos los detalles o None si no se encuentra
     """
-    from app.schemas.quote import QuoteDetailResponse, QuoteDetailItem, QuoteTotals, QuoteHistoryEvent
     from datetime import datetime
+
+    from app.schemas.quote import (
+        QuoteDetailItem,
+        QuoteDetailResponse,
+        QuoteHistoryEvent,
+        QuoteTotals,
+    )
     
     logger = get_logger("dashboard")
     
@@ -825,7 +840,7 @@ def get_quote_detail_for_admin(
         )
         
         # Determinar estado basado en status, anulado, saldo y fecha de expiración
-        status_code = str(header.get('status', '0')).strip()
+        str(header.get('status', '0')).strip()
         anulado = header.get('anulado', 0)
         balance = Decimal(str(header.get('saldo', 0) or 0))
         expiration_date = header.get('expires_at')
@@ -860,7 +875,7 @@ def get_quote_detail_for_admin(
             expires_at = expires_at.isoformat()
         
         # Historial básico
-        history: List[QuoteHistoryEvent] = [
+        history: list[QuoteHistoryEvent] = [
             QuoteHistoryEvent(
                 timestamp=created_at or "",
                 event="created",
@@ -894,7 +909,7 @@ def get_quote_detail_for_admin(
 # get_order_by_id, update_order_status, get_orders_by_status, get_orders_by_user, 
 # get_orders_by_date, get_all_orders eliminadas
 
-def get_all_customers(db: Session) -> List[User]:
+def get_all_customers(db: Session) -> list[User]:
     customers_without_admin_users = []
     customers = db.query(User).all()
     for customer in customers:
@@ -914,7 +929,6 @@ def get_credit_payments_dashboard(db: Session) -> dict:
     """Dashboard de pagos de crédito para admin"""
     from app.models.credit_payment import CreditPayment
     from app.models.order import Order
-    from sqlalchemy import func
     
     
     # Pagos pendientes
@@ -949,10 +963,9 @@ def get_credit_payments_dashboard(db: Session) -> dict:
 
 def get_user_credit_dashboard(user_id: str, db: Session) -> dict:
     """Dashboard de crédito para usuario"""
-    from app.models.user import User
-    from app.models.order import Order
     from app.models.credit_payment import CreditPayment
-    from sqlalchemy import func
+    from app.models.order import Order
+    from app.models.user import User
     
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -1010,8 +1023,6 @@ def get_user_credit_dashboard(user_id: str, db: Session) -> dict:
 def get_payment_details(payment_id: str, db: Session) -> dict:
     """Detalles completos de un pago"""
     from app.models.credit_payment import CreditPayment
-    from app.models.order import Order
-    from app.models.user import User
     
     payment = db.query(CreditPayment).filter(CreditPayment.id == payment_id).first()
     if not payment:

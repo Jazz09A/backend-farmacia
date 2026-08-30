@@ -1,9 +1,10 @@
-from app.models.product import Product
-from app.config.database import get_db
+
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
-from fastapi import Depends
-from typing import List, Optional
-from fastapi import HTTPException
+
+from app.config.database import get_db
+from app.models.product import Product
+
 
 class ImageService:
     def __init__(self, db: Session = Depends(get_db)):
@@ -18,7 +19,7 @@ class ImageService:
     # =============================================================================
     # ADD IMAGES TO PRODUCT
     # =============================================================================
-    async def add_images_to_product(self, product_id: str, images: Optional[List[str]] = None):
+    async def add_images_to_product(self, product_id: str, images: list[str] | None = None):
         if images is None:
             raise HTTPException(status_code=400, detail="No se proporcionaron imágenes")
         

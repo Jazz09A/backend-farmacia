@@ -1,13 +1,17 @@
-from typing import Any, Dict, List, Optional
-from decimal import Decimal
 import json
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
 
 from app.config.logging_config import get_logger
+
+# from app.querys.image_query import get_image_by_co_art
+from app.config.settings import Settings
+from app.models.promotion import DiscountType, FlashOffer
 from app.schemas.article import (
     ArticleDetail,
     ArticleImageResponse,
@@ -15,17 +19,15 @@ from app.schemas.article import (
     ArticlePriceDetail,
     ArticleStockDetail,
     ArticleSummary,
-    ImageUploadResponse,
     CloudinaryImageInfo,
+    ImageUploadResponse,
 )
 from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
-from app.models.promotion import FlashOffer, DiscountType
-from app.services.source_system_service import source_system_service
 from app.services.cache_service import cache_service
 from app.services.product_image_service import product_image_service
+from app.services.source_system_service import source_system_service
 from app.utils.timezone import get_ve_now
-# from app.querys.image_query import get_image_by_co_art
-from app.config.settings import Settings
+
 settings = Settings()
 class ArticleService:
     """Servicio de negocio para artículos provenientes de Profit Plus."""
@@ -33,14 +35,14 @@ class ArticleService:
     def __init__(self):
         self.logger = get_logger("articles")
         self._source_service = source_system_service
-        self._descriptions_cache: Optional[Dict[str, str]] = None
+        self._descriptions_cache: dict[str, str] | None = None
         self._descriptions_file_path = Path("articles_with_descriptions.json")
     
     def _get_active_flash_offers_by_article_codes(
         self, 
-        db: Optional[Session], 
-        article_codes: List[str]
-    ) -> Dict[str, FlashOffer]:
+        db: Session | None, 
+        article_codes: list[str]
+    ) -> dict[str, FlashOffer]:
         """
         Obtiene flash offers activas para una lista de códigos de artículo de manera optimizada.
         
@@ -118,7 +120,7 @@ class ArticleService:
             )
         )
     
-    def _build_profit_discount_info(self, discount_row: Dict[str, Any]) -> ProfitDiscountInfo:
+    def _build_profit_discount_info(self, discount_row: dict[str, Any]) -> ProfitDiscountInfo:
         """Construye la información de descuento de Profit Plus para incluir en la respuesta."""
         from decimal import Decimal as D
         
@@ -161,7 +163,7 @@ class ArticleService:
         )
 
     @staticmethod
-    def _build_image_url(rowguid: Optional[str]) -> Optional[str]:
+    def _build_image_url(rowguid: str | None) -> str | None:
         """
         Construye la URL completa para servir una imagen por su GUID.
         """
@@ -173,12 +175,12 @@ class ArticleService:
         if not guid_str:
             return None
         
-        base_url = settings.API_URL or "http://localhost:8000"
+        base_url = settings.app.API_URL or "http://localhost:8000"
         # CORREGIDO: La ruta debe incluir /articles porque el router está registrado con ese prefijo
         url = f"{base_url}/api/v1/articles/images/{guid_str}"
         return url
 
-    def _load_descriptions(self) -> Dict[str, str]:
+    def _load_descriptions(self) -> dict[str, str]:
         """Carga las descripciones desde el archivo JSON y las mantiene en cache."""
         if self._descriptions_cache is not None:
             return self._descriptions_cache
@@ -202,11 +204,11 @@ class ArticleService:
             
             self.logger.info(f"Cargadas {len(self._descriptions_cache)} descripciones desde JSON")
         except Exception as e:
-            self.logger.error(f"Error al cargar descripciones: {str(e)}")
+            self.logger.error(f"Error al cargar descripciones: {e!s}")
         
         return self._descriptions_cache
     
-    def _get_description(self, co_art: str) -> Optional[str]:
+    def _get_description(self, co_art: str) -> str | None:
         """Obtiene la descripción de un artículo desde el cache."""
         if not co_art:
             return None
@@ -218,16 +220,16 @@ class ArticleService:
     def _get_all_catalog_items_for_demo_filter(
         self,
         *,
-        search: Optional[str],
-        line_code: Optional[str],
-        category_code: Optional[str],
-        min_price: Optional[Decimal],
-        max_price: Optional[Decimal],
+        search: str | None,
+        line_code: str | None,
+        category_code: str | None,
+        min_price: Decimal | None,
+        max_price: Decimal | None,
         sort_by: str,
         price_code: str,
         warehouse_code: str,
         in_stock_only: bool,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         DEMO ONLY:
         Obtiene todos los items del catálogo (sin paginar a nivel de API),
@@ -238,7 +240,7 @@ class ArticleService:
         """
         batch_size = 500
         page_num = 1
-        all_items: List[Dict[str, Any]] = []
+        all_items: list[dict[str, Any]] = []
 
         while True:
             result = self._source_service.get_articles_catalog(
@@ -270,7 +272,7 @@ class ArticleService:
         return all_items
     
     @staticmethod
-    def _to_decimal(value: Any) -> Optional[Decimal]:
+    def _to_decimal(value: Any) -> Decimal | None:
         if value is None:
             return None
         if isinstance(value, Decimal):
@@ -284,16 +286,16 @@ class ArticleService:
         self,
         page: int = 1,
         limit: int = 20,
-        search: Optional[str] = None,
-        line_code: Optional[str] = None,
-        category_code: Optional[str] = None,
-        min_price: Optional[Decimal] = None,
-        max_price: Optional[Decimal] = None,
+        search: str | None = None,
+        line_code: str | None = None,
+        category_code: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
         sort_by: str = "art_des",
         price_code: str = "01",
         warehouse_code: str = "001",
         in_stock_only: bool = False,
-        db: Optional[Session] = None,
+        db: Session | None = None,
     ) -> ArticleListResponse:
         """Obtiene el catálogo paginado directamente desde Profit Plus con cache."""
         # Feature flag: este filtro es temporal (demo) y se controla SOLO por env var.
@@ -394,7 +396,7 @@ class ArticleService:
             tip_cli=None,  # Por ahora sin filtrar por tipo de cliente
         )
 
-        summaries: List[ArticleSummary] = []
+        summaries: list[ArticleSummary] = []
         for row in page_items:
             co_art = (row.get("co_art") or "").strip()
             art_des = row.get("art_des") or ""
@@ -448,7 +450,7 @@ class ArticleService:
                 )
             )
 
-        filters_applied: Dict[str, Any] = {}
+        filters_applied: dict[str, Any] = {}
         if search:
             filters_applied["search"] = search
         if line_code:
@@ -487,7 +489,7 @@ class ArticleService:
         
         return response
 
-    def get_article_detail(self, co_art: str, db: Optional[Session] = None) -> ArticleDetail:
+    def get_article_detail(self, co_art: str, db: Session | None = None) -> ArticleDetail:
         """Obtiene el detalle de un artículo y lo transforma a schema con cache."""
         # Normalizar código de artículo
         normalized_co_art = (co_art or "").strip().upper()
@@ -554,7 +556,7 @@ class ArticleService:
             ArticlePriceDetail(
                 price_code=(item.get("price_code") or "").strip(),
                 price_name=item.get("price_name"),
-                amount=self._to_decimal(item.get("amount")) or Decimal("0"),
+                amount=self._to_decimal(item.get("amount")) or Decimal(0),
                 currency=(item.get("currency") or "VES").strip(),
                 desde=item.get("desde"),  # Fecha desde la cual es válido el precio
             )
@@ -565,7 +567,7 @@ class ArticleService:
             ArticleStockDetail(
                 warehouse_code=(item.get("warehouse_code") or "").strip(),
                 warehouse_name=item.get("warehouse_name"),
-                quantity=self._to_decimal(item.get("quantity")) or Decimal("0"),
+                quantity=self._to_decimal(item.get("quantity")) or Decimal(0),
             )
             for item in stock_raw
         ]
@@ -648,8 +650,8 @@ class ArticleService:
         self,
         co_art: str,
         image_bytes: bytes,
-        filename: Optional[str],
-        tip: Optional[str] = None,
+        filename: str | None,
+        tip: str | None = None,
         created_by: str = "API_USER",
     ) -> ImageUploadResponse:
         """Sube una imagen para un artículo y devuelve la respuesta de negocio."""
@@ -688,7 +690,7 @@ class ArticleService:
             url=self._build_image_url(guid),
         )
 
-    def get_image_binary(self, image_guid: str) -> Dict[str, Any]:
+    def get_image_binary(self, image_guid: str) -> dict[str, Any]:
         """Obtiene la imagen binaria y metadatos para servirla por HTTP."""
         row = self._source_service.get_image_by_guid(image_guid)
         if not row:
@@ -703,9 +705,9 @@ class ArticleService:
             )
         return row
 
-    def _map_images(self, rows: List[Dict[str, Any]]) -> List[ArticleImageResponse]:
+    def _map_images(self, rows: list[dict[str, Any]]) -> list[ArticleImageResponse]:
         """Convierte las filas de saArtImagen a schemas de respuesta."""
-        images: List[ArticleImageResponse] = []
+        images: list[ArticleImageResponse] = []
         for row in rows:
             guid = row.get("rowguid")
             if not guid:

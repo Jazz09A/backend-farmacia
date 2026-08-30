@@ -8,16 +8,17 @@ Proporciona funcionalidades para:
 - Obtener información de imágenes
 """
 
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
-from cloudinary.utils import cloudinary_url
-from typing import Optional, Dict, Any, List, Tuple
-from fastapi import HTTPException, UploadFile, status
 from enum import Enum
+from typing import Any, Optional, Self
 
-from app.config.settings import Settings
+import cloudinary
+import cloudinary.api
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
+from fastapi import HTTPException, UploadFile, status
+
 from app.config.logging_config import get_logger
+from app.config.settings import Settings
 
 logger = get_logger("cloudinary_service")
 settings = Settings()
@@ -54,7 +55,7 @@ class CloudinaryService:
     _instance: Optional["CloudinaryService"] = None
     _configured: bool = False
     
-    def __new__(cls) -> "CloudinaryService":
+    def __new__(cls) -> Self:
         """Implementa patrón Singleton para reutilizar la configuración."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -69,9 +70,9 @@ class CloudinaryService:
     def _configure_cloudinary(self) -> None:
         """Configura las credenciales de Cloudinary de forma robusta."""
         # IMPORTANTE: .strip() elimina espacios o saltos de línea invisibles
-        cloud_name = settings.CLOUDINARY_CLOUD_NAME.strip() if settings.CLOUDINARY_CLOUD_NAME else None
-        api_key = settings.CLOUDINARY_API_KEY.strip() if settings.CLOUDINARY_API_KEY else None
-        api_secret = settings.CLOUDINARY_API_SECRET.strip() if settings.CLOUDINARY_API_SECRET else None
+        cloud_name = settings.cloudinary.CLOUD_NAME.strip() if settings.cloudinary.CLOUD_NAME else None
+        api_key = settings.cloudinary.API_KEY.strip() if settings.cloudinary.API_KEY else None
+        api_secret = settings.cloudinary.API_SECRET.strip() if settings.cloudinary.API_SECRET else None
 
         if not all([cloud_name, api_key, api_secret]):
             logger.warning(
@@ -95,9 +96,9 @@ class CloudinaryService:
     def _validate_configuration(self) -> None:
         """Valida que Cloudinary esté configurado antes de realizar operaciones."""
         if not all([
-            settings.CLOUDINARY_CLOUD_NAME,
-            settings.CLOUDINARY_API_KEY,
-            settings.CLOUDINARY_API_SECRET
+            settings.cloudinary.CLOUD_NAME,
+            settings.cloudinary.API_KEY,
+            settings.cloudinary.API_SECRET
         ]):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -105,7 +106,7 @@ class CloudinaryService:
             )
     
     @staticmethod
-    def _validate_image_format(file_bytes: bytes) -> Tuple[str, str]:
+    def _validate_image_format(file_bytes: bytes) -> tuple[str, str]:
         """
         Valida el formato de imagen basándose en magic numbers.
         
@@ -145,12 +146,12 @@ class CloudinaryService:
         self,
         file: UploadFile,
         folder: str = CloudinaryFolder.GENERAL,
-        public_id: Optional[str] = None,
-        transformation: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        public_id: str | None = None,
+        transformation: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
         overwrite: bool = False,
         max_size_mb: float = 10.0
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Sube una imagen a Cloudinary.
         
@@ -202,7 +203,7 @@ class CloudinaryService:
             self._validate_image_format(file_bytes)
             
             # Preparar opciones de subida
-            upload_options: Dict[str, Any] = {
+            upload_options: dict[str, Any] = {
                 "folder": folder,
                 "overwrite": overwrite,
                 "resource_type": "image",
@@ -246,10 +247,10 @@ class CloudinaryService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error subiendo imagen a Cloudinary: {str(e)}")
+            logger.error(f"Error subiendo imagen a Cloudinary: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al subir la imagen: {str(e)}"
+                detail=f"Error al subir la imagen: {e!s}"
             )
         finally:
             # Resetear posición del archivo por si se necesita leer de nuevo
@@ -259,12 +260,12 @@ class CloudinaryService:
         self,
         image_bytes: bytes,
         folder: str = CloudinaryFolder.GENERAL,
-        public_id: Optional[str] = None,
-        transformation: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        public_id: str | None = None,
+        transformation: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
         overwrite: bool = False,
         max_size_mb: float = 10.0
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Sube una imagen a Cloudinary desde bytes.
         
@@ -300,7 +301,7 @@ class CloudinaryService:
             self._validate_image_format(image_bytes)
             
             # Preparar opciones
-            upload_options: Dict[str, Any] = {
+            upload_options: dict[str, Any] = {
                 "folder": folder,
                 "overwrite": overwrite,
                 "resource_type": "image",
@@ -336,20 +337,20 @@ class CloudinaryService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error subiendo imagen desde bytes: {str(e)}")
+            logger.error(f"Error subiendo imagen desde bytes: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al subir la imagen: {str(e)}"
+                detail=f"Error al subir la imagen: {e!s}"
             )
     
     async def upload_image_from_url(
         self,
         image_url: str,
         folder: str = CloudinaryFolder.GENERAL,
-        public_id: Optional[str] = None,
-        transformation: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        public_id: str | None = None,
+        transformation: dict[str, Any] | None = None,
+        tags: list[str] | None = None
+    ) -> dict[str, Any]:
         """
         Sube una imagen a Cloudinary desde una URL.
         
@@ -371,7 +372,7 @@ class CloudinaryService:
             folder = folder.value
         
         try:
-            upload_options: Dict[str, Any] = {
+            upload_options: dict[str, Any] = {
                 "folder": folder,
                 "resource_type": "image",
             }
@@ -403,10 +404,10 @@ class CloudinaryService:
             }
             
         except Exception as e:
-            logger.error(f"Error subiendo imagen desde URL: {str(e)}")
+            logger.error(f"Error subiendo imagen desde URL: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al subir la imagen desde URL: {str(e)}"
+                detail=f"Error al subir la imagen desde URL: {e!s}"
             )
     
     # async def upload_image_base64(
@@ -461,7 +462,7 @@ class CloudinaryService:
     #             detail="Error al procesar la imagen en formato base64"
     #         )
     
-    async def delete_image(self, public_id: str) -> Dict[str, Any]:
+    async def delete_image(self, public_id: str) -> dict[str, Any]:
         """
         Elimina una imagen de Cloudinary.
         
@@ -493,13 +494,13 @@ class CloudinaryService:
                 }
                 
         except Exception as e:
-            logger.error(f"Error eliminando imagen: {str(e)}")
+            logger.error(f"Error eliminando imagen: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al eliminar la imagen: {str(e)}"
+                detail=f"Error al eliminar la imagen: {e!s}"
             )
     
-    async def delete_images_bulk(self, public_ids: List[str]) -> Dict[str, Any]:
+    async def delete_images_bulk(self, public_ids: list[str]) -> dict[str, Any]:
         """
         Elimina múltiples imágenes de Cloudinary.
         
@@ -531,17 +532,17 @@ class CloudinaryService:
             }
             
         except Exception as e:
-            logger.error(f"Error en eliminación masiva: {str(e)}")
+            logger.error(f"Error en eliminación masiva: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al eliminar las imágenes: {str(e)}"
+                detail=f"Error al eliminar las imágenes: {e!s}"
             )
     
     def get_optimized_url(
         self,
         public_id: str,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
+        width: int | None = None,
+        height: int | None = None,
         crop: str = "fill",
         quality: str = "auto",
         format: str = ImageFormat.AUTO,
@@ -610,7 +611,7 @@ class CloudinaryService:
             gravity="face"
         )
     
-    async def get_image_info(self, public_id: str) -> Dict[str, Any]:
+    async def get_image_info(self, public_id: str) -> dict[str, Any]:
         """
         Obtiene información detallada de una imagen.
         
@@ -648,18 +649,18 @@ class CloudinaryService:
                 detail=f"Imagen no encontrada: {public_id}"
             )
         except Exception as e:
-            logger.error(f"Error obteniendo info de imagen: {str(e)}")
+            logger.error(f"Error obteniendo info de imagen: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al obtener información de la imagen: {str(e)}"
+                detail=f"Error al obtener información de la imagen: {e!s}"
             )
     
     async def list_images_in_folder(
         self,
         folder: str,
         max_results: int = 100,
-        next_cursor: Optional[str] = None
-    ) -> Dict[str, Any]:
+        next_cursor: str | None = None
+    ) -> dict[str, Any]:
         """
         Lista todas las imágenes en una carpeta.
         
@@ -708,10 +709,10 @@ class CloudinaryService:
             }
             
         except Exception as e:
-            logger.error(f"Error listando imágenes: {str(e)}")
+            logger.error(f"Error listando imágenes: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al listar imágenes: {str(e)}"
+                detail=f"Error al listar imágenes: {e!s}"
             )
     
     async def rename_image(
@@ -719,7 +720,7 @@ class CloudinaryService:
         from_public_id: str,
         to_public_id: str,
         overwrite: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Renombra una imagen en Cloudinary.
         
@@ -751,13 +752,13 @@ class CloudinaryService:
             }
             
         except Exception as e:
-            logger.error(f"Error renombrando imagen: {str(e)}")
+            logger.error(f"Error renombrando imagen: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al renombrar la imagen: {str(e)}"
+                detail=f"Error al renombrar la imagen: {e!s}"
             )
     
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """
         Verifica el estado de la conexión con Cloudinary.
         
@@ -766,9 +767,9 @@ class CloudinaryService:
         """
         try:
             if not all([
-                settings.CLOUDINARY_CLOUD_NAME,
-                settings.CLOUDINARY_API_KEY,
-                settings.CLOUDINARY_API_SECRET
+                settings.cloudinary.CLOUD_NAME,
+                settings.cloudinary.API_KEY,
+                settings.cloudinary.API_SECRET
             ]):
                 return {
                     "status": "not_configured",
@@ -780,7 +781,7 @@ class CloudinaryService:
             
             return {
                 "status": "healthy",
-                "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+                "cloud_name": settings.cloudinary.CLOUD_NAME,
                 "response": result
             }
             

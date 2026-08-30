@@ -1,8 +1,11 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class UserFavorite(Base):
     __tablename__ = "user_favorites"

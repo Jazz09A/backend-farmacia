@@ -1,9 +1,12 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, Date, JSON, Float, Numeric
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
 from decimal import Decimal
+
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Numeric, String
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class User(Base):
     __tablename__ = "users"

@@ -2,74 +2,68 @@
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
 from datetime import timedelta
-from app.utils.timezone import get_ve_now
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.config.logging_config import get_logger
 from app.core.auth import get_admin_user, get_super_admin_user
-
-from app.models.user import User
-from app.services.role_service import RoleService
-from app.schemas.role import (
-    UserRoleResponse
-)
-from app.schemas.dashboard import DashboardData
-
-from app.schemas.user import (
-    CustomerDetailedStats, CustomerStats,
-    UserResponse
-)
 from app.core.dependencies import PaginationParams, get_pagination_params
+from app.models.user import User
+from app.schemas.dashboard import DashboardData
+from app.schemas.role import UserRoleResponse
+from app.schemas.user import CustomerDetailedStats, CustomerStats, UserResponse
 from app.services import dashboard_service
 from app.services.imges_service import ImageService
-
-from app.config.logging_config import get_logger
-
+from app.services.role_service import RoleService
 
 # SourceSystem imports y endpoints
 from app.services.source_system_service import source_system_service
-from app.services.source_system_user_creation_service import SourceSystemUserCreationService
-from pydantic import BaseModel
+from app.services.source_system_user_creation_service import (
+    SourceSystemUserCreationService,
+)
+from app.utils.timezone import get_ve_now
+
 
 # Schemas para endpoints
 class SourceSystemCustomerResponse(BaseModel):
     customer_code: str
     customer_name: str
-    email: Optional[str]
-    alternate_email: Optional[str]
-    rif: Optional[str]
-    phones: Optional[str]
+    email: str | None
+    alternate_email: str | None
+    rif: str | None
+    phones: str | None
     inactive: bool
     is_juridico: bool
 
 class SourceSystemCustomerListResponse(BaseModel):
     success: bool = True  # Nuevo campo
-    customers: List[SourceSystemCustomerResponse]
+    customers: list[SourceSystemCustomerResponse]
     total: int
     page: int
     limit: int
 
 class CreateUsersFromSourceSystemRequest(BaseModel):
-    customer_codes: List[str]
+    customer_codes: list[str]
     use_alternate_emails: bool = False
 
 class UserCreationResult(BaseModel):
     success: bool
     customer_code: str
-    customer_name: Optional[str]
-    email: Optional[str]
-    user_id: Optional[str]
-    error: Optional[str]
-    email_sent: Optional[bool]
-    email_error: Optional[str]
+    customer_name: str | None
+    email: str | None
+    user_id: str | None
+    error: str | None
+    email_sent: bool | None
+    email_error: str | None
 
 class CreateUsersResponse(BaseModel):
     success: bool = True  # Nuevo campo
     total: int
-    successful: List[UserCreationResult]
-    failed: List[UserCreationResult]
+    successful: list[UserCreationResult]
+    failed: list[UserCreationResult]
     summary: dict
 
 router = APIRouter(prefix="/admin")
@@ -99,7 +93,7 @@ async def get_admin_dashboard(
 # GESTIÓN DE USUARIOS
 # =============================================================================
 
-@router.get("/users", response_model=List[UserRoleResponse])
+@router.get("/users", response_model=list[UserRoleResponse])
 async def get_all_users(
     pagination: PaginationParams = Depends(get_pagination_params),
     role_filter: str = Query(None, description="Filtrar por rol específico"),
@@ -501,7 +495,7 @@ async def get_source_system_customers(
     pagination: PaginationParams = Depends(get_pagination_params),
     include_inactive: bool = Query(False, description="Incluir clientes inactivos"),
     only_with_email: bool = Query(True, description="Solo clientes con email"),
-    search: Optional[str] = Query(None, description="Buscar por nombre o código"),
+    search: str | None = Query(None, description="Buscar por nombre o código"),
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
@@ -533,10 +527,10 @@ async def get_source_system_customers(
             limit=pagination.limit
         )
     except Exception as e:
-        logger.error(f"Error obteniendo clientes SourceSystem: {str(e)}")
+        logger.error(f"Error obteniendo clientes SourceSystem: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener clientes de SourceSystem: {str(e)}"
+            detail=f"Error al obtener clientes de SourceSystem: {e!s}"
         )
 
 @router.post("/source-system/create-users", response_model=CreateUsersResponse)
@@ -595,18 +589,20 @@ async def create_users_from_source_system(
         # Re-lanzar HTTPException sin modificar
         raise
     except Exception as e:
-        logger.error(f"Error creando usuarios desde SourceSystem: {str(e)}")
+        logger.error(f"Error creando usuarios desde SourceSystem: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al crear usuarios: {str(e)}"
+            detail=f"Error al crear usuarios: {e!s}"
         )
 
 # =============================================================================
 # GESTIÓN DE CACHE
 # =============================================================================
 
-from app.services.cache_service import cache_service
 from pydantic import BaseModel
+
+from app.services.cache_service import cache_service
+
 
 class CacheStatsResponse(BaseModel):
     enabled: bool
@@ -622,8 +618,8 @@ class CacheStatsResponse(BaseModel):
     total_requests: int
 
 class CacheInvalidateRequest(BaseModel):
-    pattern: Optional[str] = None
-    cache_type: Optional[str] = None  # 'catalog', 'article', 'all'
+    pattern: str | None = None
+    cache_type: str | None = None  # 'catalog', 'article', 'all'
 
 class CacheInvalidateResponse(BaseModel):
     success: bool

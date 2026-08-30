@@ -1,7 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
 from datetime import datetime
 
+from pydantic import BaseModel, Field, field_validator
 
 # =============================================================================
 # BLOG CATEGORY SCHEMAS
@@ -10,7 +9,7 @@ from datetime import datetime
 class BlogCategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     slug: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
 
     @field_validator('slug')
     def validate_slug(cls, v):
@@ -22,18 +21,18 @@ class BlogCategoryBase(BaseModel):
 class BlogCategoryCreate(BaseModel):
     """Schema para crear categoría - el slug se genera automáticamente desde el nombre"""
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class BlogCategoryUpdate(BaseModel):
     """Schema para actualizar categoría - el slug se genera automáticamente desde el nombre si se actualiza"""
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = None
 
 
 class BlogCategoryResponse(BlogCategoryBase):
     id: str
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
     
     class Config:
         from_attributes = True
@@ -48,9 +47,9 @@ class BlogPostBase(BaseModel):
     slug: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     category_id: str = Field(..., description="ID de la categoría del blog")
-    featured_image_url: Optional[str] = None
-    status: Optional[str] = Field(default="draft", description="Estado: draft, published, archived")
-    published_at: Optional[datetime] = None
+    featured_image_url: str | None = None
+    status: str | None = Field(default="draft", description="Estado: draft, published, archived")
+    published_at: datetime | None = None
 
     @field_validator('slug')
     def validate_slug(cls, v):
@@ -70,20 +69,20 @@ class BlogPostCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     category_id: str = Field(..., description="ID de la categoría del blog")
-    author_name: Optional[str] = Field(None, description="Nombre del autor del artículo. Si no se proporciona, se usa el nombre del usuario autenticado")
-    featured_image_url: Optional[str] = None
-    status: Optional[str] = Field(default="draft", description="Estado: draft, published, archived")
+    author_name: str | None = Field(None, description="Nombre del autor del artículo. Si no se proporciona, se usa el nombre del usuario autenticado")
+    featured_image_url: str | None = None
+    status: str | None = Field(default="draft", description="Estado: draft, published, archived")
 
 
 class BlogPostUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=200)
-    slug: Optional[str] = Field(None, min_length=1, max_length=200)
-    content: Optional[str] = Field(None, min_length=1)
-    category_id: Optional[str] = None
-    author_name: Optional[str] = Field(None, description="Nombre del autor del artículo")
-    featured_image_url: Optional[str] = None
-    status: Optional[str] = Field(None, description="Estado: draft, published, archived")
-    published_at: Optional[datetime] = None
+    title: str | None = Field(None, min_length=1, max_length=200)
+    slug: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1)
+    category_id: str | None = None
+    author_name: str | None = Field(None, description="Nombre del autor del artículo")
+    featured_image_url: str | None = None
+    status: str | None = Field(None, description="Estado: draft, published, archived")
+    published_at: datetime | None = None
 
     @field_validator('slug')
     def validate_slug(cls, v):
@@ -99,8 +98,8 @@ class BlogPostUpdate(BaseModel):
 
 
 class BlogPostAuthor(BaseModel):
-    id: Optional[str] = None  # Opcional si solo se usa author_name
-    email: Optional[str] = None  # Opcional si solo se usa author_name
+    id: str | None = None  # Opcional si solo se usa author_name
+    email: str | None = None  # Opcional si solo se usa author_name
     full_name: str
     
     class Config:
@@ -118,9 +117,9 @@ class BlogPostCategory(BaseModel):
 
 class BlogPostResponse(BlogPostBase):
     id: str
-    author_id: Optional[str] = None  # Opcional si solo se usa author_name
-    author: Optional[BlogPostAuthor] = None
-    category: Optional[BlogPostCategory] = None
+    author_id: str | None = None  # Opcional si solo se usa author_name
+    author: BlogPostAuthor | None = None
+    category: BlogPostCategory | None = None
     created_at: datetime
     updated_at: datetime
     is_published: bool = False
@@ -134,15 +133,15 @@ class BlogPostSummary(BaseModel):
     id: str
     title: str
     slug: str
-    featured_image_url: Optional[str] = None  # URL externa o primera imagen subida
-    images: Optional[List[str]] = None  # URLs de todas las imágenes subidas
-    status: Optional[str] = None
-    published_at: Optional[datetime] = None
+    featured_image_url: str | None = None  # URL externa o primera imagen subida
+    images: list[str] | None = None  # URLs de todas las imágenes subidas
+    status: str | None = None
+    published_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-    author: Optional[BlogPostAuthor] = None
-    category: Optional[BlogPostCategory] = None
-    excerpt: Optional[str] = None  # Primeros caracteres del contenido
+    author: BlogPostAuthor | None = None
+    category: BlogPostCategory | None = None
+    excerpt: str | None = None  # Primeros caracteres del contenido
     
     class Config:
         from_attributes = True
@@ -150,7 +149,7 @@ class BlogPostSummary(BaseModel):
 
 class BlogPostListResponse(BaseModel):
     """Respuesta paginada de lista de posts"""
-    items: List[BlogPostSummary]
+    items: list[BlogPostSummary]
     total: int
     page: int
     limit: int
@@ -159,7 +158,6 @@ class BlogPostListResponse(BaseModel):
 
 class BlogPostDetailResponse(BlogPostResponse):
     """Respuesta detallada de un post individual"""
-    pass
 
 
 # =============================================================================
@@ -168,19 +166,19 @@ class BlogPostDetailResponse(BlogPostResponse):
 
 class BlogImageBase(BaseModel):
     image_code: str = Field(..., max_length=10, description="Código único de la imagen (ej: IMG001)")
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class BlogImageCreate(BaseModel):
     """Schema para crear imagen - el image_code se genera automáticamente si no se proporciona"""
-    description: Optional[str] = None
-    image_code: Optional[str] = Field(None, max_length=10, description="Código opcional. Si no se proporciona, se genera automáticamente")
+    description: str | None = None
+    image_code: str | None = Field(None, max_length=10, description="Código opcional. Si no se proporciona, se genera automáticamente")
 
 
 class BlogImageResponse(BlogImageBase):
     id: str
     blog_post_id: str
-    created_by: Optional[str] = None
+    created_by: str | None = None
     created_at: datetime
     updated_at: datetime
     image_url: str = Field(..., description="URL para obtener la imagen")
@@ -191,7 +189,7 @@ class BlogImageResponse(BlogImageBase):
 
 class BlogImageListResponse(BaseModel):
     """Lista de imágenes de un post"""
-    images: List[BlogImageResponse]
+    images: list[BlogImageResponse]
     total: int
 
 

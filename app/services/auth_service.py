@@ -1,34 +1,37 @@
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 from datetime import timedelta
 
-from app.models.user import User
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.config.logging_config import get_logger, log_error
-from app.schemas.auth import LoginRequest, RegisterRequest, Token
-from app.schemas.user import UserResponse
-from app.core.security import (
-    verify_password, 
-    get_password_hash, 
-    create_access_token, 
-    create_refresh_token,
-    verify_token,
-    generate_verification_token,
-    generate_reset_token,
-    create_url_safe_token,
-    verify_url_safe_token
-)
+from app.config.settings import Settings
 from app.core.exceptions import (
     InvalidCredentialsException,
     UserAlreadyExistsException,
     UserNotFoundException,
 )
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    create_url_safe_token,
+    generate_verification_token,
+    get_password_hash,
+    verify_password,
+    verify_token,
+    verify_url_safe_token,
+)
+from app.models.user import User
+from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.schemas.role import UserRole
-from app.config.settings import Settings
-from app.services.email_service import email_service # Import the service instance
+from app.schemas.user import UserResponse
+from app.services.email_service import email_service  # Import the service instance
 from app.services.source_system_service import source_system_service
-from app.services.source_system_user_creation_service import SourceSystemUserCreationService
+from app.services.source_system_user_creation_service import (
+    SourceSystemUserCreationService,
+)
 from app.utils.timezone import get_ve_now
+
 settings = Settings()
 class AuthService:
     def __init__(self, db: Session):
@@ -90,7 +93,7 @@ class AuthService:
             )
 
             # Send verification email
-            verification_link = f"{settings.FRONTEND_URL}/verify-email/{verification_token}" # Adjust the base URL as needed
+            verification_link = f"{settings.app.FRONTEND_URL}/verify-email/{verification_token}" # Adjust the base URL as needed
             await email_service.send_email(
                 to_email=db_user.email,
                 subject="Verifica tu cuenta en Grupo Drozainka",
@@ -243,7 +246,7 @@ class AuthService:
                 access_token=access_token,
                 refresh_token=refresh_token,
                 token_type="bearer",
-                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                expires_in=settings.jwt.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
                 role=user.role
             )
 
@@ -294,7 +297,7 @@ class AuthService:
                 access_token=access_token,
                 refresh_token=new_refresh_token,
                 token_type="bearer",
-                expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                expires_in=settings.jwt.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
                 role=user.role
             )
         except HTTPException as e:
@@ -380,7 +383,7 @@ class AuthService:
         db.commit()
         
         # Send reset email
-        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+        reset_link = f"{settings.app.FRONTEND_URL}/reset-password?token={reset_token}"
         try:
             await email_service.send_password_reset_email(
                 to_email=user.email,
@@ -502,7 +505,7 @@ class AuthService:
             subject="Verifica tu cuenta en Grupo Drozainka",
             template_name="verify_email.html",
             context={
-                "verification_link": f"{settings.FRONTEND_URL}/verify-email/{user.verification_token}",
+                "verification_link": f"{settings.app.FRONTEND_URL}/verify-email/{user.verification_token}",
                 "year": get_ve_now().year
             }
         )

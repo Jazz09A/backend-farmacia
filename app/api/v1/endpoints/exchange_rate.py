@@ -1,5 +1,7 @@
 from fastapi import APIRouter
+
 from app.services.exchange_service import ExchangeRateService
+
 exchange_service = ExchangeRateService()
 
 router = APIRouter()

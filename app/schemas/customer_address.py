@@ -1,5 +1,6 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Literal
 
 
 class CustomerAddressItem(BaseModel):
@@ -7,14 +8,14 @@ class CustomerAddressItem(BaseModel):
     type: Literal["principal", "entrega", "secundaria"] = Field(..., description="Tipo de dirección")
     label: str = Field(..., description="Etiqueta descriptiva de la dirección")
     address: str = Field(..., description="Dirección completa")
-    city: Optional[str] = Field(None, description="Ciudad")
-    postal_code: Optional[str] = Field(None, description="Código postal")
-    phones: Optional[str] = Field(None, description="Teléfonos de contacto")
-    customer_name: Optional[str] = Field(None, description="Nombre del cliente")
+    city: str | None = Field(None, description="Ciudad")
+    postal_code: str | None = Field(None, description="Código postal")
+    phones: str | None = Field(None, description="Teléfonos de contacto")
+    customer_name: str | None = Field(None, description="Nombre del cliente")
 
 
 class CustomerAddressesResponse(BaseModel):
     """Respuesta con las direcciones del cliente desde Profit Plus"""
     customer_code: str = Field(..., description="Código de cliente (co_cli)")
-    addresses: List[CustomerAddressItem] = Field(..., description="Lista de direcciones disponibles")
+    addresses: list[CustomerAddressItem] = Field(..., description="Lista de direcciones disponibles")
 

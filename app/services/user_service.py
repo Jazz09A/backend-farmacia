@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
+
+from app.config.logging_config import get_logger
 from app.models.user import User
 from app.services.source_system_service import source_system_service
-from app.config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -12,7 +13,7 @@ class UserService:
     def get_user_by_id(self, user_id: str) -> User:
         return self.db.query(User).filter(User.id == user_id).first()
     
-    def get_user_stats_by_id(self, user_id: str, user_email: str = None) -> dict:
+    def get_user_stats_by_id(self, user_id: str, user_email: str | None = None) -> dict:
         """
         Obtiene estadísticas del usuario desde source_system (DEMOA).
         

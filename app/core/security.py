@@ -1,14 +1,15 @@
+import secrets
 from datetime import timedelta
-from typing import Optional, Union
+
 import jwt
+from fastapi import HTTPException, status
 from jwt import ExpiredSignatureError, InvalidTokenError
 from passlib.context import CryptContext
-from fastapi import HTTPException, status
+
+from app.config.logging_config import get_logger
 from app.config.settings import Settings
-import secrets
-from app.utils.timezone import get_ve_now
-from app.config.logging_config import get_logger, log_error
 from app.core.exceptions import FarmaException
+from app.utils.timezone import get_ve_now
 
 logger = get_logger("auth")
 
@@ -25,24 +26,24 @@ def get_password_hash(password: str) -> str:
     """Generate password hash."""
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create JWT access token."""
     to_encode = data.copy()
     if expires_delta:
         expire = get_ve_now() + expires_delta
     else:
-        expire = get_ve_now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = get_ve_now() + timedelta(minutes=settings.jwt.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire, "type": "access"})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.SECRET_KEY, algorithm=settings.jwt.ALGORITHM)
     return encoded_jwt
 
 def create_refresh_token(data: dict) -> str:
     """Create JWT refresh token."""
     to_encode = data.copy()
-    expire = get_ve_now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = get_ve_now() + timedelta(days=settings.jwt.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.SECRET_KEY, algorithm=settings.jwt.ALGORITHM)
     return encoded_jwt
 
 
@@ -79,8 +80,8 @@ def verify_token(token: str, token_type: str = "access") -> str:
     try:
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            settings.jwt.SECRET_KEY,
+            algorithms=[settings.jwt.ALGORITHM],
         )
     except ExpiredSignatureError:
         raise HTTPException(
@@ -93,8 +94,8 @@ def verify_token(token: str, token_type: str = "access") -> str:
             detail="Token inválido o expirado",
         )
 
-    email: Optional[str] = payload.get("sub")
-    token_type_check: Optional[str] = payload.get("type")
+    email: str | None = payload.get("sub")
+    token_type_check: str | None = payload.get("type")
 
     if email is None:
         raise HTTPException(
@@ -123,10 +124,10 @@ def create_url_safe_token(data: dict, expires_hours: int = 24) -> str:
     to_encode = data.copy()
     expire = get_ve_now() + timedelta(hours=expires_hours)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.SECRET_KEY, algorithm=settings.jwt.ALGORITHM)
     return encoded_jwt
 
-def verify_url_safe_token(token: str) -> Union[dict, None]:
+def verify_url_safe_token(token: str) -> dict | None:
     """Verify URL-safe token and return payload.
 
     Returns None on any decoding error (expired or invalid). The caller is
@@ -134,7 +135,7 @@ def verify_url_safe_token(token: str) -> Union[dict, None]:
     public contract of this function (no exception raised) intact.
     """
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.jwt.SECRET_KEY, algorithms=[settings.jwt.ALGORITHM])
         return payload
     except (ExpiredSignatureError, InvalidTokenError):
         return None

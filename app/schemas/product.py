@@ -1,20 +1,22 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Any
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
+
 
 class ProductBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     brand: str = Field(..., min_length=1, max_length=100)
     category: str = Field(..., min_length=1, max_length=100)
-    subcategory: Optional[str] = Field(None, max_length=100)
+    subcategory: str | None = Field(None, max_length=100)
     price: Decimal = Field(..., gt=0, description="Precio en USD (única moneda interna)")
     description: str = Field(..., min_length=10)
-    ingredients: Optional[List[str]] = []
-    image: Optional[str] = Field(None, description="URL de imagen principal (deprecated, use images)")
-    images: Optional[List[str]] = Field(default_factory=list, description="Lista de URLs de imágenes del producto")
+    ingredients: list[str] | None = []
+    image: str | None = Field(None, description="URL de imagen principal (deprecated, use images)")
+    images: list[str] | None = Field(default_factory=list, description="Lista de URLs de imágenes del producto")
     in_stock: bool = True
-    stock: Optional[int] = Field(default=0, ge=0)
+    stock: int | None = Field(default=0, ge=0)
     prescription: bool = False
 
     @field_validator('images', mode='before')
@@ -35,19 +37,19 @@ class ProductCreateInput(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     brand: str = Field(..., min_length=1, max_length=100)
     category: str = Field(..., min_length=1, max_length=100)
-    subcategory: Optional[str] = Field(None, max_length=100)
+    subcategory: str | None = Field(None, max_length=100)
     price: Decimal = Field(..., gt=0, description="Precio en USD")
     description: str = Field(..., min_length=10)
-    ingredients: Optional[List[str]] = []
+    ingredients: list[str] | None = []
     image: str = Field(..., min_length=1, description="URL de imagen principal")
-    images: Optional[List[str]] = []
+    images: list[str] | None = []
     in_stock: bool = True
-    stock: Optional[int] = Field(default=0, ge=0)
+    stock: int | None = Field(default=0, ge=0)
     prescription: bool = False
-    slug: Optional[str] = Field(None, max_length=200)
+    slug: str | None = Field(None, max_length=200)
     featured: bool = False
     is_offer: bool = False
-    original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD para ofertas")
+    original_price: Decimal | None = Field(None, gt=0, description="Precio original en USD para ofertas")
 
     @field_validator('price', 'original_price')
     def validate_prices(cls, v):
@@ -62,10 +64,10 @@ class ProductCreateInput(BaseModel):
         return v
 
 class ProductCreate(ProductBase):
-    slug: Optional[str] = Field(None, max_length=200)
+    slug: str | None = Field(None, max_length=200)
     featured: bool = False
     is_offer: bool = False
-    original_price: Optional[Decimal] = Field(None, gt=0)
+    original_price: Decimal | None = Field(None, gt=0)
 
     @field_validator('slug')
     def validate_slug(cls, v):
@@ -74,21 +76,21 @@ class ProductCreate(ProductBase):
         return v
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    brand: Optional[str] = Field(None, min_length=1, max_length=100)
-    category: Optional[str] = Field(None, min_length=1, max_length=100)
-    subcategory: Optional[str] = Field(None, max_length=100)
-    price: Optional[Decimal] = Field(None, gt=0, description="Precio en USD")
-    description: Optional[str] = Field(None, min_length=10)
-    ingredients: Optional[List[str]] = None
-    image: Optional[str] = Field(None, description="URL de imagen principal (deprecated, use images)")
-    images: Optional[List[str]] = Field(None, description="Lista de URLs de imágenes del producto")
-    in_stock: Optional[bool] = None
-    stock: Optional[int] = Field(None, ge=0)
-    prescription: Optional[bool] = None
-    featured: Optional[bool] = None
-    is_offer: Optional[bool] = None
-    original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD para ofertas")
+    name: str | None = Field(None, min_length=1, max_length=200)
+    brand: str | None = Field(None, min_length=1, max_length=100)
+    category: str | None = Field(None, min_length=1, max_length=100)
+    subcategory: str | None = Field(None, max_length=100)
+    price: Decimal | None = Field(None, gt=0, description="Precio en USD")
+    description: str | None = Field(None, min_length=10)
+    ingredients: list[str] | None = None
+    image: str | None = Field(None, description="URL de imagen principal (deprecated, use images)")
+    images: list[str] | None = Field(None, description="Lista de URLs de imágenes del producto")
+    in_stock: bool | None = None
+    stock: int | None = Field(None, ge=0)
+    prescription: bool | None = None
+    featured: bool | None = None
+    is_offer: bool | None = None
+    original_price: Decimal | None = Field(None, gt=0, description="Precio original en USD para ofertas")
 
 class FlashOfferInfo(BaseModel):
     """Información de flash offer aplicable a un producto"""
@@ -98,9 +100,9 @@ class FlashOfferInfo(BaseModel):
     original_price: float
     offer_price: float
     discount_percentage: float
-    end_time: Optional[str] = None
-    max_quantity: Optional[int] = None
-    remaining_quantity: Optional[int] = None
+    end_time: str | None = None
+    max_quantity: int | None = None
+    remaining_quantity: int | None = None
     
     class Config:
         from_attributes = True
@@ -109,27 +111,27 @@ class FlashOfferInfo(BaseModel):
 class ProfitDiscountInfo(BaseModel):
     """Información de descuento por volumen desde Profit Plus (saDescArticulo)"""
     co_desc: str = Field(..., description="Código del descuento")
-    des_des: Optional[str] = Field(None, description="Descripción del descuento")
+    des_des: str | None = Field(None, description="Descripción del descuento")
     tip_cli: str = Field(..., description="Tipo de cliente")
-    des_tipo: Optional[str] = Field(None, description="Descripción del tipo de cliente")
+    des_tipo: str | None = Field(None, description="Descripción del tipo de cliente")
     
     # Rangos de descuento disponibles
-    ranges: List[Dict[str, Any]] = Field(
+    ranges: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Rangos de cantidad y porcentaje de descuento"
     )
     
     # Información de vigencia
-    fecha_ini: Optional[datetime] = Field(None, description="Fecha de inicio")
-    fecha_fin: Optional[datetime] = Field(None, description="Fecha de fin")
+    fecha_ini: datetime | None = Field(None, description="Fecha de inicio")
+    fecha_fin: datetime | None = Field(None, description="Fecha de fin")
     is_active: bool = Field(True, description="Si el descuento está vigente")
     
     # Mejor descuento aplicable (para cantidad 1)
-    best_discount_percentage: Optional[Decimal] = Field(
+    best_discount_percentage: Decimal | None = Field(
         None,
         description="Mejor porcentaje de descuento disponible"
     )
-    min_quantity_for_discount: Optional[Decimal] = Field(
+    min_quantity_for_discount: Decimal | None = Field(
         None,
         description="Cantidad mínima para obtener descuento"
     )
@@ -141,15 +143,15 @@ class ProductResponse(ProductBase):
     id: str
     rating: Decimal
     is_offer: bool
-    original_price: Optional[Decimal] = None
+    original_price: Decimal | None = None
     featured: bool
-    slug: Optional[str] = None
-    discount_percentage: Optional[Decimal] = Decimal('0.00')
+    slug: str | None = None
+    discount_percentage: Decimal | None = Decimal('0.00')
     current_price: Decimal
     is_available: bool
     created_at: datetime
     updated_at: datetime
-    flash_offer: Optional[FlashOfferInfo] = None
+    flash_offer: FlashOfferInfo | None = None
     
     class Config:
         from_attributes = True
@@ -161,15 +163,15 @@ class ProductSummary(BaseModel):
     brand: str
     category: str
     price: Decimal  # USD únicamente
-    image: Optional[str] = None  # Deprecated, use images
-    images: Optional[List[str]] = Field(default_factory=list)
+    image: str | None = None  # Deprecated, use images
+    images: list[str] | None = Field(default_factory=list)
     rating: Decimal
     in_stock: bool
     prescription: bool
     is_offer: bool
-    discount_percentage: Optional[Decimal] = Decimal('0.00')
+    discount_percentage: Decimal | None = Decimal('0.00')
     featured: bool
-    slug: Optional[str] = None
+    slug: str | None = None
     
     @field_validator('images', mode='before')
     def validate_images(cls, v):
@@ -182,16 +184,16 @@ class ProductSummary(BaseModel):
         from_attributes = True
 
 class ProductSearchFilters(BaseModel):
-    category: Optional[str] = None
-    subcategory: Optional[str] = None
-    brand: Optional[str] = None
-    min_price: Optional[Decimal] = Field(None, ge=0)
-    max_price: Optional[Decimal] = Field(None, ge=0)
-    in_stock: Optional[bool] = None
-    prescription: Optional[bool] = None
-    min_rating: Optional[Decimal] = Field(None, ge=0, le=5)
-    featured: Optional[bool] = None
-    is_offer: Optional[bool] = None
+    category: str | None = None
+    subcategory: str | None = None
+    brand: str | None = None
+    min_price: Decimal | None = Field(None, ge=0)
+    max_price: Decimal | None = Field(None, ge=0)
+    in_stock: bool | None = None
+    prescription: bool | None = None
+    min_rating: Decimal | None = Field(None, ge=0, le=5)
+    featured: bool | None = None
+    is_offer: bool | None = None
     sort_by: str = Field(default='name', description="Campo por el cual ordenar")
     sort_order: str = Field(default='asc', description="Orden: asc o desc")
     page: int = Field(default=1, ge=1)
@@ -218,7 +220,7 @@ class ProductSearchFilters(BaseModel):
         return v
 
 class ProductSearchResponse(BaseModel):
-    products: List[ProductSummary]
+    products: list[ProductSummary]
     total: int
     page: int
     limit: int
@@ -228,13 +230,13 @@ class ProductSearchResponse(BaseModel):
 
 class ProductListResponse(BaseModel):
     """Enhanced paginated response for product listings"""
-    products: List[ProductResponse]
+    products: list[ProductResponse]
     pagination: dict
     filters_applied: dict
     total: int
     
     @classmethod
-    def create(cls, products: List[ProductResponse], total: int, page: int, limit: int, filters: dict = None):
+    def create(cls, products: list[ProductResponse], total: int, page: int, limit: int, filters: dict | None = None):
         total_pages = (total + limit - 1) // limit if total > 0 else 0
         return cls(
             products=products,
@@ -255,7 +257,7 @@ class ProductListResponse(BaseModel):
 class CategoryResponse(BaseModel):
     name: str
     count: int
-    subcategories: Optional[List[dict]] = []
+    subcategories: list[dict] | None = []
 
 class ProductStats(BaseModel):
     total_products: int
@@ -274,22 +276,22 @@ class ProductBulkUploadItem(BaseModel):
     description: str = Field(..., min_length=10)
     
     # Optional fields with defaults
-    brand: Optional[str] = Field(None, max_length=100)
-    category: Optional[str] = Field(None, max_length=100)
-    subcategory: Optional[str] = Field(None, max_length=100)
-    image: Optional[str] = Field(None, min_length=1, description="URL de imagen principal")
-    images: Optional[List[str]] = []
-    ingredients: Optional[List[str]] = []
-    in_stock: Optional[bool] = True
-    stock: Optional[int] = Field(default=0, ge=0)
-    prescription: Optional[bool] = False
-    sku: Optional[str] = Field(None, max_length=50)
-    featured: Optional[bool] = False
-    is_offer: Optional[bool] = False
-    original_price: Optional[Decimal] = Field(None, gt=0, description="Precio original en USD")
+    brand: str | None = Field(None, max_length=100)
+    category: str | None = Field(None, max_length=100)
+    subcategory: str | None = Field(None, max_length=100)
+    image: str | None = Field(None, min_length=1, description="URL de imagen principal")
+    images: list[str] | None = []
+    ingredients: list[str] | None = []
+    in_stock: bool | None = True
+    stock: int | None = Field(default=0, ge=0)
+    prescription: bool | None = False
+    sku: str | None = Field(None, max_length=50)
+    featured: bool | None = False
+    is_offer: bool | None = False
+    original_price: Decimal | None = Field(None, gt=0, description="Precio original en USD")
     
     # Row reference for error reporting
-    row_number: Optional[int] = None
+    row_number: int | None = None
     
     @field_validator('price')
     def validate_price(cls, v):
@@ -319,11 +321,11 @@ class ProductValidationError(BaseModel):
 class ProductBulkUploadResult(BaseModel):
     """Schema for bulk upload results"""
     total_rows: int
-    valid_products: List[ProductBulkUploadItem]
-    validation_errors: List[ProductValidationError]
+    valid_products: list[ProductBulkUploadItem]
+    validation_errors: list[ProductValidationError]
     processed_count: int
     error_count: int
-    warnings: List[str] = []
+    warnings: list[str] = []
     
     @property
     def success_rate(self) -> Decimal:
@@ -333,6 +335,6 @@ class ProductBulkUploadResult(BaseModel):
 
 class ProductRecommendations(BaseModel):
     """Respuesta con productos relacionados y recomendados"""
-    related_products: List[ProductResponse] = Field(default_factory=list, description="Productos relacionados")
-    frequently_bought_together: List[ProductResponse] = Field(default_factory=list, description="Productos frecuentemente comprados juntos")
-    you_may_also_like: List[ProductResponse] = Field(default_factory=list, description="También te pueden interesar") 
+    related_products: list[ProductResponse] = Field(default_factory=list, description="Productos relacionados")
+    frequently_bought_together: list[ProductResponse] = Field(default_factory=list, description="Productos frecuentemente comprados juntos")
+    you_may_also_like: list[ProductResponse] = Field(default_factory=list, description="También te pueden interesar") 

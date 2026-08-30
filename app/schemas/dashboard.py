@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import List, Dict
 from decimal import Decimal
+
+from pydantic import BaseModel
+
 
 class DashboardStats(BaseModel):
     total_revenue: Decimal
@@ -34,12 +35,12 @@ class DiscountBreakdown(BaseModel):
     flash_discounts: int = 0
     coupon_discounts: int = 0
     promotional_discounts: int = 0
-    total_amount_by_type: Dict[str, Decimal] = {}
+    total_amount_by_type: dict[str, Decimal] = {}
     
 class DashboardData(BaseModel):
     stats: DashboardStats
     order_status_summary: OrderStatusSummary
-    recent_orders: List[RecentOrder]
+    recent_orders: list[RecentOrder]
     discount_breakdown: DiscountBreakdown = DiscountBreakdown() 
     
 

@@ -1,12 +1,24 @@
 """
 Endpoints públicos que no requieren autenticación.
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+# from app.utils.timezone import get_ve_now
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
+
 # from sqlalchemy import func, and_, or_, desc, asc
 # from decimal import Decimal
 from app.config.database import get_db
+from app.schemas.blog import (
+    BlogCategoryResponse,
+    BlogPostDetailResponse,
+    BlogPostListResponse,
+    BlogPostSummary,
+)
+from app.services.blog_image_service import BlogImageService
+
 # Product model eliminado - Los artículos vienen de Profit Plus a través de /articles
 # from app.models.product import Product
 # from app.models.user import User
@@ -18,10 +30,6 @@ from app.config.database import get_db
 # from app.core.dependencies import get_optional_current_user
 # from app.services.discount_service import DiscountService
 from app.services.blog_service import BlogService
-from app.services.blog_image_service import BlogImageService
-from app.schemas.blog import BlogPostListResponse, BlogPostDetailResponse, BlogPostSummary, BlogCategoryResponse
-# from app.utils.timezone import get_ve_now
-from fastapi.responses import Response
 
 router = APIRouter(prefix="/public")
 
@@ -52,8 +60,8 @@ async def health_check():
 async def get_blog_posts(
     page: int = Query(1, ge=1, description="Número de página"),
     limit: int = Query(10, ge=1, le=50, description="Elementos por página"),
-    category_slug: Optional[str] = Query(None, description="Filtrar por slug de categoría"),
-    search: Optional[str] = Query(None, description="Buscar en título y contenido"),
+    category_slug: str | None = Query(None, description="Filtrar por slug de categoría"),
+    search: str | None = Query(None, description="Buscar en título y contenido"),
     db: Session = Depends(get_db)
 ):
     """
@@ -200,7 +208,7 @@ async def get_blog_post_by_slug(
     )
 
 
-@router.get("/blog/categories", response_model=List[BlogCategoryResponse])
+@router.get("/blog/categories", response_model=list[BlogCategoryResponse])
 async def get_blog_categories(
     db: Session = Depends(get_db)
 ):

@@ -1,17 +1,18 @@
 import uuid
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.config.logging_config import get_logger
 from app.models.credit_payment import CreditPayment
+
 # Order model eliminado - Order no se usa con Profit Plus
 # from app.models.order import Order
-from app.models.user import User
-from app.config.logging_config import get_logger
 from app.services.currency_service import CurrencyService
 from app.utils.timezone import get_ve_now
+
 
 class CreditPaymentService:
     def __init__(self, db: Session):
@@ -106,7 +107,7 @@ class CreditPaymentService:
         
         return payment
     
-    def approve_payment(self, payment_id: str, admin_id: str, admin_notes: str = None) -> bool:
+    def approve_payment(self, payment_id: str, admin_id: str, admin_notes: str | None = None) -> bool:
         """Aprobar un pago desde el dashboard de admin"""
         
         payment = self.db.query(CreditPayment).filter(CreditPayment.id == payment_id).first()
@@ -154,13 +155,13 @@ class CreditPaymentService:
         
         return True
     
-    def get_order_payments(self, order_id: str) -> List[CreditPayment]:
+    def get_order_payments(self, order_id: str) -> list[CreditPayment]:
         """Obtener todos los pagos de una orden"""
         return self.db.query(CreditPayment).filter(
             CreditPayment.order_id == order_id
         ).order_by(CreditPayment.created_at.desc()).all()
     
-    def get_pending_payments(self) -> List[CreditPayment]:
+    def get_pending_payments(self) -> list[CreditPayment]:
         """Obtener todos los pagos pendientes de aprobación"""
         return self.db.query(CreditPayment).filter(
             CreditPayment.status == "pending"
@@ -168,14 +169,14 @@ class CreditPaymentService:
 
     def get_payments_filtered(
         self,
-        status: Optional[str] = None,
-        user_id: Optional[str] = None,
-        order_id: Optional[str] = None,
-        min_amount: Optional[Decimal] = None,
-        max_amount: Optional[Decimal] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[CreditPayment]:
+        status: str | None = None,
+        user_id: str | None = None,
+        order_id: str | None = None,
+        min_amount: Decimal | None = None,
+        max_amount: Decimal | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[CreditPayment]:
         """
         Obtener pagos con filtros opcionales. Ordena por fecha de creación desc.
         """
@@ -198,22 +199,23 @@ class CreditPaymentService:
 
         return query.order_by(CreditPayment.created_at.desc()).all()
     
-    def get_user_payments(self, user_id: str) -> List[CreditPayment]:
+    def get_user_payments(self, user_id: str) -> list[CreditPayment]:
         """Obtener todos los pagos de un usuario"""
         return self.db.query(CreditPayment).filter(
             CreditPayment.user_id == user_id
         ).order_by(CreditPayment.created_at.desc()).all()
     
-    def get_payment_by_id(self, payment_id: str) -> Optional[CreditPayment]:
+    def get_payment_by_id(self, payment_id: str) -> CreditPayment | None:
         """Obtener un pago por ID"""
         return self.db.query(CreditPayment).filter(CreditPayment.id == payment_id).first()
     
     def _send_payment_registered_email(self, user_id: str, payment: CreditPayment):
         """Enviar email de pago registrado"""
         try:
+            import asyncio
+
             from app.models.user import User
             from app.services.email_service import email_service
-            import asyncio
             
             user = self.db.query(User).filter(User.id == user_id).first()
             if user and user.email:
@@ -246,9 +248,10 @@ class CreditPaymentService:
     def _send_payment_approved_email(self, user_id: str, payment: CreditPayment):
         """Enviar email de pago aprobado"""
         try:
+            import asyncio
+
             from app.models.user import User
             from app.services.email_service import email_service
-            import asyncio
             
             user = self.db.query(User).filter(User.id == user_id).first()
             if user and user.email:
@@ -282,9 +285,10 @@ class CreditPaymentService:
     def _send_payment_rejected_email(self, user_id: str, payment: CreditPayment):
         """Enviar email de pago rechazado"""
         try:
+            import asyncio
+
             from app.models.user import User
             from app.services.email_service import email_service
-            import asyncio
             
             user = self.db.query(User).filter(User.id == user_id).first()
             if user and user.email:

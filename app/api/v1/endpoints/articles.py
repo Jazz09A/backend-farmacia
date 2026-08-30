@@ -1,5 +1,4 @@
 from decimal import Decimal
-from typing import Optional, Dict
 
 from fastapi import (
     APIRouter,
@@ -12,7 +11,9 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy.orm import Session
 
+from app.config.database import get_db
 from app.core.dependencies import (
     PaginationParams,
     get_admin_user,
@@ -20,24 +21,27 @@ from app.core.dependencies import (
     get_optional_current_user,
     get_pagination_params,
 )
-from app.config.database import get_db
 from app.models.user import User
-from sqlalchemy.orm import Session
-from app.schemas.article import ArticleDetail, ArticleListResponse, ImageUploadResponse, ArticleRecommendations, ArticleSummary
+from app.schemas.article import (
+    ArticleDetail,
+    ArticleListResponse,
+    ArticleRecommendations,
+    ArticleSummary,
+    ImageUploadResponse,
+)
 from app.schemas.product_image import (
-    ProductImageUploadResponse,
-    ProductImageResponse,
-    ProductImageListResponse,
-    ProductImageDeleteResponse,
     ProductImageBulkDeleteResponse,
-    SetMainImageResponse,
+    ProductImageDeleteResponse,
     ProductImageFromURL,
+    ProductImageListResponse,
+    ProductImageResponse,
+    ProductImageUploadResponse,
+    SetMainImageResponse,
 )
 from app.services.article_service import article_service
+from app.services.product_image_service import product_image_service
 from app.services.recommendation_service import RecommendationService
 from app.services.source_system_service import source_system_service
-from app.services.product_image_service import product_image_service
-
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png"}
@@ -48,13 +52,13 @@ router = APIRouter()
 @router.get("", response_model=ArticleListResponse)
 async def list_articles(
     pagination: PaginationParams = Depends(get_pagination_params),
-    search: Optional[str] = Query(None, description="Buscar por código o descripción"),
-    line_code: Optional[str] = Query(None, description="Filtrar por línea (co_lin)"),
-    category_code: Optional[str] = Query(
+    search: str | None = Query(None, description="Buscar por código o descripción"),
+    line_code: str | None = Query(None, description="Filtrar por línea (co_lin)"),
+    category_code: str | None = Query(
         None, description="Filtrar por categoría (co_cat)"
     ),
-    min_price: Optional[float] = Query(None, ge=0, description="Precio mínimo"),
-    max_price: Optional[float] = Query(None, ge=0, description="Precio máximo"),
+    min_price: float | None = Query(None, ge=0, description="Precio mínimo"),
+    max_price: float | None = Query(None, ge=0, description="Precio máximo"),
     sort_by: str = Query(
         "art_des",
         description="Campo de ordenamiento: art_des, art_des_desc, price_asc, price_desc, stock_asc, stock_desc",
@@ -160,7 +164,7 @@ async def get_article_recommendations(
     )
     
     # Convertir a ArticleSummary
-    def row_to_summary(row: Dict) -> ArticleSummary:
+    def row_to_summary(row: dict) -> ArticleSummary:
         image_guid = row.get('image_guid')
         image_guid_normalized = None
         if image_guid:
@@ -196,7 +200,7 @@ async def get_article_recommendations(
 async def upload_article_image(
     co_art: str,
     file: UploadFile = File(...),
-    tip: Optional[str] = Form(
+    tip: str | None = Form(
         None,
         description="Código único de la imagen (máx. 6 caracteres). Si no se proporciona, se genera automáticamente (IMG001, IMG002, etc.). Debe ser único para el artículo.",
     ),
@@ -239,7 +243,7 @@ async def upload_article_image(
 @router.get("/images/{image_guid}")
 async def get_article_image(
     image_guid: str,
-    current_user: Optional[User] = Depends(get_optional_current_user),  # Cambiar a opcional
+    current_user: User | None = Depends(get_optional_current_user),  # Cambiar a opcional
 ):
     """
     Devuelve los bytes de una imagen almacenada en saArtImagen.
@@ -280,7 +284,7 @@ async def get_article_image(
         # Capturar otros errores y devolver 500
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener la imagen: {str(e)}",
+            detail=f"Error al obtener la imagen: {e!s}",
         )
 
 
@@ -298,7 +302,7 @@ async def upload_product_image_cloudinary(
     co_art: str,
     file: UploadFile = File(..., description="Archivo de imagen (JPG, PNG, WEBP)"),
     is_main: bool = Form(False, description="Marcar como imagen principal"),
-    description: Optional[str] = Form(None, description="Descripción o alt text de la imagen"),
+    description: str | None = Form(None, description="Descripción o alt text de la imagen"),
     admin_user=Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):

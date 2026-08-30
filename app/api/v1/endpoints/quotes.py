@@ -1,23 +1,23 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status, Query, Request
-from sqlalchemy.orm import Session
-from typing import Optional
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
+
 from app.config.database import get_db
+from app.config.logging_config import get_logger, log_error
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
 from app.schemas.quote import (
-    QuoteCreate,
-    QuoteCreatedResponse,
-    QuoteListResponse,
-    QuoteDetailResponse,
-    QuoteVerifyRequest,
-    QuoteVerifyResponse,
     CartValidationRequest,
     CartValidationResponse,
+    QuoteCreate,
+    QuoteCreatedResponse,
+    QuoteDetailResponse,
+    QuoteListResponse,
+    QuoteVerifyRequest,
+    QuoteVerifyResponse,
 )
 from app.services.quote_service import QuoteService
-from app.config.logging_config import get_logger, log_error
 
 logger = get_logger("orders")
 
@@ -44,8 +44,8 @@ async def verificar_carrito(
     data: CartValidationRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-    price_code: Optional[str] = Query("01", description="Código de lista de precios"),
-    warehouse_code: Optional[str] = Query("001", description="Código de almacén para verificar stock"),
+    price_code: str | None = Query("01", description="Código de lista de precios"),
+    warehouse_code: str | None = Query("001", description="Código de almacén para verificar stock"),
 ):
     """
     Valida un carrito de compras enviado por el frontend.
@@ -122,8 +122,8 @@ async def create_quote(
         # Enviar email de confirmación (no bloquear si falla)
         if current_user.email:
             try:
-                from app.services.email_service import EmailService
                 from app.config.settings import Settings
+                from app.services.email_service import EmailService
                 
                 settings = Settings()
                 email_service = EmailService()
@@ -167,7 +167,7 @@ async def create_quote(
                                 })
                     else:
                         # Fallback: usar datos del payload si no hay items_data (no debería pasar normalmente)
-                        logger.warning(f"[EMAIL DEBUG] No hay items_data disponible, usando fallback con data.items")
+                        logger.warning("[EMAIL DEBUG] No hay items_data disponible, usando fallback con data.items")
                         for item in data.items:
                             unit_price_fallback = item.unit_price if item.unit_price and item.unit_price != 'None' else 'N/A'
                             logger.warning(f"[EMAIL DEBUG] Fallback - Item {item.product_code} -> unit_price: {unit_price_fallback}")
@@ -192,7 +192,7 @@ async def create_quote(
                 expires_at_str = ''
                 if created.expires_at:
                     try:
-                        expires_dt = dt.fromisoformat(created.expires_at.replace('Z', '+00:00'))
+                        expires_dt = dt.fromisoformat(created.expires_at)
                         expires_at_str = expires_dt.strftime('%d/%m/%Y')
                     except:
                         expires_at_str = created.expires_at.split('T')[0] if 'T' in created.expires_at else created.expires_at
@@ -207,7 +207,7 @@ async def create_quote(
                     'total_tax': created.total_tax,
                     'total_gross': created.total_gross,
                     'items': email_items,
-                    'frontend_url': settings.FRONTEND_URL or 'https://farmaplus.com',
+                    'frontend_url': settings.app.FRONTEND_URL or 'https://farmaplus.com',
                     'year': datetime.now().year
                 }
                 
@@ -226,7 +226,7 @@ async def create_quote(
             except Exception as email_error:
                 # No fallar la respuesta si el email falla
                 logger.warning(
-                    f"Error enviando email de cotización a {current_user.email}: {str(email_error)}. "
+                    f"Error enviando email de cotización a {current_user.email}: {email_error!s}. "
                     f"La cotización fue creada exitosamente pero el email no se pudo enviar.",
                     exc_info=True
                 )
@@ -256,7 +256,7 @@ async def create_quote(
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo registrar la cotización en Profit Plus: {str(e)}",
+            detail=f"No se pudo registrar la cotización en Profit Plus: {e!s}",
         ) from e
 
 
@@ -278,9 +278,9 @@ async def get_quote_statuses(
 
 @user_quotes_router.get("", response_model=QuoteListResponse)
 async def list_user_quotes(
-    status: Optional[str] = Query(None, description="pending|accepted|expired|cancelled|converted"),
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
+    status: str | None = Query(None, description="pending|accepted|expired|cancelled|converted"),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     x_source_system: str = Header(..., alias="X-Source-System"),

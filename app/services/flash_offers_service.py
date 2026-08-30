@@ -1,29 +1,29 @@
 """
 Servicio para manejar la lógica de negocio de Flash Offers
 """
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
-from fastapi import HTTPException, status
 from decimal import Decimal
 
-from app.models.promotion import FlashOffer, DiscountType
+from fastapi import HTTPException, status
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+
 from app.models.product import Product
+from app.models.promotion import DiscountType, FlashOffer
 from app.schemas.promotion import (
-    FlashOfferCreate,
-    FlashOfferUpdate,
-    FlashOfferResponse,
     FlashOfferArticleData,
+    FlashOfferCreate,
+    FlashOfferResponse,
+    FlashOfferUpdate,
 )
-from app.utils.timezone import get_ve_now
 from app.services.article_service import ArticleService
 from app.services.source_system_service import source_system_service
+from app.utils.timezone import get_ve_now
 
 
 class FlashOffersService:
     """Servicio para gestionar flash offers."""
     
-    def __init__(self, db: Session, article_service: Optional[ArticleService] = None):
+    def __init__(self, db: Session, article_service: ArticleService | None = None):
         self.db = db
         self.article_service = article_service or ArticleService()
     
@@ -92,7 +92,7 @@ class FlashOffersService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="El precio objetivo debe ser menor al precio del artículo en Profit Plus",
                 )
-            discount_percentage = ((source_price - fixed_price_decimal) / source_price) * Decimal("100")
+            discount_percentage = ((source_price - fixed_price_decimal) / source_price) * Decimal(100)
             payload["discount_type"] = DiscountType.PERCENTAGE 
             payload["discount_value"] = float(discount_percentage.quantize(Decimal("0.01")))
         else:
@@ -112,7 +112,7 @@ class FlashOffersService:
         
         return flash_offer
     
-    def get_flash_offer(self, offer_id: str) -> Optional[FlashOffer]:
+    def get_flash_offer(self, offer_id: str) -> FlashOffer | None:
         """Obtener una flash offer por ID."""
         return self.db.query(FlashOffer).filter(FlashOffer.id == offer_id).first()
     
@@ -122,9 +122,9 @@ class FlashOffersService:
         limit: int = 10,
         active_only: bool = False,
         valid_only: bool = False,
-        product_id: Optional[str] = None,
-        article_code: Optional[str] = None,
-    ) -> tuple[List[FlashOffer], int]:
+        product_id: str | None = None,
+        article_code: str | None = None,
+    ) -> tuple[list[FlashOffer], int]:
         """Obtener lista de flash offers desde Source System (saDescArticulo)."""
         
         # Obtener datos crudos de Profit Plus
@@ -178,7 +178,7 @@ class FlashOffersService:
         
         return flash_offers, total
     
-    def update_flash_offer(self, offer_id: str, update_data: FlashOfferUpdate) -> Optional[FlashOffer]:
+    def update_flash_offer(self, offer_id: str, update_data: FlashOfferUpdate) -> FlashOffer | None:
         """Actualizar una flash offer existente."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
@@ -253,7 +253,7 @@ class FlashOffersService:
         base = FlashOfferResponse.model_validate(flash_offer, from_attributes=True)
         return base.model_copy(update={"article_details": article_details})
 
-    def serialize_flash_offers(self, flash_offers: List[FlashOffer]) -> List[FlashOfferResponse]:
+    def serialize_flash_offers(self, flash_offers: list[FlashOffer]) -> list[FlashOfferResponse]:
         """Enriquece una lista de ofertas con información del source system."""
         return [self.build_flash_offer_response(offer) for offer in flash_offers]
 
@@ -301,8 +301,8 @@ class FlashOffersService:
         discount_percentage = float(flash_offer.discount_value or 0)
         offer_price = (
             original_price
-            * (Decimal("100") - Decimal(str(discount_percentage)))
-            / Decimal("100")
+            * (Decimal(100) - Decimal(str(discount_percentage)))
+            / Decimal(100)
         ).quantize(Decimal("0.01"))
 
         gallery = [img.url for img in getattr(detail, "images", []) if getattr(img, "url", None)]
@@ -336,7 +336,7 @@ class FlashOffersService:
         self.db.commit()
         return True
     
-    def toggle_flash_offer_status(self, offer_id: str) -> Optional[FlashOffer]:
+    def toggle_flash_offer_status(self, offer_id: str) -> FlashOffer | None:
         """Activar/desactivar una flash offer."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
@@ -349,7 +349,7 @@ class FlashOffersService:
         
         return flash_offer
     
-    def get_active_flash_offers_for_article(self, article_code: str) -> List[FlashOffer]:
+    def get_active_flash_offers_for_article(self, article_code: str) -> list[FlashOffer]:
         """Obtener todas las flash offers válidas para un artículo específico."""
         now = get_ve_now()
         normalized_code = (article_code or "").strip().upper()
@@ -372,7 +372,7 @@ class FlashOffersService:
             )
         ).all()
     
-    def increment_usage(self, offer_id: str, quantity: int = 1) -> Optional[FlashOffer]:
+    def increment_usage(self, offer_id: str, quantity: int = 1) -> FlashOffer | None:
         """Incrementar el uso de una flash offer."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
@@ -392,7 +392,7 @@ class FlashOffersService:
         
         return flash_offer
     
-    def get_expired_flash_offers(self) -> List[FlashOffer]:
+    def get_expired_flash_offers(self) -> list[FlashOffer]:
         """Obtener flash offers expiradas."""
         now = get_ve_now()
         return self.db.query(FlashOffer).filter(

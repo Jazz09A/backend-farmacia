@@ -2,16 +2,17 @@
 Sistema de autorización y control de acceso basado en roles.
 """
 from functools import wraps
-from typing import Optional, List
-from fastapi import HTTPException, status, Depends
-from sqlalchemy.orm import Session
-from app.core.dependencies import get_current_active_user, get_db
+
+from fastapi import Depends, HTTPException, status
+
+from app.core.dependencies import get_current_active_user
 from app.models.user import User
+
 
 class RoleChecker:
     """Verificador de roles para endpoints."""
     
-    def __init__(self, required_roles: List[str]):
+    def __init__(self, required_roles: list[str]):
         self.required_roles = required_roles
     
     def __call__(self, current_user: User = Depends(get_current_active_user)):

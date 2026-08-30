@@ -1,17 +1,18 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from typing import List, Optional, Dict, Tuple
+import asyncio
+import io
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import RLock
+
 from fastapi import HTTPException, status
-from app.models.blog import BlogPost, BlogImage
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from app.config.database import SessionLocal
 from app.config.logging_config import get_logger
 from app.config.settings import Settings
-from app.config.database import SessionLocal
-import re
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import io
-import time
-from threading import RLock
+from app.models.blog import BlogImage, BlogPost
 
 logger = get_logger("blog_images")
 settings = Settings()
@@ -31,7 +32,7 @@ class ImageCache:
     """
     
     def __init__(self, max_size_mb: int = 100, ttl_seconds: int = 3600):
-        self._cache: Dict[str, Tuple[bytes, str, float]] = {}  # id -> (data, content_type, timestamp)
+        self._cache: dict[str, tuple[bytes, str, float]] = {}  # id -> (data, content_type, timestamp)
         self._lock = RLock()
         self._max_size_bytes = max_size_mb * 1024 * 1024
         self._current_size = 0
@@ -39,7 +40,7 @@ class ImageCache:
         self._hits = 0
         self._misses = 0
     
-    def get(self, image_id: str) -> Optional[Tuple[bytes, str]]:
+    def get(self, image_id: str) -> tuple[bytes, str] | None:
         """Obtiene imagen del caché. Retorna (data, content_type) o None."""
         with self._lock:
             if image_id in self._cache:
@@ -96,7 +97,7 @@ class ImageCache:
             self._cache.clear()
             self._current_size = 0
     
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> dict:
         """Obtiene estadísticas del caché."""
         with self._lock:
             total = self._hits + self._misses
@@ -128,7 +129,7 @@ class BlogImageService:
         self.db = db
     
     @staticmethod
-    def _validate_image_format(image_bytes: bytes) -> Tuple[str, str]:
+    def _validate_image_format(image_bytes: bytes) -> tuple[str, str]:
         """
         Valida el formato de imagen sin leer todo el archivo.
         Retorna (formato, content_type)
@@ -239,9 +240,9 @@ class BlogImageService:
     def _upload_image_sync(
         blog_post_id: str,
         image_bytes: bytes,
-        description: Optional[str] = None,
-        image_code: Optional[str] = None,
-        created_by: Optional[str] = None,
+        description: str | None = None,
+        image_code: str | None = None,
+        created_by: str | None = None,
         optimize: bool = True
     ) -> BlogImage:
         """
@@ -338,9 +339,9 @@ class BlogImageService:
         self,
         blog_post_id: str,
         image_bytes: bytes,
-        description: Optional[str] = None,
-        image_code: Optional[str] = None,
-        created_by: Optional[str] = None,
+        description: str | None = None,
+        image_code: str | None = None,
+        created_by: str | None = None,
         optimize: bool = True
     ) -> BlogImage:
         """
@@ -363,7 +364,7 @@ class BlogImageService:
         )
         return blog_image
     
-    def get_image_by_id(self, image_id: str) -> Optional[BlogImage]:
+    def get_image_by_id(self, image_id: str) -> BlogImage | None:
         """Obtiene una imagen por su ID."""
         return self.db.query(BlogImage).filter(BlogImage.id == image_id).first()
     
@@ -384,7 +385,7 @@ class BlogImageService:
         return "image/jpeg"
     
     @staticmethod
-    def _get_image_from_db_sync(image_id: str) -> Optional[Tuple[bytes, str]]:
+    def _get_image_from_db_sync(image_id: str) -> tuple[bytes, str] | None:
         """
         Obtiene imagen de la BD de forma síncrona (para ejecutar en thread pool).
         Retorna (image_data, content_type) o None.
@@ -401,7 +402,7 @@ class BlogImageService:
             db.close()
     
     @staticmethod
-    async def get_image_data_async(image_id: str) -> Optional[Tuple[bytes, str]]:
+    async def get_image_data_async(image_id: str) -> tuple[bytes, str] | None:
         """
         Obtiene los datos de una imagen de forma asíncrona.
         Usa caché en memoria para respuestas rápidas.
@@ -439,25 +440,25 @@ class BlogImageService:
         logger.debug(f"Image cache invalidated: {image_id}")
     
     @staticmethod
-    def get_image_cache_stats() -> Dict:
+    def get_image_cache_stats() -> dict:
         """Obtiene estadísticas del caché de imágenes."""
         return _image_cache.get_stats()
     
-    def get_image_by_code(self, blog_post_id: str, image_code: str) -> Optional[BlogImage]:
+    def get_image_by_code(self, blog_post_id: str, image_code: str) -> BlogImage | None:
         """Obtiene una imagen por su código y post ID."""
         return self.db.query(BlogImage).filter(
             BlogImage.blog_post_id == blog_post_id,
             BlogImage.image_code == image_code
         ).first()
     
-    def get_images_by_post(self, blog_post_id: str) -> List[BlogImage]:
+    def get_images_by_post(self, blog_post_id: str) -> list[BlogImage]:
         """Obtiene todas las imágenes de un post."""
         return self.db.query(BlogImage).filter(
             BlogImage.blog_post_id == blog_post_id
         ).order_by(BlogImage.image_code).all()
     
     @staticmethod
-    def get_images_by_posts_batch(db: Session, post_ids: List[str]) -> Dict[str, List[BlogImage]]:
+    def get_images_by_posts_batch(db: Session, post_ids: list[str]) -> dict[str, list[BlogImage]]:
         """
         Obtiene todas las imágenes de múltiples posts en una sola query.
         Retorna un diccionario: post_id -> [imágenes]

@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field
 from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
 
 class CreditInfo(BaseModel):
     """Información de crédito del usuario"""
@@ -15,7 +16,7 @@ class CreditPaymentCreate(BaseModel):
     amount: Decimal = Field(..., gt=0, description="Monto del pago")
     payment_currency: str = Field(default="USD", description="Moneda del pago: 'USD' o 'VES'")
     payment_reference: str = Field(..., min_length=1, description="Referencia del pago")
-    payment_capture_url: Optional[str] = Field(None, description="URL de la captura del pago")
+    payment_capture_url: str | None = Field(None, description="URL de la captura del pago")
 
 class CreditPaymentResponse(BaseModel):
     """Respuesta de pago de crédito (sistema unificado USD)"""
@@ -23,13 +24,13 @@ class CreditPaymentResponse(BaseModel):
     order_id: str
     amount: Decimal  # Monto en USD (después de conversión si era VES)
     payment_currency: str  # Moneda en que pagó el usuario ('USD' o 'VES')
-    exchange_rate_used: Optional[Decimal] = None  # Tasa usada si pagó en VES
+    exchange_rate_used: Decimal | None = None  # Tasa usada si pagó en VES
     payment_reference: str
-    payment_capture_url: Optional[str] = None
+    payment_capture_url: str | None = None
     status: str
     created_at: datetime
-    approved_at: Optional[datetime] = None
-    admin_notes: Optional[str] = None
+    approved_at: datetime | None = None
+    admin_notes: str | None = None
 
     class Config:
         from_attributes = True
@@ -38,13 +39,13 @@ class PaymentApproval(BaseModel):
     """Aprobar o rechazar un pago"""
     payment_id: str
     action: str = Field(..., pattern="^(approve|reject)$", description="Acción: approve o reject")
-    admin_notes: Optional[str] = Field(None, description="Notas del administrador")
+    admin_notes: str | None = Field(None, description="Notas del administrador")
 
 class CreditOrderCreate(BaseModel):
     """Crear orden con crédito"""
     shipping_address_id: str = Field(..., description="ID de la dirección de envío")
     payment_due_days: int = Field(30, ge=1, le=365, description="Días para pagar")
-    customer_notes: Optional[str] = Field(None, description="Notas del cliente")
+    customer_notes: str | None = Field(None, description="Notas del cliente")
 
 class CreditDashboard(BaseModel):
     """Dashboard de crédito para usuario"""
@@ -71,11 +72,11 @@ class CreditOrderItem(BaseModel):
     product_id: str
     product_name: str
     product_brand: str
-    product_image: Optional[str] = None
+    product_image: str | None = None
     quantity: int
     unit_price: Decimal  # USD
     total_price: Decimal  # USD
-    selected_presentation: Optional[str] = None
+    selected_presentation: str | None = None
     
     class Config:
         from_attributes = True
@@ -85,11 +86,11 @@ class CreditOrderAddress(BaseModel):
     street: str
     city: str
     state: str
-    postal_code: Optional[str] = None
+    postal_code: str | None = None
     country: str
     recipient_name: str
     recipient_phone: str
-    delivery_instructions: Optional[str] = None
+    delivery_instructions: str | None = None
     
     class Config:
         from_attributes = True
@@ -100,8 +101,8 @@ class CreditOrderResponse(BaseModel):
     order_number: str
     status: str
     total: Decimal  # USD
-    payment_currency: Optional[str] = "USD"  # Moneda en que pagó
-    exchange_rate: Optional[Decimal] = None  # Tasa si pagó en VES
+    payment_currency: str | None = "USD"  # Moneda en que pagó
+    exchange_rate: Decimal | None = None  # Tasa si pagó en VES
     created_at: datetime
     updated_at: datetime
     
@@ -109,29 +110,29 @@ class CreditOrderResponse(BaseModel):
     credit_amount: Decimal  # USD
     credit_remaining: Decimal  # USD
     credit_paid_total: Decimal  # USD
-    payment_due_date: Optional[datetime] = None
+    payment_due_date: datetime | None = None
     credit_paid: bool
-    credit_payment_date: Optional[datetime] = None
+    credit_payment_date: datetime | None = None
     
     # Información de pago
     payment_status: str
     payment_method: str
     
     # Items de la orden
-    items: List[CreditOrderItem]
+    items: list[CreditOrderItem]
     
     # Dirección de envío
-    shipping_address: Optional[CreditOrderAddress] = None
+    shipping_address: CreditOrderAddress | None = None
     
     # Pagos realizados
-    credit_payments: List[CreditPaymentResponse]
+    credit_payments: list[CreditPaymentResponse]
     
     # Información adicional
     item_count: int
-    customer_notes: Optional[str] = None
-    tracking_number: Optional[str] = None
-    estimated_delivery: Optional[datetime] = None
-    delivered_at: Optional[datetime] = None
+    customer_notes: str | None = None
+    tracking_number: str | None = None
+    estimated_delivery: datetime | None = None
+    delivered_at: datetime | None = None
 
     class Config:
         from_attributes = True

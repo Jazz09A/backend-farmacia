@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
 from app.config.settings import Settings
 
 settings = Settings()
@@ -45,12 +46,6 @@ def create_tables():
     Esto evita sobrescribir accidentalmente un esquema migrado.
     """
     # Import all models to ensure they are registered with Base
-    from app.models import (
-        User, Product, CartItem, Address, UserPreferences,
-        Category, Brand, FlashOffer, PromotionalCode,
-        PromotionUsage, UserFavorite, CreditPayment,
-        BlogPost, BlogCategory, BlogImage, ProductImage
-    )
     inspector = inspect(engine)
     if inspector.get_table_names():
         # BD ya inicializada (probablemente vía Alembic) -> no tocar

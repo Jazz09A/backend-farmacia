@@ -1,31 +1,31 @@
-from typing import List, Optional, Tuple
-from sqlalchemy.orm import Session
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
+from sqlalchemy.orm import Session
+
+from app.config.logging_config import get_logger
 from app.schemas.quote import (
-    QuoteCreate,
-    QuoteCreatedResponse,
-    QuoteVerifyRequest,
-    QuoteVerifyResponse,
-    QuoteVerifyItemResult,
-    QuoteVerifyTotals,
-    QuoteListItem,
-    QuoteListResponse,
-    Pagination,
-    QuoteDetailResponse,
-    QuoteDetailItem,
-    QuoteTotals,
-    QuoteHistoryEvent,
-    QuoteStatus,
+    CartValidationItemResult,
     CartValidationRequest,
     CartValidationResponse,
-    CartValidationItemResult,
     CartValidationTotals,
+    Pagination,
+    QuoteCreate,
+    QuoteCreatedResponse,
+    QuoteDetailItem,
+    QuoteDetailResponse,
+    QuoteHistoryEvent,
+    QuoteListItem,
+    QuoteListResponse,
+    QuoteStatus,
+    QuoteTotals,
+    QuoteVerifyItemResult,
+    QuoteVerifyRequest,
+    QuoteVerifyResponse,
+    QuoteVerifyTotals,
 )
-from app.utils.timezone import get_ve_now, VENEZUELA_TZ
 from app.services.source_system_service import source_system_service
-from app.config.logging_config import get_logger
+from app.utils.timezone import VENEZUELA_TZ, get_ve_now
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ class QuoteService:
     def __init__(self, db: Session):
         self.db = db
     
-    def _get_customer_code_by_email(self, email: str) -> Optional[str]:
+    def _get_customer_code_by_email(self, email: str) -> str | None:
         """
         Obtiene el código de cliente (co_cli) en DEMOA por email.
         
@@ -58,7 +58,7 @@ class QuoteService:
             logger.error(f"Error obteniendo código de cliente por email {email}: {e}")
             return None
     
-    def _determine_status(self, saldo: Decimal, fec_venc: Optional[datetime]) -> str:
+    def _determine_status(self, saldo: Decimal, fec_venc: datetime | None) -> str:
         """
         Determina el estado de una cotización basado en sus campos.
         
@@ -133,7 +133,7 @@ class QuoteService:
         user_id: int,
         payload: QuoteCreate,
         source_system: str,
-        user_email: Optional[str] = None,
+        user_email: str | None = None,
     ) -> QuoteCreatedResponse:
         """
         Inserta cotización en Profit Plus (saCotizacionCliente y saCotizacionClienteReng)
@@ -582,7 +582,7 @@ class QuoteService:
                         if discount_info and discount_info.get('disponibles', 0) > 0:
                             discount_percentage = discount_info['discount_percentage']
                             subtotal_bruto_temp = (cantidad * precio_unit)
-                            monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+                            monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal(100)).quantize(Decimal('0.01'))
                             
                             # Guardar descuento para incrementar después del COMMIT
                             field_to_increment = discount_info.get('field_to_increment', 'campo1')
@@ -832,7 +832,7 @@ class QuoteService:
             art_map = {r.get("co_art"): r.get("art_des") for r in rows} if rows else {}
 
         # Calcular totales (estimados) con IVA 16% sobre precio 0.00 al no tener pricing aquí
-        items_out: List[QuoteVerifyItemResult] = []
+        items_out: list[QuoteVerifyItemResult] = []
         bruto = Decimal('0.00')
         impuestos_total = Decimal('0.00')
         for it in verify_req.items:
@@ -872,8 +872,8 @@ class QuoteService:
         self,
         user_id: int,
         source_system: str,
-        status_filter: Optional[str],
-        date_range: Optional[Tuple[Optional[str], Optional[str]]],
+        status_filter: str | None,
+        date_range: tuple[str | None, str | None] | None,
         page: int,
         page_size: int,
     ) -> QuoteListResponse:
@@ -978,12 +978,10 @@ class QuoteService:
                 # Formatear fechas
                 created_at = quote.get('created_at')
                 expires_at = quote.get('expires_at')
-                if created_at:
-                    if isinstance(created_at, datetime):
-                        created_at = created_at.isoformat()
-                if expires_at:
-                    if isinstance(expires_at, datetime):
-                        expires_at = expires_at.isoformat()
+                if created_at and isinstance(created_at, datetime):
+                    created_at = created_at.isoformat()
+                if expires_at and isinstance(expires_at, datetime):
+                    expires_at = expires_at.isoformat()
                 
                 # Generar quote_id en formato COT-YYYY-XXXXX
                 profit_plus_id = str(quote.get('profit_plus_id', ''))
@@ -1031,7 +1029,7 @@ class QuoteService:
         user_id: int,
         quote_id: str,
         source_system: str,
-    ) -> Optional[QuoteDetailResponse]:
+    ) -> QuoteDetailResponse | None:
         """
         Obtiene el detalle completo de una cotización desde Profit Plus.
         
@@ -1182,7 +1180,7 @@ class QuoteService:
                 expires_at = expires_at.isoformat()
             
             # Historial básico
-            history: List[QuoteHistoryEvent] = [
+            history: list[QuoteHistoryEvent] = [
                 QuoteHistoryEvent(
                     timestamp=created_at or "",
                     event="created",
@@ -1309,7 +1307,7 @@ class QuoteService:
             )
             return False
 
-    def get_statuses(self) -> List[QuoteStatus]:
+    def get_statuses(self) -> list[QuoteStatus]:
         return [
             QuoteStatus(
                 code="pending",
@@ -1445,14 +1443,13 @@ class QuoteService:
                     }
 
         # 3. Obtener código de cliente para consultar descuentos
-        co_cli = None
         if user_email:
             customer_data = self._get_customer_code_by_email(user_email)
             if customer_data:
-                co_cli = customer_data.strip()
+                customer_data.strip()
 
         # 4. Procesar y validar cada item
-        items_verificados: List[CartValidationItemResult] = []
+        items_verificados: list[CartValidationItemResult] = []
         total_bruto = Decimal('0.00')
         total_impuestos = Decimal('0.00')
         total_descuentos = Decimal('0.00')
@@ -1513,7 +1510,7 @@ class QuoteService:
                         if discount_info and discount_info.get('disponibles', 0) > 0:
                             discount_percentage = discount_info['discount_percentage']
                             # Calcular monto de descuento
-                            descuento = (subtotal_bruto * discount_percentage / Decimal('100')).quantize(Decimal('0.01'))
+                            descuento = (subtotal_bruto * discount_percentage / Decimal(100)).quantize(Decimal('0.01'))
                             
                             # Preparar información del descuento para la respuesta
                             descuento_info_dict = {
@@ -1539,7 +1536,7 @@ class QuoteService:
                     # Calcular impuestos usando 16% fijo (IVA estándar) sobre el subtotal después de descuento
                     tasa_impuesto = Decimal('16.00')  # 16% IVA
                     if subtotal > 0:
-                        impuestos = (subtotal * tasa_impuesto / Decimal('100')).quantize(Decimal('0.01'))
+                        impuestos = (subtotal * tasa_impuesto / Decimal(100)).quantize(Decimal('0.01'))
                     else:
                         impuestos = Decimal('0.00')
                     

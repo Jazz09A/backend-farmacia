@@ -1,24 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+
 from app.config.database import get_db
+from app.config.logging_config import get_logger
+from app.core.dependencies import get_current_active_user, get_current_user
+from app.core.rate_limit import limiter
+from app.models.user import User
 from app.schemas.auth import (
-    LoginRequest,
-    RegisterRequest,
-    Token,
-    RefreshTokenRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ResendVerificationRequest,
     AuthResponse,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    Token,
 )
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
-from app.core.dependencies import get_current_active_user, get_current_user
-from app.models.user import User
-from app.config.logging_config import get_logger
 from app.utils.logging_helpers import log_security_event
-from app.core.rate_limit import limiter
 
 router = APIRouter()
 logger = get_logger("auth")
@@ -164,7 +165,7 @@ async def get_current_user_info(
     Retorna el schema apropiado según el tipo de usuario.
     """
     from app.utils.logging_helpers import set_request_context
-    set_request_context(user_id=current_user.id, user_email=current_user.email)
+    set_request_context(user_id=str(current_user.id), user_email=str(current_user.email))
     return AuthService.get_user_info(current_user)
 
 
@@ -224,9 +225,9 @@ async def forgot_password(
     )
     return await AuthService.send_reset_password_email(db, forgot_data.email)
 
-
 @router.post("/reset-password", response_model=AuthResponse)
 async def reset_password(
+    request: Request,
     reset_data: ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
@@ -246,6 +247,7 @@ async def reset_password(
         log_security_event("reset_password_failed", request=request)
         raise
 
+
 @router.post("/change-password", response_model=AuthResponse)
 async def change_password(
     payload: ChangePasswordRequest,
@@ -257,19 +259,19 @@ async def change_password(
     """
     log_security_event(
         "change_password_attempt",
-        user_email=current_user.email,
+        user_email=str(current_user.email),
     )
     try:
         result = await AuthService.change_password(
             db,
-            current_user.id,
+            str(current_user.id),
             payload.current_password,
             payload.new_password,
         )
-        log_security_event("change_password_success", user_email=current_user.email)
+        log_security_event("change_password_success", user_email=str(current_user.email))
         return result
     except HTTPException:
-        log_security_event("change_password_failed", user_email=current_user.email)
+        log_security_event("change_password_failed", user_email=str(current_user.email))
         raise
 
 
@@ -280,7 +282,7 @@ async def logout(
     """
     Cerrar sesión (invalidar token).
     """
-    log_security_event("logout", user_email=current_user.email)
+    log_security_event("logout", user_email=str(current_user.email))
     return AuthResponse(
         message="Sesión cerrada exitosamente",
         success=True

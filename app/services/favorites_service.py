@@ -1,9 +1,11 @@
-from sqlalchemy.orm import Session
+
+from fastapi import HTTPException, status
 from sqlalchemy import and_
+from sqlalchemy.orm import Session
+
 from app.models.favorites import UserFavorite
 from app.models.product import Product
-from typing import List 
-from fastapi import HTTPException, status
+
 
 class FavoritesService:
     """Servicio para manejar operaciones de favoritos"""
@@ -74,7 +76,7 @@ class FavoritesService:
         user_id: str, 
         skip: int = 0, 
         limit: int = 20
-    ) -> tuple[List[UserFavorite], int]:
+    ) -> tuple[list[UserFavorite], int]:
         """Obtener lista de favoritos del usuario con paginación"""
         
         # Query base
@@ -131,7 +133,7 @@ class FavoritesService:
         user_id: str,
         skip: int = 0,
         limit: int = 20
-    ) -> tuple[List[UserFavorite], int]:
+    ) -> tuple[list[UserFavorite], int]:
         """Obtener favoritos con información completa del producto"""
 
         # selectinload evita N+1 al acceder a `favorite.product` en el response.

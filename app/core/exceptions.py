@@ -1,5 +1,7 @@
+from typing import Any
+
 from fastapi import HTTPException, status
-from typing import Any, Dict, Optional
+
 
 class FarmaException(HTTPException):
     """Base exception for FarmaPlus application."""
@@ -8,7 +10,7 @@ class FarmaException(HTTPException):
         self,
         status_code: int,
         detail: str,
-        headers: Optional[Dict[str, Any]] = None,
+        headers: dict[str, Any] | None = None,
     ):
         super().__init__(status_code=status_code, detail=detail, headers=headers)
 

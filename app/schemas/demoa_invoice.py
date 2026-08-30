@@ -1,17 +1,17 @@
 """
 Schemas para facturas y pagos de DEMOA
 """
-from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
 from decimal import Decimal
+
+from pydantic import BaseModel
 
 
 class DEMOAInvoiceResponse(BaseModel):
     """Respuesta de factura DEMOA"""
     invoice_number: str
     emission_date: datetime
-    due_date: Optional[datetime] = None
+    due_date: datetime | None = None
     total_amount: Decimal
     balance: Decimal
     amount_paid: Decimal
@@ -41,7 +41,7 @@ class DEMOAInvoiceItem(BaseModel):
 
 class DEMOAInvoiceDetails(DEMOAInvoiceResponse):
     """Detalles completos de factura con items"""
-    items: List[DEMOAInvoiceItem]
+    items: list[DEMOAInvoiceItem]
     
     class Config:
         from_attributes = True

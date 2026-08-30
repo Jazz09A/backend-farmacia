@@ -1,10 +1,22 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, dashboard, flash_offers, article_discounts
-from app.api.v1.endpoints import quotes
-from app.api.v1.endpoints import exchange_rate
-from app.api.v1.endpoints import articles
-from app.api.v1.endpoints import blog_admin
+from app.api.v1.endpoints import (
+    admin,
+    article_discounts,
+    articles,
+    auth,
+    blog_admin,
+    dashboard,
+    exchange_rate,
+    flash_offers,
+    public,
+    quotes,
+    user,
+)
+
+# Nota FE Fase 1 (aprobada): el frontend no montará crédito ni llamará APIs
+# legacy de orders/quantity-discounts/addresses; flujo comercial = cotizaciones.
+# No reactivar routers de crédito solo por código BE existente sin acuerdo FE/BE.
 api_router = APIRouter()
 
 # =============================================================================

@@ -1,12 +1,13 @@
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-from typing import Optional
+
 from app.config.database import get_db
+from app.config.logging_config import get_logger, log_error
 from app.config.settings import Settings
 from app.core.security import verify_token
 from app.models.user import User
-from app.config.logging_config import get_logger, log_error
 
 logger = get_logger("auth")
 
@@ -113,7 +114,7 @@ async def get_current_verified_user(current_user: User = Depends(get_current_act
 async def get_optional_current_user(
     request: Request,
     db: Session = Depends(get_db)
-) -> Optional[User]:
+) -> User | None:
     """Get current user if authenticated, otherwise return None."""
     try:
         authorization = request.headers.get("authorization")
@@ -142,18 +143,18 @@ async def get_admin_user(current_user: User = Depends(get_current_verified_user)
 
 # Enhanced Pagination dependency with configuration
 class PaginationParams:
-    def __init__(self, page: int = 1, limit: int = None):
+    def __init__(self, page: int = 1, limit: int | None = None):
         # Use settings for default values
         if limit is None:
-            limit = settings.DEFAULT_PAGE_SIZE
+            limit = settings.app.DEFAULT_PAGE_SIZE
             
         self.page = max(1, page)
-        self.limit = min(settings.MAX_PAGE_SIZE, max(settings.MIN_PAGE_SIZE, limit))
+        self.limit = min(settings.app.MAX_PAGE_SIZE, max(settings.app.MIN_PAGE_SIZE, limit))
         self.skip = (self.page - 1) * self.limit
 
 def get_pagination_params(
     page: int = 1, 
-    limit: int = None
+    limit: int | None = None
 ) -> PaginationParams:
     """Get pagination parameters with configurable defaults."""
     return PaginationParams(page, limit) 

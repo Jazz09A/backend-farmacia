@@ -1,15 +1,18 @@
 """
 Servicio para manejo de roles y permisos.
 """
-from typing import Dict, List, Optional
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
 from app.models.user import User
 from app.schemas.role import (
-    UserRoleUpdate, PromotionRequest, RoleInfo, 
-    UserRoleResponse, RolePermissionsResponse, RoleHierarchyResponse
+    RoleHierarchyResponse,
+    RoleInfo,
+    RolePermissionsResponse,
+    UserRoleResponse,
 )
 from app.utils.timezone import get_ve_now
+
 
 class RoleService:
     """Servicio para gestión de roles y permisos."""
@@ -133,7 +136,7 @@ class RoleService:
         promoter: User,
         target_user_id: str,
         new_role: str,
-        justification: str = None
+        justification: str | None = None
     ) -> UserRoleResponse:
         """Promover un usuario a un nuevo rol."""
         
@@ -167,7 +170,6 @@ class RoleService:
             )
         
         # Guardar rol anterior para logging
-        previous_role = target_user.role
         
         # Actualizar rol
         target_user.role = new_role
@@ -190,7 +192,7 @@ class RoleService:
                 is_super_admin=target_user.is_super_admin()
             )
             
-        except Exception as e:
+        except Exception:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -203,7 +205,7 @@ class RoleService:
         demoter: User,
         target_user_id: str,
         new_role: str = "user",
-        reason: str = None
+        reason: str | None = None
     ) -> UserRoleResponse:
         """Degradar un usuario a un rol menor."""
         
@@ -238,7 +240,6 @@ class RoleService:
                 detail="No puedes cambiar tu propio rol"
             )
         
-        previous_role = target_user.role
         target_user.role = new_role
         target_user.updated_at = get_ve_now()
         
@@ -256,7 +257,7 @@ class RoleService:
                 is_super_admin=target_user.is_super_admin()
             )
             
-        except Exception as e:
+        except Exception:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -264,7 +265,7 @@ class RoleService:
             )
     
     @staticmethod
-    def get_users_by_role(db: Session, role: str, skip: int = 0, limit: int = 100) -> List[UserRoleResponse]:
+    def get_users_by_role(db: Session, role: str, skip: int = 0, limit: int = 100) -> list[UserRoleResponse]:
         """Obtiene usuarios filtrados por rol."""
         users = db.query(User).filter(User.role == role).offset(skip).limit(limit).all()
         

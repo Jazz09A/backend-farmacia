@@ -1,8 +1,11 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Index
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
+
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class CartItem(Base):
     __tablename__ = "cart_items"

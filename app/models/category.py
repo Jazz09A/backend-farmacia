@@ -1,8 +1,11 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class Category(Base):
     __tablename__ = "categories"

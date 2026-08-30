@@ -1,19 +1,20 @@
-from typing import Optional
 from decimal import Decimal
-from sqlalchemy.orm import Session, joinedload
+
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.cart import CartItem
 from app.models.product import Product
-from app.schemas.cart import CartResponse, CartItemResponse, CartDiscountsInfo
+from app.schemas.cart import CartDiscountsInfo, CartItemResponse, CartResponse
 from app.schemas.product import ProductSummary
 from app.services.discount_service import DiscountService
+
 
 class CartService:
     def __init__(self, db: Session):
         self.db = db
 
-    def add_item(self, user_id: str, product_id: str, quantity: int, selected_presentation: Optional[str] = None):
+    def add_item(self, user_id: str, product_id: str, quantity: int, selected_presentation: str | None = None):
         """
         Adds a product to the user's cart. If the item already exists, its quantity is updated.
         """
@@ -94,7 +95,7 @@ class CartService:
         self.db.query(CartItem).filter(CartItem.user_id == user_id).delete()
         self.db.commit()
 
-    def get_user_cart(self, user_id: str) -> Optional[CartResponse]:
+    def get_user_cart(self, user_id: str) -> CartResponse | None:
         """
         Retrieves the user's cart with detailed product information and calculated totals.
         SISTEMA UNIFICADO USD: Todo calculado en USD únicamente.

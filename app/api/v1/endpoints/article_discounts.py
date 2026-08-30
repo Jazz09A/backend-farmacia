@@ -1,17 +1,19 @@
-from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from app.services.source_system_service import source_system_service
-from app.schemas.article_discount import (
-    ArticleDiscountCreate,
-    ArticleDiscountResponse,
-    ArticleDiscountListResponse,
-    ArticleDiscountDetail,
-    ArticleDiscountUpdate
-)
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+
 from app.core.dependencies import get_admin_user
 from app.models.user import User
+from app.schemas.article_discount import (
+    ArticleDiscountCreate,
+    ArticleDiscountDetail,
+    ArticleDiscountListResponse,
+    ArticleDiscountResponse,
+    ArticleDiscountUpdate,
+)
+from app.services.source_system_service import source_system_service
+from app.utils.logging_helpers import log_internal_error
 from app.utils.timezone import get_ve_now
-from app.utils.logging_helpers import log_internal_error, new_request_id
 
 router = APIRouter()
 
@@ -83,12 +85,12 @@ def create_article_discount(
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error de validación: {str(ve)}"
+            detail=f"Error de validación: {ve!s}"
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creando descuento: {str(e)}"
+            detail=f"Error creando descuento: {e!s}"
         )
 
 
@@ -112,8 +114,8 @@ def get_valid_customer_types(
 @router.get("/", response_model=ArticleDiscountListResponse)
 def list_article_discounts(
     request: Request,
-    co_art: Optional[str] = Query(None, description="Filtrar por código de artículo"),
-    tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
+    co_art: str | None = Query(None, description="Filtrar por código de artículo"),
+    tip_cli: str | None = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(False, description="Solo descuentos activos"),
     page: int = Query(1, ge=1, description="Número de página"),
     limit: int = Query(50, ge=1, le=100, description="Registros por página"),
@@ -142,7 +144,7 @@ def list_article_discounts(
 def get_article_discounts_by_code(
     request: Request,
     co_art: str,
-    tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
+    tip_cli: str | None = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(True, description="Solo descuentos activos"),
     current_user: User = Depends(get_admin_user),
 ) -> Any:

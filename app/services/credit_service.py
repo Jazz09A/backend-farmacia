@@ -1,21 +1,20 @@
-from sqlalchemy.orm import Session, joinedload
-from app.models.user import User
-# Order model eliminado - Order no se usa con Profit Plus
-# from app.models.order import Order
-from app.models.cart import CartItem
-from app.models.address import Address
-# ShippingZone eliminado - no se usa con Profit Plus
-# from app.models.shipping import ShippingZone
-from fastapi import HTTPException
-from datetime import timedelta
-from app.config.logging_config import get_logger
 # OrderCreate schema eliminado - Order no se usa con Profit Plus
 # from app.schemas.order import OrderCreate
 from decimal import Decimal
 
+# ShippingZone eliminado - no se usa con Profit Plus
+# from app.models.shipping import ShippingZone
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.config.logging_config import get_logger
+
+# Order model eliminado - Order no se usa con Profit Plus
+# from app.models.order import Order
+from app.models.user import User
 from app.services.currency_service import CurrencyService
 from app.services.exchange_service import ExchangeRateService
-from app.utils.timezone import get_ve_now
+
 
 class CreditService:
     def __init__(self, db: Session):

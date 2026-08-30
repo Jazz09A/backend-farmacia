@@ -1,7 +1,9 @@
-from typing import List, Optional, Dict, Any
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
 
 
@@ -10,10 +12,10 @@ class ArticleImageResponse(BaseModel):
 
     guid: str = Field(..., description="RowGUID de la imagen en saArtImagen")
     url: str = Field(..., description="URL pública construida para servir la imagen")
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None, description="Descripción o nombre de la imagen (imagen_des)"
     )
-    tip: Optional[str] = Field(
+    tip: str | None = Field(
         None, description="Tipo de la imagen (campo tip en saArtImagen)"
     )
 
@@ -22,14 +24,14 @@ class ArticlePriceDetail(BaseModel):
     """Detalle de precio por lista (co_precio) para un artículo."""
 
     price_code: str = Field(..., description="Código de lista de precio (co_precio)")
-    price_name: Optional[str] = Field(
+    price_name: str | None = Field(
         None, description="Descripción de la lista de precio (saTipoPrecio)"
     )
     amount: Decimal = Field(..., description="Monto de la lista de precio")
     currency: str = Field(
         "VES", description="Moneda en la que está expresado el precio (co_mone)"
     )
-    desde: Optional[datetime] = Field(
+    desde: datetime | None = Field(
         None, description="Fecha desde la cual es válido el precio (columna desde en saArtPrecio)"
     )
 
@@ -38,7 +40,7 @@ class ArticleStockDetail(BaseModel):
     """Detalle de inventario por almacén para un artículo."""
 
     warehouse_code: str = Field(..., description="Código del almacén (co_alma)")
-    warehouse_name: Optional[str] = Field(
+    warehouse_name: str | None = Field(
         None, description="Descripción del almacén (saAlmacen)"
     )
     quantity: Decimal = Field(..., description="Cantidad disponible (stock)")
@@ -48,10 +50,10 @@ class CloudinaryImageInfo(BaseModel):
     """Información de una imagen almacenada en Cloudinary."""
     id: int = Field(..., description="ID de la imagen en la base de datos")
     cloudinary_url: str = Field(..., description="URL de la imagen en Cloudinary")
-    cloudinary_public_id: Optional[str] = Field(None, description="Public ID en Cloudinary")
+    cloudinary_public_id: str | None = Field(None, description="Public ID en Cloudinary")
     is_main: bool = Field(False, description="Si es la imagen principal")
     display_order: int = Field(0, description="Orden de visualización")
-    description: Optional[str] = Field(None, description="Descripción o alt text")
+    description: str | None = Field(None, description="Descripción o alt text")
 
 
 class ArticleSummary(BaseModel):
@@ -59,42 +61,42 @@ class ArticleSummary(BaseModel):
 
     co_art: str = Field(..., description="Código del artículo (co_art)")
     art_des: str = Field(..., description="Descripción del artículo (art_des)")
-    category_code: Optional[str] = Field(
+    category_code: str | None = Field(
         None, description="Código de categoría (co_cat)"
     )
-    category_name: Optional[str] = Field(
+    category_name: str | None = Field(
         None, description="Descripción de la categoría (cat_des desde saCatArticulo)"
     )
-    price: Optional[Decimal] = Field(
+    price: Decimal | None = Field(
         None, description="Precio de referencia (lista 01) para catálogo"
     )
     currency: str = Field("VES", description="Moneda asociada al precio de referencia")
-    stock: Optional[Decimal] = Field(
+    stock: Decimal | None = Field(
         None, description="Cantidad disponible en el almacén principal"
     )
-    warehouse_code: Optional[str] = Field(
+    warehouse_code: str | None = Field(
         None, description="Almacén base usado para el stock de catálogo"
     )
-    image_url: Optional[str] = Field(
+    image_url: str | None = Field(
         None, description="URL de la imagen principal construida desde rowguid (Profit Plus)"
     )
     has_image: bool = Field(
         False, description="Indica si el artículo tiene al menos una imagen en Profit Plus"
     )
     # Campos de Cloudinary
-    cloudinary_image_url: Optional[str] = Field(
+    cloudinary_image_url: str | None = Field(
         None, description="URL de la imagen principal en Cloudinary (DB local)"
     )
     has_cloudinary_image: bool = Field(
         False, description="Indica si el artículo tiene imagen en Cloudinary"
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None, description="Descripción extendida del producto"
     )
-    flash_offer: Optional[FlashOfferInfo] = Field(
+    flash_offer: FlashOfferInfo | None = Field(
         None, description="Información de flash offer activa para este artículo"
     )
-    profit_discount: Optional[ProfitDiscountInfo] = Field(
+    profit_discount: ProfitDiscountInfo | None = Field(
         None, description="Información de descuento por volumen desde Profit Plus"
     )
 
@@ -105,40 +107,40 @@ class ArticleDetail(BaseModel):
     success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
     co_art: str = Field(..., description="Código del artículo (co_art)")
     art_des: str = Field(..., description="Descripción del artículo (art_des)")
-    modelo: Optional[str] = Field(None, description="Modelo del artículo (modelo)")
-    ref: Optional[str] = Field(None, description="Referencia del artículo (ref)")
-    category_code: Optional[str] = Field(None, description="Código de categoría (co_cat)")
-    category_name: Optional[str] = Field(
+    modelo: str | None = Field(None, description="Modelo del artículo (modelo)")
+    ref: str | None = Field(None, description="Referencia del artículo (ref)")
+    category_code: str | None = Field(None, description="Código de categoría (co_cat)")
+    category_name: str | None = Field(
         None, description="Descripción de la categoría (cat_des desde saCatArticulo)"
     )
-    line_code: Optional[str] = Field(None, description="Código de línea (co_lin)")
-    sub_line_code: Optional[str] = Field(None, description="Código de sub-línea (co_subl)")
-    presentation: Optional[str] = Field(
+    line_code: str | None = Field(None, description="Código de línea (co_lin)")
+    sub_line_code: str | None = Field(None, description="Código de sub-línea (co_subl)")
+    presentation: str | None = Field(
         None, description="Presentación o unidad de empaque (campo adicional)"
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None, description="Descripción extendida del producto"
     )
-    additional_data: Optional[Dict[str, Any]] = Field(
+    additional_data: dict[str, Any] | None = Field(
         default_factory=dict, description="Datos adicionales relevantes del artículo"
     )
-    prices: List[ArticlePriceDetail] = Field(
+    prices: list[ArticlePriceDetail] = Field(
         default_factory=list, description="Listas de precio disponibles"
     )
-    stock_by_warehouse: List[ArticleStockDetail] = Field(
+    stock_by_warehouse: list[ArticleStockDetail] = Field(
         default_factory=list, description="Inventario agrupado por almacén"
     )
-    images: List[ArticleImageResponse] = Field(
+    images: list[ArticleImageResponse] = Field(
         default_factory=list, description="Galería de imágenes del artículo (Profit Plus)"
     )
     # Imágenes de Cloudinary (DB local)
-    cloudinary_images: List[CloudinaryImageInfo] = Field(
+    cloudinary_images: list[CloudinaryImageInfo] = Field(
         default_factory=list, description="Galería de imágenes en Cloudinary (DB local)"
     )
-    flash_offer: Optional[FlashOfferInfo] = Field(
+    flash_offer: FlashOfferInfo | None = Field(
         None, description="Información de flash offer activa para este artículo"
     )
-    profit_discount: Optional[ProfitDiscountInfo] = Field(
+    profit_discount: ProfitDiscountInfo | None = Field(
         None, description="Información de descuento por volumen desde Profit Plus"
     )
 
@@ -147,14 +149,14 @@ class ArticleListResponse(BaseModel):
     """Respuesta paginada para listados de artículos desde Profit Plus."""
 
     success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
-    articles: List[ArticleSummary]
+    articles: list[ArticleSummary]
     total: int
     page: int
     limit: int
     total_pages: int
     has_next: bool = Field(..., description="Indica si existe una página siguiente")
     has_prev: bool = Field(..., description="Indica si existe una página anterior")
-    filters_applied: Dict[str, Any] = Field(
+    filters_applied: dict[str, Any] = Field(
         default_factory=dict, description="Filtros que se aplicaron a la consulta"
     )
 
@@ -171,6 +173,6 @@ class ImageUploadResponse(BaseModel):
 class ArticleRecommendations(BaseModel):
     """Respuesta con artículos relacionados y recomendados"""
     success: bool = Field(default=True, description="Indica si la consulta fue exitosa")
-    related_articles: List[ArticleSummary] = Field(default_factory=list, description="Artículos relacionados")
-    frequently_bought_together: List[ArticleSummary] = Field(default_factory=list, description="Artículos frecuentemente comprados juntos")
-    you_may_also_like: List[ArticleSummary] = Field(default_factory=list, description="También te pueden interesar")
+    related_articles: list[ArticleSummary] = Field(default_factory=list, description="Artículos relacionados")
+    frequently_bought_together: list[ArticleSummary] = Field(default_factory=list, description="Artículos frecuentemente comprados juntos")
+    you_may_also_like: list[ArticleSummary] = Field(default_factory=list, description="También te pueden interesar")

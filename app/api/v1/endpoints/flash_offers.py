@@ -1,22 +1,25 @@
 """
 Endpoints para gestionar Flash Offers
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
-from app.core.dependencies import get_current_user
 from app.core.auth import get_admin_user
+from app.core.dependencies import (
+    PaginationParams,
+    get_current_user,
+    get_pagination_params,
+)
 from app.models.user import User
-from app.services.flash_offers_service import FlashOffersService
 from app.schemas.promotion import (
     FlashOfferCreate,
-    FlashOfferUpdate,
+    FlashOfferListResponse,
     FlashOfferResponse,
-    FlashOfferListResponse
+    FlashOfferUpdate,
 )
-from app.core.dependencies import PaginationParams, get_pagination_params
+from app.services.flash_offers_service import FlashOffersService
 
 router = APIRouter()
 
@@ -42,8 +45,8 @@ async def get_flash_offers(
     pagination: PaginationParams = Depends(get_pagination_params),
     active_only: bool = Query(False, description="Solo ofertas activas"),
     valid_only: bool = Query(False, description="Solo ofertas válidas (activas y en tiempo)"),
-    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto local"),
-    article_code: Optional[str] = Query(None, description="Filtrar por código de artículo (co_art)"),
+    product_id: str | None = Query(None, description="Filtrar por ID de producto local"),
+    article_code: str | None = Query(None, description="Filtrar por código de artículo (co_art)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -74,8 +77,8 @@ async def get_flash_offers(
 @router.get("/flash-offers/public", response_model=FlashOfferListResponse)
 async def get_public_flash_offers(
     pagination: PaginationParams = Depends(get_pagination_params),
-    product_id: Optional[str] = Query(None, description="Filtrar por ID de producto local"),
-    article_code: Optional[str] = Query(None, description="Filtrar por código de artículo (co_art)"),
+    product_id: str | None = Query(None, description="Filtrar por ID de producto local"),
+    article_code: str | None = Query(None, description="Filtrar por código de artículo (co_art)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -193,7 +196,7 @@ async def toggle_flash_offer_status(
     return service.build_flash_offer_response(flash_offer)
 
 
-@router.get("/flash-offers/article/{article_code}/active", response_model=List[FlashOfferResponse])
+@router.get("/flash-offers/article/{article_code}/active", response_model=list[FlashOfferResponse])
 async def get_active_flash_offers_for_article(
     article_code: str,
     db: Session = Depends(get_db)
@@ -258,7 +261,7 @@ async def cleanup_expired_flash_offers(
     }
 
 
-@router.get("/flash-offers/stats/expired", response_model=List[FlashOfferResponse])
+@router.get("/flash-offers/stats/expired", response_model=list[FlashOfferResponse])
 async def get_expired_flash_offers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)

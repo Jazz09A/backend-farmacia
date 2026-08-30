@@ -2,28 +2,38 @@
 Endpoints de administración para gestión de blogs.
 Solo accesibles para usuarios con rol de administrador.
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile, Form
-from sqlalchemy.orm import Session
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.config.database import get_db
 from app.core.auth import get_admin_user
 from app.models.user import User
-from app.services.blog_service import BlogService
-from app.services.blog_image_service import BlogImageService
 from app.schemas.blog import (
-    BlogPostCreate,
-    BlogPostUpdate,
-    BlogPostResponse,
-    BlogPostListResponse,
-    BlogPostSummary,
     BlogCategoryCreate,
-    BlogCategoryUpdate,
     BlogCategoryResponse,
-    BlogImageUploadResponse,
+    BlogCategoryUpdate,
     BlogImageListResponse,
-    BlogImageResponse
+    BlogImageResponse,
+    BlogImageUploadResponse,
+    BlogPostCreate,
+    BlogPostListResponse,
+    BlogPostResponse,
+    BlogPostSummary,
+    BlogPostUpdate,
 )
+from app.services.blog_image_service import BlogImageService
+from app.services.blog_service import BlogService
 
 router = APIRouter(prefix="/admin/blog", tags=["👑 Admin - Blog"])
 
@@ -49,7 +59,7 @@ async def create_blog_category(
     return category
 
 
-@router.get("/categories", response_model=List[BlogCategoryResponse])
+@router.get("/categories", response_model=list[BlogCategoryResponse])
 async def get_all_blog_categories(
     include_deleted: bool = Query(False, description="Incluir categorías eliminadas"),
     current_user: User = Depends(get_admin_user),
@@ -178,9 +188,9 @@ async def create_blog_post(
 async def get_all_blog_posts(
     page: int = Query(1, ge=1, description="Número de página"),
     limit: int = Query(10, ge=1, le=50, description="Elementos por página"),
-    status_filter: Optional[str] = Query(None, description="Filtrar por estado: draft, published, archived"),
-    category_id: Optional[str] = Query(None, description="Filtrar por ID de categoría"),
-    search: Optional[str] = Query(None, description="Buscar en título y contenido"),
+    status_filter: str | None = Query(None, description="Filtrar por estado: draft, published, archived"),
+    category_id: str | None = Query(None, description="Filtrar por ID de categoría"),
+    search: str | None = Query(None, description="Buscar en título y contenido"),
     include_deleted: bool = Query(False, description="Incluir artículos eliminados"),
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
@@ -359,8 +369,8 @@ MAX_IMAGE_SIZE = 6 * 1024 * 1024  # 6 MB
 async def upload_blog_image(
     post_id: str,
     file: UploadFile = File(...),
-    description: Optional[str] = Form(None),
-    image_code: Optional[str] = Form(None, description="Código único opcional (máx. 10 caracteres). Si no se proporciona, se genera automáticamente"),
+    description: str | None = Form(None),
+    image_code: str | None = Form(None, description="Código único opcional (máx. 10 caracteres). Si no se proporciona, se genera automáticamente"),
     optimize: bool = Form(True, description="Optimizar imagen automáticamente (recomendado)"),
     current_user: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
@@ -485,5 +495,4 @@ async def delete_blog_image(
     """
     image_service = BlogImageService(db)
     image_service.delete_image(image_id)
-    return None
 

@@ -1,8 +1,20 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Index, Boolean, LargeBinary
-from sqlalchemy.orm import relationship
-from app.config.database import Base
 import uuid
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 class BlogCategory(Base):
     __tablename__ = "blog_categories"
@@ -75,7 +87,7 @@ class BlogPost(Base):
             'idx_blog_post_published_partial',
             'published_at',
             postgresql_where=(
-                (status == 'published') & (deleted == False)  # noqa: E712
+                (status == 'published') & (deleted == False)
             ),
         ),
     )

@@ -7,16 +7,17 @@ Combina:
 - Integración con códigos de artículos de Profit Plus
 """
 
-from typing import Optional, Dict, Any, List
-from fastapi import HTTPException, UploadFile, status
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from typing import Any
 
-from app.models.product_image import ProductImage
-from app.services.cloudinary_service import cloudinary_service, CloudinaryFolder
-from app.config.logging_config import get_logger
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
+
 from app.config.database import SessionLocal
+from app.config.logging_config import get_logger
+from app.models.product_image import ProductImage
 from app.services.cache_service import cache_service
+from app.services.cloudinary_service import CloudinaryFolder, cloudinary_service
 
 logger = get_logger("product_image_service")
 
@@ -32,7 +33,7 @@ class ProductImageService:
     4. Permite recuperar imágenes por co_art para combinar con datos de Profit
     """
     
-    def __init__(self, db: Optional[Session] = None):
+    def __init__(self, db: Session | None = None):
         """
         Inicializa el servicio.
         
@@ -61,9 +62,9 @@ class ProductImageService:
         co_art: str,
         file: UploadFile,
         is_main: bool = False,
-        description: Optional[str] = None,
-        created_by: Optional[str] = None
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        created_by: str | None = None
+    ) -> dict[str, Any]:
         """
         Sube una imagen de producto a Cloudinary y guarda la referencia en DB.
         
@@ -169,10 +170,10 @@ class ProductImageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error subiendo imagen de producto: {str(e)}")
+            logger.error(f"Error subiendo imagen de producto: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al subir la imagen: {str(e)}"
+                detail=f"Error al subir la imagen: {e!s}"
             )
     
     async def upload_product_image_from_url(
@@ -180,9 +181,9 @@ class ProductImageService:
         co_art: str,
         image_url: str,
         is_main: bool = False,
-        description: Optional[str] = None,
-        created_by: Optional[str] = None
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        created_by: str | None = None
+    ) -> dict[str, Any]:
         """
         Sube una imagen de producto desde URL a Cloudinary.
         
@@ -269,17 +270,17 @@ class ProductImageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error subiendo imagen desde URL: {str(e)}")
+            logger.error(f"Error subiendo imagen desde URL: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al subir la imagen: {str(e)}"
+                detail=f"Error al subir la imagen: {e!s}"
             )
     
     def get_images_by_article(
         self,
         co_art: str,
-        db: Optional[Session] = None
-    ) -> List[Dict[str, Any]]:
+        db: Session | None = None
+    ) -> list[dict[str, Any]]:
         """
         Obtiene todas las imágenes de un artículo.
         
@@ -331,14 +332,14 @@ class ProductImageService:
             return result
             
         except Exception as e:
-            logger.error(f"Error obteniendo imágenes del artículo {co_art}: {str(e)}", exc_info=True)
+            logger.error(f"Error obteniendo imágenes del artículo {co_art}: {e!s}", exc_info=True)
             return []
     
     def get_main_image_by_article(
         self,
         co_art: str,
-        db: Optional[Session] = None
-    ) -> Optional[Dict[str, Any]]:
+        db: Session | None = None
+    ) -> dict[str, Any] | None:
         """
         Obtiene la imagen principal de un artículo.
         
@@ -385,14 +386,14 @@ class ProductImageService:
             }
             
         except Exception as e:
-            logger.error(f"Error obteniendo imagen principal: {str(e)}")
+            logger.error(f"Error obteniendo imagen principal: {e!s}")
             return None
     
     def get_images_by_articles_batch(
         self,
-        co_arts: List[str],
-        db: Optional[Session] = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        co_arts: list[str],
+        db: Session | None = None
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Obtiene imágenes de múltiples artículos en una sola consulta (optimizado).
         
@@ -423,8 +424,8 @@ class ProductImageService:
             ).all()
             
             # Agrupar por co_art
-            result: Dict[str, List[Dict[str, Any]]] = {}
-            order_counter: Dict[str, int] = {}
+            result: dict[str, list[dict[str, Any]]] = {}
+            order_counter: dict[str, int] = {}
             
             for img in images:
                 co_art = img.co_art_profit
@@ -445,14 +446,14 @@ class ProductImageService:
             return result
             
         except Exception as e:
-            logger.error(f"Error en consulta batch de imágenes: {str(e)}")
+            logger.error(f"Error en consulta batch de imágenes: {e!s}")
             return {}
     
     def get_main_images_by_articles_batch(
         self,
-        co_arts: List[str],
-        db: Optional[Session] = None
-    ) -> Dict[str, str]:
+        co_arts: list[str],
+        db: Session | None = None
+    ) -> dict[str, str]:
         """
         Obtiene solo la URL de la imagen principal de múltiples artículos.
         Optimizado para catálogos.
@@ -484,7 +485,7 @@ class ProductImageService:
             ).all()
             
             # Para cada artículo, tomar solo la primera imagen (que será la principal o la primera por ID)
-            result: Dict[str, str] = {}
+            result: dict[str, str] = {}
             for img in images:
                 co_art = img.co_art_profit
                 if co_art not in result:  # Solo tomar la primera
@@ -493,11 +494,11 @@ class ProductImageService:
             return result
             
         except Exception as e:
-            logger.error(f"Error obteniendo imágenes principales batch: {str(e)}")
+            logger.error(f"Error obteniendo imágenes principales batch: {e!s}")
             return {}
     
     @staticmethod
-    def _extract_public_id_from_url(cloudinary_url: str) -> Optional[str]:
+    def _extract_public_id_from_url(cloudinary_url: str) -> str | None:
         """
         Extrae el public_id de una URL de Cloudinary.
         
@@ -524,8 +525,8 @@ class ProductImageService:
     async def delete_image(
         self,
         image_id: int,
-        db: Optional[Session] = None
-    ) -> Dict[str, Any]:
+        db: Session | None = None
+    ) -> dict[str, Any]:
         """
         Elimina una imagen de producto (de Cloudinary y de la DB).
         
@@ -558,7 +559,7 @@ class ProductImageService:
                     await cloudinary_service.delete_image(public_id)
                     cloudinary_deleted = True
                 except Exception as e:
-                    logger.warning(f"No se pudo eliminar de Cloudinary: {str(e)}")
+                    logger.warning(f"No se pudo eliminar de Cloudinary: {e!s}")
             
             co_art = image.co_art_profit
             
@@ -593,17 +594,17 @@ class ProductImageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error eliminando imagen: {str(e)}")
+            logger.error(f"Error eliminando imagen: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al eliminar la imagen: {str(e)}"
+                detail=f"Error al eliminar la imagen: {e!s}"
             )
     
     async def set_main_image(
         self,
         image_id: int,
-        db: Optional[Session] = None
-    ) -> Dict[str, Any]:
+        db: Session | None = None
+    ) -> dict[str, Any]:
         """
         Establece una imagen como principal para su artículo.
         
@@ -666,17 +667,17 @@ class ProductImageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error estableciendo imagen principal: {str(e)}")
+            logger.error(f"Error estableciendo imagen principal: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al actualizar la imagen: {str(e)}"
+                detail=f"Error al actualizar la imagen: {e!s}"
             )
     
     async def delete_all_images_by_article(
         self,
         co_art: str,
-        db: Optional[Session] = None
-    ) -> Dict[str, Any]:
+        db: Session | None = None
+    ) -> dict[str, Any]:
         """
         Elimina todas las imágenes de un artículo.
         
@@ -724,7 +725,7 @@ class ProductImageService:
                 try:
                     cloudinary_result = await cloudinary_service.delete_images_bulk(public_ids)
                 except Exception as e:
-                    logger.warning(f"Error eliminando de Cloudinary: {str(e)}")
+                    logger.warning(f"Error eliminando de Cloudinary: {e!s}")
             
             # Eliminar de la base de datos
             deleted_count = session.query(ProductImage).filter(
@@ -758,10 +759,10 @@ class ProductImageService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error eliminando imágenes del artículo: {str(e)}")
+            logger.error(f"Error eliminando imágenes del artículo: {e!s}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al eliminar las imágenes: {str(e)}"
+                detail=f"Error al eliminar las imágenes: {e!s}"
             )
 
 

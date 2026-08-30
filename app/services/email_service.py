@@ -1,25 +1,26 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.header import Header
-from email.utils import formataddr
-from typing import Dict, Any
-from app.config.settings import Settings
-from app.config.logging_config import get_logger, log_error
 import os
+import smtplib
+from email.header import Header
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+from typing import Any
+
 from jinja2 import Environment, FileSystemLoader
-import socket
+
+from app.config.logging_config import get_logger, log_error
+from app.config.settings import Settings
 from app.utils.timezone import get_ve_now
 
 settings = Settings()
 class EmailService:
     def __init__(self):
-        self.smtp_server = settings.SMTP_HOST
-        self.smtp_port = settings.SMTP_PORT
-        self.smtp_user = settings.SMTP_USER
-        self.smtp_password = settings.SMTP_PASSWORD
-        self.from_email = settings.SMTP_FROM
-        self.from_name = settings.SMTP_FROM_NAME
+        self.smtp_server = settings.smtp.HOST
+        self.smtp_port = settings.smtp.PORT
+        self.smtp_user = settings.smtp.USER
+        self.smtp_password = settings.smtp.PASSWORD
+        self.from_email = settings.smtp.FROM
+        self.from_name = settings.smtp.FROM_NAME
         self.email_logger = get_logger("email")
         self.error_logger = get_logger("errors")
 
@@ -28,12 +29,12 @@ class EmailService:
             loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), '..', 'templates', 'emails'))
         )
 
-    def _render_template(self, template_name: str, context: Dict[str, Any]) -> str:
+    def _render_template(self, template_name: str, context: dict[str, Any]) -> str:
         """Renders an email template with the given context."""
         template = self.template_env.get_template(template_name)
         return template.render(context)
 
-    async def send_email(self, to_email: str, subject: str, template_name: str, context: Dict[str, Any]):
+    async def send_email(self, to_email: str, subject: str, template_name: str, context: dict[str, Any]):
         """
         Sends an email using an HTML template.
         """
@@ -105,7 +106,7 @@ class EmailService:
                         'event': 'email_sent_successfully'
                     }
                 )
-        except (socket.timeout, socket.error, OSError) as e:
+        except (TimeoutError, OSError) as e:
             # Errores de red - logear con más detalles y relanzar el error
             error_details = {
                 'to_email': to_email,
@@ -127,7 +128,7 @@ class EmailService:
                 error_details['error_strerror'] = e.strerror
             
             self.email_logger.error(
-                f"Network error sending email - {type(e).__name__}: {str(e)}",
+                f"Network error sending email - {type(e).__name__}: {e!s}",
                 extra=error_details
             )
             
@@ -193,7 +194,7 @@ class EmailService:
             # Relanzar el error para que el código que llama pueda manejarlo
             raise
 
-    async def send_order_tracking_email(self, to_email: str, order_data: Dict[str, Any]):
+    async def send_order_tracking_email(self, to_email: str, order_data: dict[str, Any]):
         """
         Sends an order tracking email when a customer completes their order successfully.
         
@@ -230,7 +231,7 @@ class EmailService:
             context=context
         )
 
-    async def send_payment_registered_email(self, to_email: str, payment_data: Dict[str, Any]):
+    async def send_payment_registered_email(self, to_email: str, payment_data: dict[str, Any]):
         """Enviar email de pago registrado"""
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
@@ -251,7 +252,7 @@ class EmailService:
             context=context
         )
 
-    async def send_payment_approved_email(self, to_email: str, payment_data: Dict[str, Any]):
+    async def send_payment_approved_email(self, to_email: str, payment_data: dict[str, Any]):
         """Enviar email de pago aprobado"""
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
@@ -273,7 +274,7 @@ class EmailService:
             context=context
         )
 
-    async def send_payment_rejected_email(self, to_email: str, payment_data: Dict[str, Any]):
+    async def send_payment_rejected_email(self, to_email: str, payment_data: dict[str, Any]):
         """Enviar email de pago rechazado"""
         context = {
             "user_name": payment_data.get("user_name", "Usuario"),
@@ -293,7 +294,7 @@ class EmailService:
             context=context
         )
 
-    async def send_verification_email(self, to_email: str, verification_data: Dict[str, Any]):
+    async def send_verification_email(self, to_email: str, verification_data: dict[str, Any]):
         """Enviar email de verificación de correo electrónico"""
         context = {
             "verification_link": verification_data.get("verification_link", "#"),

@@ -3,12 +3,13 @@ Exchange Rate Service
 
 This service handles fetching exchange rates from the BCV API and updating product prices.
 """
-import httpx
 import logging
-from typing import Optional, Dict, Any
 from datetime import timedelta
-from sqlalchemy.orm import Session
+from typing import Any
+
+import httpx
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.models.product import Product
 from app.utils.timezone import get_ve_now
@@ -26,7 +27,7 @@ class ExchangeRateService:
         self._last_fetch = None
         self._cache_duration = timedelta(hours=1)  # Cache for 1 hour
     
-    async def get_exchange_rate(self, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+    async def get_exchange_rate(self, force_refresh: bool = False) -> dict[str, Any] | None:
         """
         Get the current USD to VES exchange rate.
         
@@ -77,7 +78,7 @@ class ExchangeRateService:
             logger.error(f"HTTP error fetching exchange rate: {e.response.status_code}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error fetching exchange rate: {str(e)}")
+            logger.error(f"Unexpected error fetching exchange rate: {e!s}")
             return None
     
     def _is_cache_valid(self) -> bool:
@@ -87,12 +88,12 @@ class ExchangeRateService:
         
         return get_ve_now() - self._last_fetch < self._cache_duration
     
-    def _validate_rate_response(self, data: Dict[str, Any]) -> bool:
+    def _validate_rate_response(self, data: dict[str, Any]) -> bool:
         """Validate the structure of the rate response."""
         required_fields = ["price", "timestamp", "source", "status"]
         return all(field in data for field in required_fields) and isinstance(data["price"], (int, float))
     
-    async def update_all_product_prices(self, db: Session, force_refresh: bool = False) -> Dict[str, Any]:
+    async def update_all_product_prices(self, db: Session, force_refresh: bool = False) -> dict[str, Any]:
         """
         Update all product prices based on the current exchange rate.
         
@@ -147,10 +148,10 @@ class ExchangeRateService:
             
         except Exception as e:
             db.rollback()
-            logger.error(f"Error updating product prices: {str(e)}")
+            logger.error(f"Error updating product prices: {e!s}")
             return {
                 "success": False,
-                "message": f"Error updating product prices: {str(e)}",
+                "message": f"Error updating product prices: {e!s}",
                 "updated_count": 0,
                 "exchange_rate": exchange_rate
             }
@@ -168,7 +169,7 @@ class ExchangeRateService:
         """
         return round(usd_price * exchange_rate, 2)
     
-    async def get_current_rate_for_product_creation(self) -> Optional[float]:
+    async def get_current_rate_for_product_creation(self) -> float | None:
         """
         Get the current exchange rate for product creation.
         Uses cached rate if available, otherwise fetches fresh data.

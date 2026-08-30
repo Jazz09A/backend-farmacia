@@ -6,9 +6,9 @@ que están alojadas en Cloudinary, relacionadas con los artículos
 de Profit Plus mediante el código de artículo (co_art).
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Index, Text
+from sqlalchemy import Boolean, Column, Integer, Text
+
 from app.config.database import Base
-from app.utils.timezone import get_ve_now
 
 
 class ProductImage(Base):

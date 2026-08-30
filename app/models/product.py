@@ -1,10 +1,23 @@
-from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey, Index, Numeric
-from sqlalchemy.orm import relationship
-from app.config.database import Base
-from app.models.types import ArrayType
 import uuid
 from decimal import Decimal
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
+
+from app.config.database import Base
+from app.models.types import ArrayType
 from app.utils.timezone import get_ve_now
+
 
 class Product(Base):
     __tablename__ = "products"

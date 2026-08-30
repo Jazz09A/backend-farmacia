@@ -1,9 +1,10 @@
 """
 Schemas para manejo de roles y permisos.
 """
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List
 from enum import Enum
+
+from pydantic import BaseModel, Field, validator
+
 
 class UserRole(str, Enum):
     """Enum para roles de usuario."""
@@ -17,13 +18,13 @@ class RoleInfo(BaseModel):
     name: str
     level: int
     description: str
-    permissions: List[str]
+    permissions: list[str]
 
 class UserRoleUpdate(BaseModel):
     """Schema para actualizar el rol de un usuario."""
     user_id: str = Field(..., description="ID del usuario")
     new_role: UserRole = Field(..., description="Nuevo rol del usuario")
-    reason: Optional[str] = Field(None, description="Razón para el cambio de rol")
+    reason: str | None = Field(None, description="Razón para el cambio de rol")
     
     @validator('new_role')
     def validate_role(cls, v):
@@ -37,8 +38,8 @@ class RolePermissionsResponse(BaseModel):
     user_id: str
     current_role: str
     role_level: int
-    permissions: List[str]
-    can_promote_to: List[str]
+    permissions: list[str]
+    can_promote_to: list[str]
 
 class UserRoleResponse(BaseModel):
     """Respuesta con información del rol del usuario."""

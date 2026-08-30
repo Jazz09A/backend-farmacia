@@ -3,15 +3,13 @@ Servicio centralizado para manejo de conversiones de moneda.
 Estandariza todas las operaciones entre VES y REF/USD.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from fastapi import HTTPException
-from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
-from app.services.exchange_service import ExchangeRateService
+from sqlalchemy.orm import Session
+
 from app.config.logging_config import get_logger
+from app.services.exchange_service import ExchangeRateService
 
 
 class CurrencyService:
@@ -67,7 +65,7 @@ class CurrencyService:
         amount: Decimal, 
         payment_currency: str, 
         exchange_rate: Decimal
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Convertir un pago a USD (ÚNICA conversión que hace el backend).
         
@@ -164,8 +162,8 @@ class CurrencyService:
         self, 
         amount: Decimal, 
         currency: str, 
-        exchange_rate: Optional[Decimal] = None
-    ) -> Dict[str, Any]:
+        exchange_rate: Decimal | None = None
+    ) -> dict[str, Any]:
         """
         Estandarizar cualquier monto a USD (wrapper de convert_payment_to_usd).
         
@@ -201,10 +199,7 @@ class CurrencyService:
                 return False
             
             # Verificar que no tenga más de 2 decimales
-            if amount.as_tuple().exponent < -2:
-                return False
-            
-            return True
+            return not amount.as_tuple().exponent < -2
             
         except Exception:
             return False
@@ -221,7 +216,7 @@ class CurrencyService:
         """
         return amount.quantize(self.decimal_places, rounding=self.rounding)
     
-    def get_currency_info(self) -> Dict[str, Any]:
+    def get_currency_info(self) -> dict[str, Any]:
         """
         Obtener información sobre las monedas soportadas (sistema unificado USD).
         

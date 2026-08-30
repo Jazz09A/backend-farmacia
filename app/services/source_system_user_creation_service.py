@@ -1,14 +1,17 @@
 import secrets
 import string
-from typing import List, Dict, Any
+from typing import Any
+
 from sqlalchemy.orm import Session
-from app.models.user import User
-from app.core.security import get_password_hash
-from app.services.source_system_service import source_system_service
-from app.services.email_service import email_service
+
 from app.config.logging_config import get_logger
-from app.utils.timezone import get_ve_now
 from app.config.settings import Settings
+from app.core.security import get_password_hash
+from app.models.user import User
+from app.services.email_service import email_service
+from app.services.source_system_service import source_system_service
+from app.utils.timezone import get_ve_now
+
 settings = Settings()
 class SourceSystemUserCreationService:
     """Servicio para crear usuarios desde SourceSystem y enviarles passwords"""
@@ -25,7 +28,7 @@ class SourceSystemUserCreationService:
         self,
         customer_code: str,
         use_alternate_email: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             # Validar que el código de cliente no esté vacío
             if not customer_code or not customer_code.strip():
@@ -38,9 +41,9 @@ class SourceSystemUserCreationService:
             try:
                 source_customer = source_system_service.get_customer_by_code(customer_code)
             except Exception as e:
-                error_msg = f"Error al consultar SourceSystem para el cliente {customer_code}: {str(e)}"
+                error_msg = f"Error al consultar SourceSystem para el cliente {customer_code}: {e!s}"
                 self.logger.error(error_msg)
-                raise ValueError(f"No se pudo verificar el cliente en SourceSystem. Error de conexión: {str(e)}")
+                raise ValueError(f"No se pudo verificar el cliente en SourceSystem. Error de conexión: {e!s}")
             
             if not source_customer:
                 error_msg = f"Cliente {customer_code} no encontrado en SourceSystem. Verifique que el código sea correcto."
@@ -82,8 +85,8 @@ class SourceSystemUserCreationService:
                             "customer_name": customer_name,
                             "email": email,
                             "temporary_password": temp_password,
-                            "login_url": f"{settings.FRONTEND_URL}/login",
-                            "change_password_url": f"{settings.FRONTEND_URL}/change-password",
+                            "login_url": f"{settings.app.FRONTEND_URL}/login",
+                            "change_password_url": f"{settings.app.FRONTEND_URL}/change-password",
                             "year": get_ve_now().year,
                         }
                     )
@@ -146,8 +149,8 @@ class SourceSystemUserCreationService:
                         "customer_name": source_customer.get('customer_name', 'Cliente'),
                         "email": email,
                         "temporary_password": temp_password,
-                        "login_url": f"{settings.FRONTEND_URL}/login",
-                        "change_password_url": f"{settings.FRONTEND_URL}/change-password",
+                        "login_url": f"{settings.app.FRONTEND_URL}/login",
+                        "change_password_url": f"{settings.app.FRONTEND_URL}/change-password",
                         "year": get_ve_now().year,
                     }
                 )
@@ -175,7 +178,7 @@ class SourceSystemUserCreationService:
             }
         except Exception as e:
             self.db.rollback()
-            self.logger.error(f"Error creando usuario desde SourceSystem {customer_code}: {str(e)}")
+            self.logger.error(f"Error creando usuario desde SourceSystem {customer_code}: {e!s}")
             return {
                 "success": False,
                 "error": str(e),
@@ -189,9 +192,9 @@ class SourceSystemUserCreationService:
 
     async def create_multiple_users_from_source_system(
         self,
-        customer_codes: List[str],
+        customer_codes: list[str],
         use_alternate_emails: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         results = {
             "total": len(customer_codes),
             "successful": [],

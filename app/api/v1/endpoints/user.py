@@ -1,40 +1,38 @@
 """
 Endpoints protegidos para usuarios autenticados.
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
 from decimal import Decimal
-from sqlalchemy.orm import Session, joinedload
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
 from app.config.database import get_db
+from app.config.logging_config import get_logger
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
-from app.models.address import Address
-from app.models.cart import CartItem
-from app.schemas.user import UserResponse, UserStats, UserUpdate
 from app.schemas.article import ArticleSummary
+from app.schemas.user import UserResponse, UserStats, UserUpdate
+from app.services.article_service import article_service
 from app.services.recommendation_service import RecommendationService
 from app.services.source_system_service import source_system_service
-from app.services.article_service import article_service
-from app.config.logging_config import get_logger
 
 logger = get_logger(__name__)
-from app.schemas.address import AddressResponse, AddressCreate, AddressUpdate
-from app.schemas.cart import CartResponse, CartItemCreate, CartItemUpdate
+from app.config.logging_config import get_logger
+from app.schemas.cart import CartItemCreate, CartItemUpdate, CartResponse
+from app.schemas.customer_address import CustomerAddressesResponse
+
 # Order schemas eliminados - Order no se usa con Profit Plus
 from app.schemas.demoa_invoice import (
-    DEMOAInvoiceResponse,
     DEMOAInvoiceDetails,
+    DEMOAInvoiceResponse,
     DEMOAInvoiceSummary,
-    DEMOAPaymentResponse
+    DEMOAPaymentResponse,
 )
 from app.services.cart_service import CartService
-# OrderService eliminado - Order no se usa con Profit Plus
-from app.services.discount_service import DiscountService
-from app.services.user_service import UserService
 from app.services.demoa_invoice_service import DEMOAInvoiceService
-from app.services.source_system_service import source_system_service
-from app.schemas.customer_address import CustomerAddressesResponse
-from app.config.logging_config import get_logger, log_error
+
+# OrderService eliminado - Order no se usa con Profit Plus
+from app.services.user_service import UserService
 
 logger = get_logger("orders")
 
@@ -488,7 +486,7 @@ async def get_user_stats(
     user_service = UserService(db)
     return user_service.get_user_stats_by_id(current_user.id, user_email=current_user.email)
 
-@router.get("/recommendations", response_model=List[ArticleSummary], summary="Obtiene artículos recomendados para el usuario")
+@router.get("/recommendations", response_model=list[ArticleSummary], summary="Obtiene artículos recomendados para el usuario")
 async def get_user_recommendations(
     limit: int = Query(12, ge=1, le=50, description="Número máximo de artículos recomendados"),
     price_code: str = Query("01", description="Lista de precio de referencia"),
@@ -574,9 +572,9 @@ async def get_invoices_summary(
     summary = demoa_service.get_invoices_summary(customer_code)
     return DEMOAInvoiceSummary(**summary)
 
-@router.get("/invoices", response_model=List[DEMOAInvoiceResponse])
+@router.get("/invoices", response_model=list[DEMOAInvoiceResponse])
 async def get_all_invoices(
-    status_filter: Optional[str] = Query(None, description="Filtrar por estado: 'pending', 'paid', 'all'"),
+    status_filter: str | None = Query(None, description="Filtrar por estado: 'pending', 'paid', 'all'"),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -603,7 +601,7 @@ async def get_all_invoices(
     # Convertir a respuesta
     return [DEMOAInvoiceResponse(**inv) for inv in invoices]
 
-@router.get("/invoices/pending", response_model=List[DEMOAInvoiceResponse])
+@router.get("/invoices/pending", response_model=list[DEMOAInvoiceResponse])
 async def get_pending_invoices(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -619,7 +617,7 @@ async def get_pending_invoices(
     invoices = demoa_service.get_pending_invoices(customer_code)
     return [DEMOAInvoiceResponse(**inv) for inv in invoices]
 
-@router.get("/invoices/paid", response_model=List[DEMOAInvoiceResponse])
+@router.get("/invoices/paid", response_model=list[DEMOAInvoiceResponse])
 async def get_paid_invoices(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -663,7 +661,7 @@ async def get_invoice_details(
     
     return DEMOAInvoiceDetails(**invoice)
 
-@router.get("/invoices/payments", response_model=List[DEMOAPaymentResponse])
+@router.get("/invoices/payments", response_model=list[DEMOAPaymentResponse])
 async def get_payment_history(
     current_user: User = Depends(get_current_active_user)
 ):

@@ -1,10 +1,23 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
+import enum
+import uuid
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
+
 from app.config.database import Base
 from app.models.types import ArrayType
-import uuid
-import enum
 from app.utils.timezone import get_ve_now
+
 
 class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"
@@ -126,7 +139,7 @@ class PromotionalCode(Base):
         user_usage_count = len([u for u in self.usages if u.user_id == user_id])
         return user_usage_count < self.user_limit
 
-    def calculate_discount(self, order_amount: float, applicable_amount: float = None) -> float:
+    def calculate_discount(self, order_amount: float, applicable_amount: float | None = None) -> float:
         """Calculate discount amount for given order."""
         if applicable_amount is None:
             applicable_amount = order_amount
@@ -207,9 +220,7 @@ class QuantityDiscount(Base):
         """Check if this discount applies to the given quantity."""
         if total_quantity < self.min_quantity:
             return False
-        if self.max_quantity and total_quantity > self.max_quantity:
-            return False
-        return True
+        return not (self.max_quantity and total_quantity > self.max_quantity)
 
     def calculate_discount(self, total_quantity: int, total_amount: float) -> float:
         """Calculate discount amount for given quantity and amount."""
@@ -224,4 +235,3 @@ class QuantityDiscount(Base):
 # Legacy Promotion class for backward compatibility
 class Promotion(FlashOffer):
     """Legacy promotion class - inherits from FlashOffer for backward compatibility."""
-    pass
