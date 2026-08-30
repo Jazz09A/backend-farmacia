@@ -1,14 +1,9 @@
 """
 Configuración global de fixtures para tests.
 
-Esta versión reemplaza el conftest previo que hacía login real contra la BD
-y contra DEMOA (anti-patrón). Ahora los tests usan:
-
-  * SQLite in-memory para la BD local (sin red, sin migraciones reales).
-  * monkeypatch de `app.services.source_system_service.source_system_service`
-    para evitar llamadas a Profit Plus / SQL Server.
-  * fakes deterministas para SMTP / email.
-  * un único `client` (TestClient) con override de `get_db`.
+Esta versión extiende la conftest previa (que cubría tests de auth, roles,
+excepciones, etc.) con fixtures adicionales para los characterization tests
+de los god services (Phase 0 del plan de refactorización).
 
 Las fixtures están diseñadas para que cualquier test pueda ejecutarse sin
 acceder a servicios externos, sin requerir `.env.test` ni variables
@@ -18,8 +13,11 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List, Dict, Any, Optional
 from unittest.mock import MagicMock
+from contextlib import contextmanager
+from decimal import Decimal
+from datetime import datetime
 
 # Directorio raíz del proyecto (donde está main.py)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -122,6 +120,12 @@ def db() -> Generator[Session, None, None]:
         Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture
+def db_session(db):
+    """Alias de `db` para compatibilidad con tests del plan de refactorización."""
+    return db
+
+
 # =============================================================================
 # APP + CLIENT FIXTURES
 # =============================================================================
@@ -202,6 +206,64 @@ class FakeEmailService:
         return True
 
 
+class FakeCursor:
+    """Fake cursor for testing pymssql interactions."""
+    def __init__(self, results: list[dict[str, Any]] = None):
+        self._results = results or []
+        self._index = 0
+        self._closed = False
+        self._last_query = ""
+        self._last_params = ()
+        self.rowcount = 0
+
+    def execute(self, query: str, params: tuple = ()) -> None:
+        self._last_query = query
+        self._last_params = params
+        self._index = 0
+        self.rowcount = len(self._results)
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._results
+
+    def fetchone(self) -> dict[str, Any] | None:
+        if self._index < len(self._results):
+            result = self._results[self._index]
+            self._index += 1
+            return result
+        return None
+
+    def close(self) -> None:
+        self._closed = True
+
+    @property
+    def last_query(self) -> str:
+        return self._last_query
+
+    @property
+    def last_params(self) -> tuple:
+        return self._last_params
+
+
+class FakeConnection:
+    """Fake connection for testing pymssql interactions."""
+    def __init__(self, cursor_results: list[dict[str, Any]] = None):
+        self._cursor_results = cursor_results or []
+        self._closed = False
+        self._in_transaction = False
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self._cursor_results)
+
+    def commit(self) -> None:
+        self._in_transaction = False
+
+    def rollback(self) -> None:
+        self._in_transaction = False
+
+    def close(self) -> None:
+        self._closed = True
+
+
 class FakeSourceSystemService:
     """Sustituye a `app.services.source_system_service.source_system_service`.
 
@@ -214,6 +276,9 @@ class FakeSourceSystemService:
         self.customers: dict[str, dict] = {}
         self.articles: dict[str, dict] = {}
         self.health_status: dict = {"status": "healthy", "latency_ms": 1.0}
+        # Control de conexiones para tests
+        self._fake_connections: dict[str, FakeConnection] = {}
+        self._next_conn_id = 0
 
     def get_customer_by_email(self, email: str):
         return self.customers.get(email.lower())
@@ -223,6 +288,42 @@ class FakeSourceSystemService:
 
     def health_check(self):
         return self.health_status
+
+    def get_pool_stats(self):
+        return {
+            "pool_size": 15,
+            "max_overflow": 10,
+            "available": 15,
+            "in_use": 0,
+        }
+
+    def get_pooled_connection(self):
+        """Retorna una fake connection para tests."""
+        conn_id = f"conn_{self._next_conn_id}"
+        self._next_conn_id += 1
+        conn = FakeConnection()
+        self._fake_connections[conn_id] = conn
+        return conn
+
+    def return_connection(self, conn):
+        """No-op para fake connection."""
+        pass
+
+    def dispose(self):
+        self._fake_connections.clear()
+
+    # Métodos que delegan a source_system_service real para tests de integración
+    def get_articles_catalog(self, **kwargs):
+        return {"items": [], "total": 0}
+
+    def get_flash_offers_paginated(self, skip=0, limit=10, article_code=None):
+        return [], 0
+
+    def get_article_discount(self, article_code: str, quantity=None, existing_cursor=None):
+        return None
+
+    def increment_discount_usage(self, co_desc: str, quantity_used: int, field_name: str = "campo1", existing_cursor=None):
+        pass
 
     # Stubs genéricos para métodos que no necesitamos cubrir en los
     # tests de auth/roles/exceptions/modelo. Si un test específico
@@ -364,3 +465,223 @@ def super_admin_headers(super_admin_user, make_token) -> dict:
 @pytest.fixture
 def settings() -> Settings:
     return Settings()
+
+
+# =============================================================================
+# PHASE 0 - CHARACTERIZATION TEST FIXTURES (God Services Refactor)
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances between tests to ensure isolation."""
+    from threading import Lock
+    from app.services.source_system_service import SourceSystemService
+    from app.services.cache_service import CacheService
+    
+    # Save original lock to restore after
+    original_sss_lock = SourceSystemService._instance_lock
+    original_cache_lock = getattr(CacheService, "_instance_lock", None)
+    
+    SourceSystemService._instance = None
+    SourceSystemService._instance_lock = Lock()
+    
+    if original_cache_lock is not None:
+        CacheService._instance = None
+        CacheService._instance_lock = Lock()
+    
+    yield
+    
+    # Cleanup after test
+    SourceSystemService._instance = None
+    SourceSystemService._instance_lock = original_sss_lock
+    if original_cache_lock is not None:
+        CacheService._instance = None
+        CacheService._instance_lock = original_cache_lock
+
+
+class FakeCursor:
+    """Fake cursor for testing pymssql interactions."""
+    def __init__(self, results: List[Dict[str, Any]] = None):
+        self._results = results or []
+        self._index = 0
+        self._closed = False
+        self._last_query = ""
+        self._last_params = ()
+        self.rowcount = 0
+
+    def execute(self, query: str, params: tuple = ()) -> None:
+        self._last_query = query
+        self._last_params = params
+        self._index = 0
+        self.rowcount = len(self._results)
+
+    def fetchall(self) -> List[Dict[str, Any]]:
+        return self._results
+
+    def fetchone(self) -> Optional[Dict[str, Any]]:
+        if self._index < len(self._results):
+            result = self._results[self._index]
+            self._index += 1
+            return result
+        return None
+
+    def close(self) -> None:
+        self._closed = True
+
+    @property
+    def last_query(self) -> str:
+        return self._last_query
+
+    @property
+    def last_params(self) -> tuple:
+        return self._last_params
+
+
+class FakeConnection:
+    """Fake connection for testing pymssql interactions."""
+    def __init__(self, cursor_results: List[Dict[str, Any]] = None):
+        self._cursor_results = cursor_results or []
+        self._closed = False
+        self._in_transaction = False
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self._cursor_results)
+
+    def commit(self) -> None:
+        self._in_transaction = False
+
+    def rollback(self) -> None:
+        self._in_transaction = False
+
+    def close(self) -> None:
+        self._closed = True
+
+
+class FakePymssql:
+    """Mock pymssql module for testing."""
+    def __init__(self):
+        self._connections = []
+        self.OperationalError = Exception
+        self.ProgrammingError = Exception
+        self.IntegrityError = Exception
+
+    def connect(self, **kwargs) -> FakeConnection:
+        conn = FakeConnection()
+        self._connections.append(conn)
+        return conn
+
+
+@pytest.fixture
+def fake_pymssql(monkeypatch):
+    """Mock pymssql with controllable fake connections and cursors."""
+    fake = FakePymssql()
+    monkeypatch.setattr("pymssql.connect", fake.connect)
+    monkeypatch.setattr("pymssql.OperationalError", fake.OperationalError)
+    monkeypatch.setattr("pymssql.ProgrammingError", fake.ProgrammingError)
+    monkeypatch.setattr("pymssql.IntegrityError", fake.IntegrityError)
+    return fake
+
+
+@pytest.fixture
+def fake_cursor():
+    """Create a fake cursor with configurable results."""
+    return FakeCursor()
+
+
+@pytest.fixture
+def fake_connection(fake_cursor):
+    """Create a fake connection with a fake cursor."""
+    conn = FakeConnection()
+    conn.cursor = lambda: fake_cursor
+    return conn
+
+
+@pytest.fixture
+def sample_customer():
+    """Sample customer data from Profit Plus (saCliente)."""
+    return {
+        "customer_code": "CLI001",
+        "customer_name": "Cliente de Prueba C.A.",
+        "email": "cliente@test.com",
+        "alternate_email": "alt@test.com",
+        "rif": "J-12345678-9",
+        "phones": "0212-555-0000",
+        "address1": "Av. Principal, Edificio Test, Piso 1",
+        "address2": "Oficina 101",
+        "tip_cli": "001",
+        "inactive": 0,
+        "is_juridico": True,
+        "registration_date": datetime(2023, 1, 15, 10, 30),
+    }
+
+
+@pytest.fixture
+def sample_article():
+    """Sample article data from Profit Plus (saArticulo)."""
+    return {
+        "co_art": "ART001",
+        "art_des": "Artículo de Prueba",
+        "ref": "REF-001",
+        "co_lin": "001",
+        "co_subl": "001",
+        "co_cat": "CAT001",
+        "category_name": "Categoría Test",
+        "tipo": "P",
+        "fecha_reg": datetime(2023, 1, 1),
+        "modelo": "MODELO-001",
+    }
+
+
+@pytest.fixture
+def sample_quote():
+    """Sample quote data from Profit Plus (saCotizacionCliente)."""
+    return {
+        "doc_num": "0000000001",
+        "co_cli": "CLI001",
+        "cli_des": "Cliente de Prueba C.A.",
+        "fec_emis": datetime(2024, 1, 15, 10, 30),
+        "fec_venc": datetime(2024, 2, 14, 10, 30),
+        "total_neto": Decimal("1160.00"),
+        "saldo": Decimal("1160.00"),
+        "co_mone": "VES",
+        "currency_name": "Bolívares",
+        "status": "0",
+        "anulado": 0,
+    }
+
+
+@pytest.fixture
+def sample_cart_items():
+    """Sample cart items for validation tests."""
+    return [
+        {"co_art": "ART001", "cantidad": 2},
+        {"co_art": "ART002", "cantidad": 1},
+    ]
+
+
+@pytest.fixture
+def juridico_payload():
+    """Sample registration payload for juridico user."""
+    return {
+        "email": "newuser@example.com",
+        "password": "Password1",
+        "user_type": "juridico",
+        "phone": "+584121234567",
+        "first_name": "Test",
+        "last_name": "User",
+        "company_name": "Test Company C.A.",
+        "rif": "J-12345678-9",
+    }
+
+
+# Markers for test categorization
+pytestmark = [
+    pytest.mark.asyncio,
+]
+
+
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line("markers", "unit: Unit tests (no external dependencies)")
+    config.addinivalue_line("markers", "integration: Integration tests (require DB/external services)")
+    config.addinivalue_line("markers", "slow: Slow running tests")
