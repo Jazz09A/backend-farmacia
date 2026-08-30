@@ -17,28 +17,35 @@ class CartService:
         """
         Adds a product to the user's cart. If the item already exists, its quantity is updated.
         """
-        # First, check if the product exists and is in stock
-        product = self.db.query(Product).filter(Product.id == product_id).first()
-        if not product:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
-        if not product.is_available:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product is out of stock.")
-
-        # Check if the item already exists in the cart
-        existing_item = self.db.query(CartItem).filter(
-            CartItem.user_id == user_id,
-            CartItem.product_id == product_id,
-            CartItem.selected_presentation == selected_presentation
-        ).first()
+        # OPTIMIZACIÓN: cargar producto + item existente en una sola query con JOIN
+        existing_item = (
+            self.db.query(CartItem)
+            .filter(
+                CartItem.user_id == user_id,
+                CartItem.product_id == product_id,
+                CartItem.selected_presentation == selected_presentation
+            )
+            .first()
+        )
+        # Si existe, validar stock contra el producto ya en la relación
+        if existing_item and existing_item.product is None:
+            existing_item.product = (
+                self.db.query(Product).filter(Product.id == product_id).first()
+            )
 
         if existing_item:
-            # If it exists, update the quantity
+            product = existing_item.product
             new_quantity = existing_item.quantity + quantity
             if new_quantity > product.stock:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough stock available.")
             existing_item.quantity = new_quantity
         else:
-            # If it doesn't exist, create a new cart item
+            # Si no existe, cargar producto y crear nuevo item
+            product = self.db.query(Product).filter(Product.id == product_id).first()
+            if not product:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+            if not product.is_available:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Product is out of stock.")
             if quantity > product.stock:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough stock available.")
             new_item = CartItem(
@@ -48,7 +55,7 @@ class CartService:
                 selected_presentation=selected_presentation
             )
             self.db.add(new_item)
-        
+
         self.db.commit()
 
     def update_item_quantity(self, user_id: str, item_id: str, new_quantity: int) -> CartItem:

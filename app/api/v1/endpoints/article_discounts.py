@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from app.services.source_system_service import source_system_service
 from app.schemas.article_discount import (
     ArticleDiscountCreate,
@@ -11,8 +11,22 @@ from app.schemas.article_discount import (
 from app.core.dependencies import get_admin_user
 from app.models.user import User
 from app.utils.timezone import get_ve_now
+from app.utils.logging_helpers import log_internal_error, new_request_id
 
 router = APIRouter()
+
+
+def _internal_error(request: Request, exc: Exception, op: str) -> HTTPException:
+    """Helper: loggea el error internamente y devuelve 500 genérico al cliente."""
+    tracking_id = log_internal_error(
+        request, exc,
+        context={"operation": op, "module": "article_discounts"},
+    )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="No se pudo completar la operación. Intente nuevamente o contacte a soporte.",
+        headers={"X-Tracking-ID": tracking_id},
+    )
 
 @router.post("/", response_model=ArticleDiscountResponse)
 def create_article_discount(
@@ -92,14 +106,12 @@ def get_valid_customer_types(
             "customer_types": valid_types
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo tipos de cliente: {str(e)}"
-        )
+        raise _internal_error(request, e, "list_valid_tip_cli")
 
 
 @router.get("/", response_model=ArticleDiscountListResponse)
 def list_article_discounts(
+    request: Request,
     co_art: Optional[str] = Query(None, description="Filtrar por código de artículo"),
     tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(False, description="Solo descuentos activos"),
@@ -119,18 +131,16 @@ def list_article_discounts(
             page=page,
             limit=limit
         )
-        
+
         return ArticleDiscountListResponse(**result)
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo descuentos: {str(e)}"
-        )
+        raise _internal_error(request, e, "list_article_discounts")
 
 
 @router.get("/{co_art}", response_model=ArticleDiscountListResponse)
 def get_article_discounts_by_code(
+    request: Request,
     co_art: str,
     tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(True, description="Solo descuentos activos"),
@@ -148,18 +158,16 @@ def get_article_discounts_by_code(
             page=1,
             limit=100
         )
-        
+
         return ArticleDiscountListResponse(**result)
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo descuentos del artículo {co_art}: {str(e)}"
-        )
+        raise _internal_error(request, e, "get_article_discounts_by_code")
 
 
 @router.get("/code/{co_desc}", response_model=ArticleDiscountDetail)
 def get_article_discount_detail(
+    request: Request,
     co_desc: str,
     current_user: User = Depends(get_admin_user),
 ) -> Any:
@@ -213,20 +221,18 @@ def get_article_discount_detail(
             is_active = False
             
         discount['is_active'] = is_active
-        
+
         return ArticleDiscountDetail(**discount)
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo detalle del descuento {co_desc}: {str(e)}"
-        )
+        raise _internal_error(request, e, "get_article_discount_detail")
 
 
 @router.put("/code/{co_desc}", response_model=dict)
 def update_article_discount(
+    request: Request,
     co_desc: str,
     discount_in: ArticleDiscountUpdate,
     current_user: User = Depends(get_admin_user),
@@ -255,14 +261,11 @@ def update_article_discount(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="No se pudo actualizar el descuento"
             )
-            
+
         return {"success": True, "message": "Descuento actualizado exitosamente", "co_desc": co_desc}
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error actualizando descuento {co_desc}: {str(e)}"
-        )
+        raise _internal_error(request, e, "update_article_discount")
 

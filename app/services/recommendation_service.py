@@ -401,9 +401,15 @@ class RecommendationService:
                                 purchased_categories.add(row.get('co_cat').strip())
                             if row.get('co_art'):
                                 purchased_articles.add(row.get('co_art').strip())
-                        
+
                         if purchased_categories:
-                            category_list = list(purchased_categories)
+                            # Sanitizar categorías: máximo 50 chars, alfanumérico/guion/espacio
+                            category_list = [
+                                c[:50] for c in purchased_categories
+                                if c and all(ch.isalnum() or ch in '- _' for ch in c)
+                            ]
+                            if not category_list:
+                                category_list = []
                             category_placeholders = ",".join(["%s"] * len(category_list))
                             
                             category_query = f"""
@@ -449,10 +455,17 @@ class RecommendationService:
                                     AND (stock_data.stock > 0 OR stock_data.stock IS NULL)
                             """
                             
-                            # Excluir artículos ya comprados
+                            # Excluir artículos ya comprados (validados: max 30 chars alfanuméricos)
                             if purchased_articles:
-                                article_placeholders = ",".join(["%s"] * len(purchased_articles))
-                                category_query += f" AND a.co_art NOT IN ({article_placeholders})"
+                                safe_purchased = [
+                                    a[:30] for a in purchased_articles
+                                    if a and all(ch.isalnum() or ch in '-_' for ch in a)
+                                ]
+                                if safe_purchased:
+                                    article_placeholders = ",".join(["%s"] * len(safe_purchased))
+                                    category_query += f" AND a.co_art NOT IN ({article_placeholders})"
+                                    params.extend(safe_purchased)
+                                    purchased_articles = set(safe_purchased)
                             
                             category_query += """
                                 ORDER BY ap.price DESC
@@ -519,7 +532,12 @@ class RecommendationService:
                     params = [price_code, warehouse_code]
                     
                     if recommended:
-                        recommended_codes = [(row.get('co_art') or '').strip() for row in recommended if row.get('co_art')]
+                        recommended_codes = [
+                            (row.get('co_art') or '').strip()[:30]
+                            for row in recommended
+                            if row.get('co_art')
+                            and all(ch.isalnum() or ch in '-_' for ch in (row.get('co_art') or '').strip())
+                        ]
                         if recommended_codes:
                             recommended_placeholders = ",".join(["%s"] * len(recommended_codes))
                             popular_query += f" AND a.co_art NOT IN ({recommended_placeholders})"

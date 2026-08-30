@@ -288,17 +288,17 @@ class SourceSystemService:
         self.logger = get_logger("source_system")
         
         # Limpiar espacios en blanco de todos los parámetros
-        self.server = settings.SOURCE_SYSTEM_SERVER.strip() if settings.SOURCE_SYSTEM_SERVER else None
-        self.port = settings.SOURCE_SYSTEM_PORT
-        self.database = settings.SOURCE_SYSTEM_DATABASE.strip() if settings.SOURCE_SYSTEM_DATABASE else None
-        self.user = settings.SOURCE_SYSTEM_USER.strip() if settings.SOURCE_SYSTEM_USER else None
-        self.password = settings.SOURCE_SYSTEM_PASSWORD.strip() if settings.SOURCE_SYSTEM_PASSWORD else None
+        self.server = settings.source_system.SYSTEM_SERVER.strip() if settings.source_system.SYSTEM_SERVER else None
+        self.port = settings.source_system.SYSTEM_PORT
+        self.database = settings.source_system.SYSTEM_DATABASE.strip() if settings.source_system.SYSTEM_DATABASE else None
+        self.user = settings.source_system.SYSTEM_USER.strip() if settings.source_system.SYSTEM_USER else None
+        self.password = settings.source_system.SYSTEM_PASSWORD.strip() if settings.source_system.SYSTEM_PASSWORD else None
         
         # Configuración del pool desde settings
-        pool_size = getattr(settings, 'SOURCE_POOL_SIZE', 15)
-        max_overflow = getattr(settings, 'SOURCE_MAX_OVERFLOW', 10)
-        pool_timeout = getattr(settings, 'SOURCE_POOL_TIMEOUT', 30)
-        pool_recycle = getattr(settings, 'SOURCE_POOL_RECYCLE', 300)
+        pool_size = settings.source_system.POOL_SIZE
+        max_overflow = settings.source_system.MAX_OVERFLOW
+        pool_timeout = settings.source_system.POOL_TIMEOUT
+        pool_recycle = settings.source_system.POOL_RECYCLE
         
         # Crear pool de conexiones mejorado
         self._pool = ConnectionPool(
@@ -600,12 +600,18 @@ class SourceSystemService:
                 self.return_connection(conn)
 
     def get_customer_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        # Cache de 5 minutos para evitar hammering del SQL Server en login/autoprovision
+        from app.services.cache_service import cache_service
+        cache_key = f"source:customer:by_email:{email.lower().strip()}"
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached if cached != "__NULL__" else None
         conn = None
         try:
             conn = self.get_pooled_connection()
             cursor = conn.cursor()
             query = """
-            SELECT 
+            SELECT
                 co_cli AS customer_code,
                 cli_des AS customer_name,
                 email,
@@ -623,6 +629,7 @@ class SourceSystemService:
             cursor.execute(query, (email, email))
             customer = cursor.fetchone()
             cursor.close()
+            cache_service.set(cache_key, customer if customer else "__NULL__", ttl=300)
             return customer
         except Exception as e:
             self.logger.error(f"Error obteniendo cliente | email={email} | error={e}")

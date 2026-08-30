@@ -69,6 +69,15 @@ class BlogPost(Base):
         Index('idx_blog_post_deleted_category_created', 'deleted', 'category_id', 'created_at'),
         # Índice para búsquedas: deleted + title (para búsquedas en título)
         Index('idx_blog_post_deleted_title', 'deleted', 'title'),
+        # Índice parcial para listado público: solo posts publicados y no eliminados
+        # Acelera dramáticamente las queries más frecuentes (catálogo público)
+        Index(
+            'idx_blog_post_published_partial',
+            'published_at',
+            postgresql_where=(
+                (status == 'published') & (deleted == False)  # noqa: E712
+            ),
+        ),
     )
     
     def __repr__(self):

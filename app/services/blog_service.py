@@ -106,7 +106,7 @@ class BlogService:
         if not trimmed:
             return None
         
-        base_api = settings.API_URL.rstrip('/')
+        base_api = settings.app.API_URL.rstrip('/')
         
         # URL externa
         if trimmed.startswith('http') and not trimmed.startswith(base_api):
@@ -573,19 +573,31 @@ class BlogService:
         # Construir condiciones WHERE
         where_conditions = []
         params = {}
-        
+
         # Filtrar eliminados si no se incluyen
         if not include_deleted:
             where_conditions.append("bp.deleted = :deleted")
             params['deleted'] = False
-        
-        # Filtrar por estado
+
+        # Filtrar por estado (validado contra whitelist)
         if status_filter:
+            _ALLOWED_STATUSES = {"draft", "published", "archived"}
+            if status_filter not in _ALLOWED_STATUSES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Estado inválido: {status_filter}",
+                )
             where_conditions.append("bp.status = :status_filter")
             params['status_filter'] = status_filter
-        
-        # Filtrar por categoría
+
+        # Filtrar por categoría (UUID-like, validado por regex)
         if category_id:
+            import re as _re
+            if not _re.fullmatch(r"[0-9a-fA-F-]{8,64}", category_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="ID de categoría inválido",
+                )
             where_conditions.append("bp.category_id = :category_id")
             params['category_id'] = category_id
         
@@ -595,25 +607,32 @@ class BlogService:
             params['search'] = f"%{search}%"
         
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-        
+
+        # Sanitización defensiva: la where_clause se construye solo con literales
+        # controlados arriba, pero validamos que no contenga caracteres peligrosos
+        # por si en el futuro se agrega un parámetro controlado por el usuario.
+        forbidden = [";", "--", "/*", "*/", "'", "\"", "\\"]
+        if any(token in where_clause for token in forbidden):
+            raise ValueError("Invalid WHERE clause constructed (security check)")
+
         # Query para contar total (optimizado - solo cuenta IDs)
         count_query = text(f"""
             SELECT COUNT(*) as total
             FROM blog_posts bp
             WHERE {where_clause}
         """)
-        
+
         result = self.db.execute(count_query, params)
         total = result.scalar() or 0
-        
+
         # Query principal optimizada con JOINs - SIN cargar content completo
         # Solo cargamos los primeros 500 caracteres para el excerpt
         offset = (page - 1) * limit
         params['offset'] = offset
         params['limit'] = limit
-        
+
         main_query = text(f"""
-            SELECT 
+            SELECT
                 bp.id,
                 bp.title,
                 bp.slug,
