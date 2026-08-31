@@ -137,6 +137,8 @@ class AppSettings(BaseSettings):
     PROJECT_NAME: str = "FarmaPlus API"
     VERSION: str = "1.0.0"
     DEBUG: bool = True
+    APP_ENV: str = "development"
+    CSP_POLICY: str | None = None
     API_URL: str = "http://localhost:8000"
     FRONTEND_URL: str | None = "http://localhost:5173"
     ALLOWED_ORIGINS: str = "http://localhost:5173"

@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/dashboard", response_model=DashboardData)
 def read_dashboard_data(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_admin_user),
     time_range: int = Query(7, ge=1, le=365, description="Número de días para el rango de fechas (1-365)")
 ):
     """

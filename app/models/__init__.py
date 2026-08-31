@@ -8,7 +8,6 @@ from .cart import CartItem
 # ShippingZone eliminado - no se usa con Profit Plus
 # from .shipping import ShippingZone
 from .category import Brand, Category
-from .credit_payment import CreditPayment
 from .favorites import UserFavorite
 from .product import Product
 from .product_image import ProductImage
@@ -36,7 +35,6 @@ __all__ = [
     "CartItem",
     # "ShippingZone",  # Eliminado - no se usa con Profit Plus
     "Category",
-    "CreditPayment",
     "DiscountType",
     "FlashOffer",
     "Product",

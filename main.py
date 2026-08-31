@@ -136,6 +136,48 @@ app.add_middleware(
 )
 
 # ============================================================================
+# MIDDLEWARE: Security headers (CSP, X-Content-Type-Options, etc.)
+# ============================================================================
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """
+    Añade cabeceras de seguridad a TODAS las responses:
+    - X-Content-Type-Options: nosniff
+    - X-Frame-Options: DENY
+    - Referrer-Policy: strict-origin-when-cross-origin
+    - Permissions-Policy: restrictivo por defecto
+    - Content-Security-Policy: permisivo (endurecer tras revisar consola del FE)
+    - Strict-Transport-Security: solo en producción (HSTS no debe enviarse en localhost)
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "geolocation=(), microphone=(), camera=(), payment=()",
+    )
+    if not settings.app.CSP_POLICY:
+        csp = (
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https:; "
+            "font-src 'self' https: data:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
+            "style-src 'self' 'unsafe-inline' https:; "
+            "frame-ancestors 'none';"
+        )
+        response.headers.setdefault("Content-Security-Policy", csp)
+    else:
+        response.headers.setdefault("Content-Security-Policy", settings.app.CSP_POLICY)
+    if getattr(settings.app, "APP_ENV", "development") == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=63072000; includeSubDomains",
+        )
+    return response
+
+# ============================================================================
 # MIDDLEWARE GLOBAL: request_id, access log, performance header
 # ============================================================================
 @app.middleware("http")
@@ -319,6 +361,56 @@ async def health_check():
         "success": True
     }
 
+@app.get("/api/v1/health/live")
+async def health_live():
+    """Liveness probe: el proceso responde. No toca dependencias externas."""
+    return {"status": "alive"}
+
+
+@app.get("/api/v1/health/ready")
+async def health_ready():
+    """
+    Readiness probe: BD local + DEMOA (Profit Plus) responden.
+    Retorna 503 si alguna dependencia crítica falla.
+    """
+    from sqlalchemy import text
+
+    from app.config.database import engine
+    from app.services.source_system_service import source_system_service
+
+    checks: dict = {}
+    overall_ok = True
+
+    # BD local
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = {"status": "ok"}
+    except Exception as exc:
+        overall_ok = False
+        checks["database"] = {"status": "error", "error": str(exc)[:200]}
+
+    # DEMOA (Profit Plus / SourceSystem)
+    try:
+        source_health = source_system_service.health_check()
+        source_ok = source_health.get("status") == "healthy"
+        checks["source_system"] = source_health
+        if not source_ok:
+            overall_ok = False
+    except Exception as exc:
+        overall_ok = False
+        checks["source_system"] = {"status": "error", "error": str(exc)[:200]}
+
+    status_code = 200 if overall_ok else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if overall_ok else "not_ready",
+            "checks": checks,
+            "version": settings.app.VERSION,
+        },
+    )
+
 @app.get("/health/db")
 async def health_check_database():
     """
@@ -348,24 +440,31 @@ async def api_info():
         "description": "API Backend para FarmaPlus - Sistema de farmacia online",
         "endpoints": {
             "auth": "/api/v1/auth",
-            "products": "/api/v1/products",
-            "cart": "/api/v1/cart",
-            "orders": "/api/v1/orders",
-            "users": "/api/v1/users",
-            "reviews": "/api/v1/reviews",
-            "tracking": "/api/v1/orders/{order_id}/tracking"
+            "public": "/api/v1/public",
+            "user": "/api/v1/user",
+            "quotes": "/api/v1/quotes",
+            "user_quotes": "/api/v1/user/quotes",
+            "articles": "/api/v1/articles",
+            "admin": "/api/v1/admin",
+            "dashboard": "/api/v1/admin/dashboard",
+            "flash_offers": "/api/v1/admin/flash-offers",
+            "article_discounts": "/api/v1/admin/article-discounts",
+            "exchange_rate": "/api/v1/exchange_rate",
+            "blog_admin": "/api/v1/admin/blog",
+        },
+        "health": {
+            "live": "/api/v1/health/live",
+            "ready": "/api/v1/health/ready",
         },
         "features": [
             "Autenticación JWT",
-            "Gestión de productos",
-            "Carrito de compras",
-            "Sistema de pedidos",
-            "Reseñas y calificaciones",
+            "Gestión de artículos (Profit Plus)",
+            "Cotizaciones (checkout → Profit Plus)",
             "Gestión de usuarios",
             "Múltiples monedas (VES/USD)",
-            "URLs obfuscadas para productos",
+            "URLs obfuscadas para artículos",
             "Búsqueda avanzada",
-            "Sistema de categorías"
+            "Sistema de categorías y marcas",
         ],
         "success": True
     }

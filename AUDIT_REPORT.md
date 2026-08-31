@@ -421,7 +421,7 @@ Múltiples `try/except` sin `finally` que devuelva la conexión al pool. Si una 
 | **R10** | Implementar `AsyncSession` para SQLAlchemy local + `asyncio.to_thread` para pymssql, o migrar a `pyodbc` async | Performance | L | 🟠 P1 | ⏳ Backlog |
 | **R11** | Refactorizar `source_system_service.py` en 4-5 repositorios (`CustomerRepository`, `ArticleRepository`, `QuoteRepository`, `DiscountRepository`, `ImageRepository`) | Mantenibilidad | XL | 🟠 P1 | ✅ **PARCIAL** (Phase 1: protocolos + 6 implementaciones creadas; falta Phase 2: delegar desde source_system_service) |
 | **R12** | Implementar blacklist de tokens JWT en logout (Redis o tabla `revoked_tokens`) | Security | M | 🟠 P1 | ⏳ Backlog |
-| **R13** | Agregar `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` middleware | Security headers | S | 🟠 P1 | ⏳ Backlog |
+| **R13** | Agregar `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` middleware | Security headers | S | 🟠 P1 | ✅ **DONE** (P0+P1 sprint 2026-08-30, commit 92fc6d7) |
 | **R14** | Auditoría de queries N+1: `joinedload`/`selectinload` en `cart_items`, `favorites`, `credit_payments`, `addresses` | Performance | M | 🟠 P1 | 🔄 **Parcial** (favorites ✅) |
 | **R15** | Migrar scripts sueltos de `migrations/` a `alembic/versions/` y eliminar archivos obsoletos | Versionado | M | 🟠 P1 | 🔄 **Archivado** (no migrado a Alembic) |
 | **R16** | Activar `pool_pre_ping` y `pool_recycle` correctamente en `create_engine`; usar `QueuePool` con `pool_size` y `max_overflow` de settings | Estabilidad DB | S | 🟠 P1 | ✅ **DONE** (non-SQLite) |
@@ -436,7 +436,7 @@ Múltiples `try/except` sin `finally` que devuelva la conexión al pool. Si una 
 | **R25** | Implementar idempotency keys en `POST /quotes` y `POST /source-system/create-users` | Idempotencia | M | 🟡 P2 | ⏳ Backlog |
 | **R26** | Documentar el contrato de Profit Plus en un README técnico (qué tablas, qué columnas, qué assumptions) | DX, mantenimiento | M | 🟡 P2 | ⏳ Backlog |
 | **R27** | Implementar tracing distribuido (OpenTelemetry) — el sistema ya tiene `request_id` en logs | Observabilidad | M | 🟡 P2 | ⏳ Backlog |
-| **R28** | Health checks: `/health` es trivial; agregar readiness (DB local + DEMOA) y liveness separados | Operabilidad | S | 🟡 P2 | ⏳ Backlog |
+| **R28** | Health checks: `/health` es trivial; agregar readiness (DB local + DEMOA) y liveness separados | Operabilidad | S | 🟡 P2 | ✅ **DONE** (P0+P1 sprint 2026-08-30: `/api/v1/health/live` + `/api/v1/health/ready`) |
 | **R29** | Adoptar `structlog` en lugar de `logging` stdlib para unificar JSON | Consistencia | S | 🟢 P3 | ⏳ Backlog |
 | **R30** | Considerar `pyproject.toml` solo, lockfile con `uv`, eliminar `requirements.txt` | Tooling | S | 🟢 P3 | 🔄 **Parcial** |
 | **R31** | Internacionalización: actualmente todo hardcodeado en español. Usar `gettext` si se requiere multi-idioma | i18n | L | 🟢 P3 | ⏳ Backlog |
@@ -661,9 +661,10 @@ Múltiples `try/except` sin `finally` que devuelva la conexión al pool. Si una 
 | Sprint | Estado | Comentario |
 |--------|--------|------------|
 | Sprint 0 (Seguridad) | 8/8 ✅ | T1 (rotación Gmail) pendiente de acción del usuario |
-| Sprint 1 (Tests + CI) | 6/6 ✅ | 246 tests passing, CI con ruff/pytest/bandit |
+| Sprint 1 (Tests + CI) | 6/6 ✅ | 260 tests passing, CI con ruff/pytest/bandit |
 | Sprint 2 (Estabilidad) | 6/6 ✅ | pool_pre_ping, N+1 audit, rate limit, context manager |
 | Sprint 3 (Refactor) | 3/6 ✅ | T1 (Repository Layer) ✅, T2 (Settings) ✅, T6 (Dead code) ✅ — T3,T4,T5 canceladas para sesiones dedicadas |
+| **Sprint P0+P1 (2026-08-30)** | **5/5 ✅** | Commit `92fc6d7`: R13 (security headers), R28 (health checks live/ready), dashboard authz fix, Credit module removal, requirements.txt cleanup |
 
 ### Plan de Refactorización de God Services (Phase 0+1 COMPLETADAS)
 
@@ -689,14 +690,39 @@ Basado en esta auditoría, se creó un plan operativo detallado en `~/.local/sha
 
 **Sprint 2 (Estabilidad):** R9 (context manager pymssql) ✅, R10 (pool_pre_ping) ✅, R14 (N+1 audit) parcial, R16 (config pool) ✅, R22 (CI) ✅
 
+### Sprint P0+P1 (prod-readiness, 2026-08-30) — ✅ COMPLETADO (commit `92fc6d7`)
+
+**R13 (Security headers)** ✅: Middleware en `main.py` que añade a TODA response:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()`
+- `Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:; ...` (permisivo — endurecer tras revisar consola del FE)
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains` (solo cuando `APP_ENV=production` para no romper localhost dev)
+- HSTS condicional controlado por nuevo campo `settings.app.APP_ENV` (default `"development"`).
+
+**Dashboard authz fix** ✅: `app/api/v1/endpoints/dashboard.py:20-23` ahora requiere `get_admin_user` (antes `get_current_user`). Bug crítico cerrado: cualquier usuario autenticado podía leer el dashboard completo.
+
+**Credit module removal** ✅: Eliminados `app/services/credit_service.py`, `app/services/credit_payment_service.py`, `app/models/credit_payment.py`, `app/schemas/credit.py` + 4 funciones credit en `dashboard_service.py` (L928-1040). Columnas `User.available_credit`, `credit_limit`, `credit_status` y relación `credit_payments` eliminadas del modelo `User`. Frontend ya no las usa (sprint previo). Nueva migración Alembic `c1d2e3f4a5b6_drop_credit_columns.py` (idempotente, dropea tabla `credit_payments` y 3 columnas de `users` si existen — seguro de aplicar contra BDs que nunca tuvieron esos objetos).
+
+**R28 (Health checks)** ✅: Nuevos endpoints `/api/v1/health/live` (200 siempre, no toca deps) y `/api/v1/health/ready` (200 si DB local + DEMOA OK, 503 con detalle si algo falla).
+
+**Requirements cleanup** 🔄 Parcial: `requirements.txt` reducido de 130 → 29 deps (alineado con `pyproject.toml` + comentario apuntando al source of truth). Eliminadas deps huérfanas verificadas con grep: pyinstaller, pytube, yt-dlp, bottle, altgraph, matplotlib, platformio, python-docx, pefile, pyelftools, celery/kombu/amqp, redis, marshmallow, etc. Pendiente (R30): eliminar `requirements.txt` definitivamente y usar solo `pyproject.toml + uv.lock`.
+
+**`/api/v1/info` fix** ✅: Eliminados endpoints fantasma (`/orders`, `/reviews`, `/tracking`) y listados los reales según `app/api/v1/router.py`. Añadido bloque `health`.
+
+**Migrations/archive README** ✅: Nuevo `migrations/archive/README.md` documenta que los scripts archivados NO se cargan por Alembic y que el esquema real está en `alembic/versions/`. Pre-deploy: ejecutar `alembic stamp head`.
+
+**Tests nuevos (14)**: `app/tests/test_prod_readiness.py` cubre security headers, HSTS condicional, dashboard authz, info endpoint, health endpoints (live/ready/503), y sanity checks del módulo credit eliminado.
+
 ### Criterio de aceptación por fase
 
-- [x] Tests pasan (existentes + nuevos + caracterización) — 246 ✅
+- [x] Tests pasan (existentes + nuevos + caracterización) — 260 ✅
 - [x] `ruff` clean — parcialmente (368 issues restantes, no bloqueantes)
 - [ ] `mypy --strict` clean (incremental) — 348 errores, pendiente Sprint dedicado
 - [ ] Cobertura ≥ 80% en código nuevo, ≥90% en código refactorizado — pendiente medir post-Phase 2
 - [x] Sin regresiones en endpoints existentes — verificado con TestClient
-- [x] Tests de caracterización siguen pasando sin modificaciones — 246/246 ✅
+- [x] Tests de caracterización siguen pasando sin modificaciones — 260/260 ✅
 
 ### Criterios finales (después de Phase 2-7)
 
@@ -754,9 +780,13 @@ R12, R13, R16, R17, R18, R20, R21, R23, R25-R32. (ver tabla §7)
 ---
 
 **Veredicto final (2026-08-30):** El proyecto tiene una **base razonable** con buenas prácticas puntuales (Pydantic v2, RBAC, logging estructurado, validación de fechas con TZ, índices compuestos), y ha avanzado significativamente en las últimas 2 semanas:
-- **246 tests passing** (vs 0 antes de S1)
+- **260 tests passing** (vs 0 antes de S1)
 - **0 secretos hardcodeados** (Settings fail-fast)
 - **CORS configurado correctamente** (sin `allow_credentials=True + "*"`)
+- **Security headers** activos (CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS condicional)
+- **Health checks separados** (`/api/v1/health/live` + `/api/v1/health/ready` con 503 si DEMOA o BD local fallan)
+- **Dashboard authz cerrado** (admin-only)
+- **Credit module eliminado** del backend (sin código muerto)
 - **Anti-enumeración implementada** en login/registro
 - **Rate limiting** en endpoints sensibles
 - **Pool de conexiones estable** con pre_ping + context manager
@@ -767,7 +797,9 @@ R12, R13, R16, R17, R18, R20, R21, R23, R25-R32. (ver tabla §7)
 1. **R1**: Rotar SMTP_PASSWORD (acción del usuario)
 2. **Phase 2-5**: Refactor de god services (reducir archivos >1500 LOC)
 3. **Phase 5**: Limpieza de código muerto (admin.py 300+ líneas comentadas, user.py 326 líneas)
-4. **R30**: Eliminar `requirements.txt` (drift con pyproject.toml)
+4. **R30**: Eliminar `requirements.txt` (drift con pyproject.toml) — 🔄 Parcial (limpieza hecha, eliminación total pendiente)
 5. **mypy --strict**: 348 errores, sprint dedicado pendiente
 
 **No desplegar a producción sin antes aplicar al menos las recomendaciones P0 restantes (R1 + Phase 2-5).**
+
+> **Última actualización:** 2026-08-30 (Sprint P0+P1 de remediación para producción — commit `92fc6d7`)

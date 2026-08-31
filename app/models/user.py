@@ -1,7 +1,6 @@
 import uuid
-from decimal import Decimal
 
-from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Numeric, String
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, String
 from sqlalchemy.orm import relationship
 
 from app.config.database import Base
@@ -79,17 +78,12 @@ class User(Base):
     # Password reset
     reset_token = Column(String, nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
-    
-    # Credit fields
-    available_credit = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)
-    credit_limit = Column(Numeric(10, 2), default=Decimal('0.00'), nullable=False)
-    credit_status = Column(String, default="active", nullable=False)  # active, suspended
-    
+
     # Timestamps
     created_at = Column(DateTime, default=get_ve_now)
     updated_at = Column(DateTime, default=get_ve_now, onupdate=get_ve_now)
     last_login = Column(DateTime, nullable=True)
-    
+
     # Relationships
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
     # orders relationship eliminado - Order no se usa con Profit Plus
@@ -97,8 +91,7 @@ class User(Base):
     cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
     preferences = relationship("UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
     favorites = relationship("UserFavorite", back_populates="user", cascade="all, delete-orphan")
-    credit_payments = relationship("CreditPayment", back_populates="user", lazy="dynamic")
-    
+
     def __repr__(self):
         if self.user_type == 'natural':
             name = f"{self.first_name} {self.last_name}" if self.first_name and self.last_name else "N/A"
