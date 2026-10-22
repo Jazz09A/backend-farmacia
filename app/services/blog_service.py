@@ -455,7 +455,8 @@ class BlogService:
 
         # Query optimizada con SQL para cargar solo preview del contenido
         posts_data = self.db.execute(
-            text("""
+            text(
+                """
                 SELECT 
                     bp.id, bp.title, bp.slug,
                     SUBSTRING(bp.content, 1, 500) as content_preview,
@@ -470,10 +471,12 @@ class BlogService:
                 FROM blog_posts bp
                 LEFT JOIN users u ON bp.author_id = u.id
                 LEFT JOIN blog_categories bc ON bp.category_id = bc.id
-                WHERE bp.id = ANY(:post_ids)
+                WHERE bp.id IN (%s)
                 ORDER BY bp.published_at DESC
-            """),
-            {"post_ids": post_ids},
+                """
+                % ", ".join(f":id_{i}" for i in range(len(post_ids))),
+            ),
+            {f"id_{i}": pid for i, pid in enumerate(post_ids)},
         ).fetchall()
 
         # Mapear a objetos BlogPost

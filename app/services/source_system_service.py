@@ -1266,14 +1266,15 @@ class SourceSystemService:
         Obtiene los datos binarios de una imagen almacenada en saArtImagen.
         """
         conn = None
+        # Validar la entrada ANTES de pedir una conexión al pool
+        image_guid_clean = (image_guid or "").strip().upper().replace("{", "").replace("}", "")
+        if not image_guid_clean:
+            self.logger.warning("Se recibió un GUID vacío")
+            return None
+
         try:
             conn = self.get_pooled_connection()
             cursor = conn.cursor()
-            # Normalizar el GUID: quitar espacios, convertir a mayúsculas, remover llaves
-            image_guid_clean = (image_guid or "").strip().upper().replace("{", "").replace("}", "")
-            if not image_guid_clean:
-                self.logger.warning("Se recibió un GUID vacío")
-                return None
 
             self.logger.info(f"Buscando imagen con GUID: {image_guid_clean}")
 
@@ -1574,16 +1575,18 @@ class SourceSystemService:
         """
         conn = None
         cursor = None
+        # Validar campos requeridos ANTES de pedir una conexión al pool
+        co_desc = (discount_data.get("co_desc") or "").strip().upper()
+        if not co_desc:
+            raise ValueError("co_desc es requerido para crear un descuento")
+
+        co_art = (discount_data.get("co_art") or "").strip().upper()
+        if not co_art:
+            raise ValueError("co_art es requerido para crear un descuento")
+
         try:
             conn = self.get_pooled_connection()
             cursor = conn.cursor()
-            co_desc = (discount_data.get("co_desc") or "").strip().upper()
-            if not co_desc:
-                raise ValueError("co_desc es requerido para crear un descuento")
-
-            co_art = (discount_data.get("co_art") or "").strip().upper()
-            if not co_art:
-                raise ValueError("co_art es requerido para crear un descuento")
 
             # Los campos campo1...campo5 son contadores, no requieren validación de "límite" aquí
             # ya que el límite es hastaX.
@@ -1778,15 +1781,15 @@ class SourceSystemService:
         if not article_codes:
             return {}
 
+        # Normalizar códigos ANTES de pedir una conexión al pool
+        normalized_codes = [code.strip().upper() for code in article_codes if code]
+        if not normalized_codes:
+            return {}
+
         conn = None
         try:
             conn = self.get_pooled_connection()
             cursor = conn.cursor()
-
-            # Normalizar códigos
-            normalized_codes = [code.strip().upper() for code in article_codes if code]
-            if not normalized_codes:
-                return {}
 
             # Construir placeholders para IN clause
             placeholders = ",".join(["%s"] * len(normalized_codes))

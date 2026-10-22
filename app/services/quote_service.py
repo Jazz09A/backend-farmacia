@@ -148,8 +148,6 @@ class QuoteService:
         6. Actualiza totales en la cabecera
         7. Confirma o revierte la transacción
         """
-        from app.services.source_system_service import source_system_service
-
         now = get_ve_now()
         if payload.valid_until:
             expires_at_dt = datetime.fromisoformat(payload.valid_until)
@@ -841,8 +839,6 @@ class QuoteService:
         """
         Verifica artículos, obtiene datos básicos y calcula totales simples.
         """
-        from app.services.source_system_service import source_system_service
-
         if not verify_req.items:
             return QuoteVerifyResponse(
                 valido=False,
@@ -1535,6 +1531,7 @@ class QuoteService:
             subtotal = Decimal("0.00")
             impuestos = Decimal("0.00")
             descuento = Decimal("0.00")
+            descuento_info_dict = None
             stock_ok = False
             descripcion = None
 
