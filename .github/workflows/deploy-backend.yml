@@ -1,22 +1,14 @@
-name: Backend CI/CD Pipeline 
+name: Backend CI/CD Pipeline
 
 on:
   push:
     branches: [main, develop]
-    paths:
-      - 'backend-farmacia/**'
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'backend-farmacia/**'
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend-farmacia
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
@@ -46,16 +38,12 @@ jobs:
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
         with:
-          files: ./backend-farmacia/coverage.xml
+          files: ./coverage.xml
           flags: backend
           fail_ci_if_error: false
 
   lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend-farmacia
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,7 +51,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
@@ -79,10 +67,6 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend-farmacia
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -90,7 +74,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
@@ -118,9 +102,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 2222
-          source: "backend-farmacia/*"
+          source: "."
           target: "/var/www/mi-backend"
-          strip_components: 1
           rm: false
 
       - name: Execute remote commands via SSH
