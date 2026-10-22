@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.4",
     "bcrypt==3.2.0",
+    "cloudinary>=1.46.3",
     "email-validator>=2.2.0",
     "fastapi>=0.116.1",
     "httpx>=0.28.1",
@@ -34,3 +35,39 @@ dependencies = [
 ]
 [tool.setuptools]
 packages = ["app"]
+
+[project.optional-dependencies]
+# CI runs `pip install -e ".[dev,test]"` (deploy-backend.yml test job).
+dev = ["mypy>=2.4", "ruff>=0.16"]
+test = ["pytest-cov>=7.0"]
+
+[dependency-groups]
+dev = ["mypy", "ruff", "pytest-cov"]
+
+[tool.mypy]
+python_version = "3.12"
+# CI runs `pip install mypy` and then `mypy app/ --ignore-missing-imports`
+# (no project dependencies installed), so every third-party import resolves to
+# Any. ``no_site_packages`` reproduces that behavior locally, making type-check
+# results consistent between dev environments and CI regardless of the local venv.
+no_site_packages = true
+
+[tool.ruff]
+# Keep the CI contract: `ruff check app/` and `ruff format --check app/`.
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# Classic core rules (E4xx/E7xx/E9xx + pyflakes). Newer ruff versions enable many
+# more rules by default (B, BLE, S, SIM, RUF, ...) that would fail this legacy
+# codebase wholesale; selecting explicitly keeps lint results stable across
+# ruff upgrades instead of relying on the tool's evolving default set.
+select = ["E4", "E7", "E9", "F"]
+ignore = [
+    # Legacy note: both are recurring idioms in this FastAPI/SQLAlchemy codebase.
+    "E712",  # SQLAlchemy filters legitimately use `Model.col == True`; rewording would change SQL semantics.
+    "E402",  # Several modules import after module-level setup on purpose (e.g. to avoid circular imports).
+]
+
+[tool.ruff.format]
+quote-style = "double"

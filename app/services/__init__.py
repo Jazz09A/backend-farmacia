@@ -1,10 +1,10 @@
 # Services package
 
 from app.services.cloudinary_service import (
-    CloudinaryService,
-    cloudinary_service,
     CloudinaryFolder,
+    CloudinaryService,
     ImageFormat,
+    cloudinary_service,
 )
 from app.services.product_image_service import (
     ProductImageService,
@@ -12,10 +12,10 @@ from app.services.product_image_service import (
 )
 
 __all__ = [
-    "CloudinaryService",
-    "cloudinary_service",
     "CloudinaryFolder",
+    "CloudinaryService",
     "ImageFormat",
     "ProductImageService",
+    "cloudinary_service",
     "product_image_service",
 ]

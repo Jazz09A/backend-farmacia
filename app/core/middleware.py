@@ -27,10 +27,10 @@
 #             return await call_next(request)
 #         # Generar ID único para el request
 #         request_id = str(uuid.uuid4())
-        
+
 #         # Capturar tiempo de inicio
 #         start_time = time.time()
-        
+
 #         # Intentar obtener user_id y email del token si está presente
 #         user_id = None
 #         user_email = None
@@ -43,7 +43,7 @@
 #                 pass
 #         except Exception:
 #             pass
-        
+
 #         # Intentar obtener email de los parámetros de query o body para endpoints públicos
 #         if not user_email:
 #             try:
@@ -60,7 +60,7 @@
 #                             pass
 #             except Exception:
 #                 pass
-        
+
 #         # Loggear información del request
 #         log_request_info(
 #             app_logger,
@@ -69,7 +69,7 @@
 #             user_email=user_email,
 #             request_id=request_id
 #         )
-        
+
 #         # Loggear actividad específica para ciertos endpoints
 #         if self._is_important_endpoint(request.url.path):
 #             activity_logger.info(
@@ -84,13 +84,13 @@
 #                     'user_agent': request.headers.get('user-agent')
 #                 }
 #             )
-        
+
 #         # Procesar request
 #         response = await call_next(request)
-        
+
 #         # Calcular duración
 #         duration_ms = (time.time() - start_time) * 1000
-        
+
 #         # Loggear información del response
 #         log_response_info(
 #             app_logger,
@@ -101,7 +101,7 @@
 #             user_email=user_email,
 #             request_id=request_id
 #         )
-        
+
 #         # Loggear métricas de performance
 #         if duration_ms > 1000:  # Requests lentos (>1 segundo)
 #             performance_logger.warning(
@@ -129,20 +129,20 @@
 #                     'status_code': response.status_code
 #                 }
 #             )
-        
+
 #         # Agregar headers de tracking
 #         response.headers["X-Request-ID"] = request_id
 #         response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
-        
+
 #         return response
-    
+
 #     def _is_important_endpoint(self, path: str) -> bool:
 #         """
 #         Determina si un endpoint es importante para logging detallado.
-        
+
 #         Args:
 #             path: Ruta del endpoint
-            
+
 #         Returns:
 #             True si es un endpoint importante
 #         """
@@ -154,7 +154,7 @@
 #             "/api/v1/cart/",
 #             "/api/v1/favorites/"
 #         ]
-        
+
 #         return any(path.startswith(important_path) for important_path in important_paths)
 
 
@@ -168,13 +168,13 @@
 #         auth_header = request.headers.get("authorization")
 #         user_agent = request.headers.get("user-agent", "")
 #         ip_address = request.client.host if request.client else "unknown"
-        
+
 #         # Detectar patrones sospechosos
 #         suspicious_patterns = [
 #             "script", "alert", "javascript:", "vbscript:", "onload=", "onerror=",
 #             "../", "..\\", "/etc/passwd", "cmd.exe", "powershell"
 #         ]
-        
+
 #         # Revisar parámetros de query por patrones sospechosos
 #         query_string = str(request.url.query)
 #         if any(pattern in query_string.lower() for pattern in suspicious_patterns):
@@ -189,7 +189,7 @@
 #                     'security_event': 'suspicious_query'
 #                 }
 #             )
-        
+
 #         # Detectar intentos de acceso sin autorización a endpoints protegidos
 #         protected_paths = ["/api/v1/admin/", "/api/v1/users/me"]
 #         if any(request.url.path.startswith(path) for path in protected_paths):
@@ -204,9 +204,9 @@
 #                         'security_event': 'unauthorized_access_attempt'
 #                     }
 #                 )
-        
+
 #         response = await call_next(request)
-        
+
 #         # Loggear eventos de autenticación fallida
 #         if response.status_code == 401:
 #             security_logger = get_logger("auth")
@@ -220,5 +220,5 @@
 #                     'security_event': 'authentication_failed'
 #                 }
 #             )
-        
+
 #         return response

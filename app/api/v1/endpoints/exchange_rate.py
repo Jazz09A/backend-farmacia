@@ -1,8 +1,11 @@
 from fastapi import APIRouter
+
 from app.services.exchange_service import ExchangeRateService
+
 exchange_service = ExchangeRateService()
 
 router = APIRouter()
+
 
 @router.get("/")
 async def get_exchange_rate():

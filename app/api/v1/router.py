@@ -1,10 +1,19 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, user, public, dashboard, flash_offers, article_discounts
-from app.api.v1.endpoints import quotes
-from app.api.v1.endpoints import exchange_rate
-from app.api.v1.endpoints import articles
-from app.api.v1.endpoints import blog_admin
+from app.api.v1.endpoints import (
+    admin,
+    article_discounts,
+    articles,
+    auth,
+    blog_admin,
+    dashboard,
+    exchange_rate,
+    flash_offers,
+    public,
+    quotes,
+    user,
+)
+
 api_router = APIRouter()
 
 # =============================================================================
@@ -33,7 +42,6 @@ api_router.include_router(
     user.router,
     tags=["🔐 Usuario Autenticado"],
 )
-
 
 
 # Órdenes del usuario

@@ -10,4 +10,3 @@ def get_ve_now() -> datetime:
     Return current datetime aware of Venezuela timezone (America/Caracas).
     """
     return datetime.now(VE_TIMEZONE)
-

@@ -1,34 +1,33 @@
 # Models package
 # Import all models to ensure SQLAlchemy relationships work correctly
 
-from .user import User
-from .product import Product
-from .cart import CartItem
 from .address import Address, UserPreferences
+from .blog import BlogCategory, BlogImage, BlogPost
+from .cart import CartItem
+
+# ShippingZone eliminado - no se usa con Profit Plus
+# from .shipping import ShippingZone
+from .category import Brand, Category
+from .credit_payment import CreditPayment
+from .favorites import UserFavorite
+from .product import Product
+from .product_image import ProductImage
+
 # Order models eliminados - Order no se usa con Profit Plus
 # from .order import Order, OrderItem, OrderAddress
 # from .order_discount import OrderDiscount, DiscountType as OrderDiscountType
-from .promotion import (
-    Promotion, PromotionUsage, FlashOffer, 
-    PromotionalCode, DiscountType
-)
-# ShippingZone eliminado - no se usa con Profit Plus
-# from .shipping import ShippingZone
-from .category import Category, Brand
-from .favorites import UserFavorite
-from .credit_payment import CreditPayment
-from .blog import BlogPost, BlogCategory, BlogImage
-from .product_image import ProductImage
+from .promotion import DiscountType, FlashOffer, Promotion, PromotionalCode, PromotionUsage
+from .user import User
 
 __all__ = [
     "User",
-    "Product", 
+    "Product",
     "CartItem",
     "Address",
     "UserPreferences",
     # Order models eliminados
     # "Order",
-    # "OrderItem", 
+    # "OrderItem",
     # "OrderAddress",
     # "OrderDiscount",
     # "OrderDiscountType",
@@ -45,5 +44,5 @@ __all__ = [
     "BlogPost",
     "BlogCategory",
     "BlogImage",
-    "ProductImage"
-] 
+    "ProductImage",
+]

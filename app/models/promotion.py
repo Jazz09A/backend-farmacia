@@ -1,12 +1,15 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.types import TypeDecorator, JSON
-from app.config.database import Base
-import uuid
-import json
 import enum
+import json
+import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.orm import relationship
+from sqlalchemy.types import JSON, TypeDecorator
+
+from app.config.database import Base
 from app.utils.timezone import get_ve_now
+
 
 # Custom array type for SQLite compatibility
 class ArrayType(TypeDecorator):
@@ -16,13 +19,13 @@ class ArrayType(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(ARRAY(String))
         else:
             return dialect.type_descriptor(JSON())
 
     def process_bind_param(self, value, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return value
         else:
             if value is None:
@@ -30,7 +33,7 @@ class ArrayType(TypeDecorator):
             return json.dumps(value) if isinstance(value, list) else value
 
     def process_result_value(self, value, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return value
         else:
             if value is None:
@@ -42,11 +45,13 @@ class ArrayType(TypeDecorator):
                     return []
             return value if isinstance(value, list) else []
 
+
 class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
 
-class FlashOffer(Base):
+
+class FlashOffer(Base):  # type: ignore[valid-type, misc]
     __tablename__ = "flash_offers"
 
     # Primary key
@@ -54,7 +59,7 @@ class FlashOffer(Base):
 
     # Product reference
     product_id = Column(String, ForeignKey("products.id"), nullable=True, index=True)
-    
+
     # Article code from Profit Plus (co_art)
     article_code = Column(String, nullable=False, index=True)
 
@@ -88,9 +93,9 @@ class FlashOffer(Base):
         """Check if flash offer is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active and
-            self.start_time <= now <= self.end_time and
-            (self.max_quantity is None or self.used_quantity < self.max_quantity)
+            self.is_active
+            and self.start_time <= now <= self.end_time
+            and (self.max_quantity is None or self.used_quantity < self.max_quantity)
         )
 
     def calculate_discount_amount(self, original_price: float) -> float:
@@ -100,7 +105,8 @@ class FlashOffer(Base):
         else:
             return min(self.discount_value, original_price)
 
-class PromotionalCode(Base):
+
+class PromotionalCode(Base):  # type: ignore[valid-type, misc]
     __tablename__ = "promotional_codes"
 
     # Primary key
@@ -149,9 +155,9 @@ class PromotionalCode(Base):
         """Check if promotional code is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active and
-            self.valid_from <= now <= self.valid_until and
-            (self.usage_limit is None or self.used_count < self.usage_limit)
+            self.is_active
+            and self.valid_from <= now <= self.valid_until
+            and (self.usage_limit is None or self.used_count < self.usage_limit)
         )
 
     def can_be_used_by_user(self, user_id: str) -> bool:
@@ -162,7 +168,7 @@ class PromotionalCode(Base):
         user_usage_count = len([u for u in self.usages if u.user_id == user_id])
         return user_usage_count < self.user_limit
 
-    def calculate_discount(self, order_amount: float, applicable_amount: float = None) -> float:
+    def calculate_discount(self, order_amount: float, applicable_amount: float | None = None) -> float:
         """Calculate discount amount for given order."""
         if applicable_amount is None:
             applicable_amount = order_amount
@@ -180,7 +186,8 @@ class PromotionalCode(Base):
 
         return discount
 
-class PromotionUsage(Base):
+
+class PromotionUsage(Base):  # type: ignore[valid-type, misc]
     __tablename__ = "promotion_usages"
 
     # Primary key
@@ -209,8 +216,10 @@ class PromotionUsage(Base):
     def __repr__(self):
         return f"<PromotionUsage(id={self.id}, code_id={self.promotional_code_id}, user_id={self.user_id})>"
 
-class QuantityDiscount(Base):
+
+class QuantityDiscount(Base):  # type: ignore[valid-type, misc]
     """Modelo para descuentos automáticos basados en cantidad total de productos."""
+
     __tablename__ = "quantity_discounts"
 
     # Primary key
@@ -257,7 +266,7 @@ class QuantityDiscount(Base):
         else:
             return min(self.discount_value, total_amount)
 
+
 # Legacy Promotion class for backward compatibility
 class Promotion(FlashOffer):
     """Legacy promotion class - inherits from FlashOffer for backward compatibility."""
-    pass

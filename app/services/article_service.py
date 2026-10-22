@@ -1,13 +1,17 @@
-from typing import Any, Dict, List, Optional
-from decimal import Decimal
 import json
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
 
 from app.config.logging_config import get_logger
+
+# from app.querys.image_query import get_image_by_co_art
+from app.config.settings import Settings
+from app.models.promotion import DiscountType, FlashOffer
 from app.schemas.article import (
     ArticleDetail,
     ArticleImageResponse,
@@ -15,94 +19,89 @@ from app.schemas.article import (
     ArticlePriceDetail,
     ArticleStockDetail,
     ArticleSummary,
-    ImageUploadResponse,
     CloudinaryImageInfo,
+    ImageUploadResponse,
 )
 from app.schemas.product import FlashOfferInfo, ProfitDiscountInfo
-from app.models.promotion import FlashOffer, DiscountType
-from app.services.source_system_service import source_system_service
 from app.services.cache_service import cache_service
 from app.services.product_image_service import product_image_service
+from app.services.source_system_service import source_system_service
 from app.utils.timezone import get_ve_now
-# from app.querys.image_query import get_image_by_co_art
-from app.config.settings import Settings
+
 settings = Settings()
+
+
 class ArticleService:
     """Servicio de negocio para artículos provenientes de Profit Plus."""
 
     def __init__(self):
         self.logger = get_logger("articles")
         self._source_service = source_system_service
-        self._descriptions_cache: Optional[Dict[str, str]] = None
+        self._descriptions_cache: dict[str, str] | None = None
         self._descriptions_file_path = Path("articles_with_descriptions.json")
-    
+
     def _get_active_flash_offers_by_article_codes(
-        self, 
-        db: Optional[Session], 
-        article_codes: List[str]
-    ) -> Dict[str, FlashOffer]:
+        self, db: Session | None, article_codes: list[str]
+    ) -> dict[str, FlashOffer]:
         """
         Obtiene flash offers activas para una lista de códigos de artículo de manera optimizada.
-        
+
         Returns:
             Dict[str, FlashOffer]: Mapa de article_code -> FlashOffer
         """
         if not db or not article_codes:
             return {}
-        
+
         now = get_ve_now()
-        
+
         # Normalizar códigos de artículo
         normalized_codes = [code.upper().strip() for code in article_codes if code]
         if not normalized_codes:
             return {}
-        
+
         # Obtener flash offers activas por article_code (una sola consulta optimizada)
-        flash_offers = db.query(FlashOffer).filter(
-            and_(
-                FlashOffer.article_code.in_(normalized_codes),
-                FlashOffer.is_active,
-                FlashOffer.start_time <= now,
-                FlashOffer.end_time >= now,
-                or_(
-                    FlashOffer.max_quantity.is_(None),
-                    FlashOffer.used_quantity < FlashOffer.max_quantity
+        flash_offers = (
+            db.query(FlashOffer)
+            .filter(
+                and_(
+                    FlashOffer.article_code.in_(normalized_codes),
+                    FlashOffer.is_active,
+                    FlashOffer.start_time <= now,
+                    FlashOffer.end_time >= now,
+                    or_(FlashOffer.max_quantity.is_(None), FlashOffer.used_quantity < FlashOffer.max_quantity),
                 )
             )
-        ).all()
-        
+            .all()
+        )
+
         # Crear mapa article_code -> FlashOffer
         result = {}
         for offer in flash_offers:
             normalized_code = (offer.article_code or "").upper().strip()
             if normalized_code and normalized_code not in result:
                 result[normalized_code] = offer
-        
+
         return result
-    
-    def _build_flash_offer_info(
-        self, 
-        flash_offer: FlashOffer, 
-        original_price: Decimal
-    ) -> FlashOfferInfo:
+
+    def _build_flash_offer_info(self, flash_offer: FlashOffer, original_price: Decimal) -> FlashOfferInfo:
         """Construye la información de flash offer para incluir en la respuesta del artículo."""
         original_price_float = float(original_price)
-        
+
         # Determinar el tipo de descuento
         discount_type_value = flash_offer.discount_type
-        if hasattr(discount_type_value, 'value'):
+        if hasattr(discount_type_value, "value"):
             discount_type_value = discount_type_value.value
-        
+
         # Calcular precio con descuento
-        if discount_type_value == 'percentage' or discount_type_value == DiscountType.PERCENTAGE.value:
+        if discount_type_value == "percentage" or discount_type_value == DiscountType.PERCENTAGE.value:
             discount_amount = original_price_float * (flash_offer.discount_value / 100)
             discount_percentage = flash_offer.discount_value
         else:  # fixed
             discount_amount = min(flash_offer.discount_value, original_price_float)
             discount_percentage = (discount_amount / original_price_float * 100) if original_price_float > 0 else 0
-        
+
         offer_price = original_price_float - discount_amount
-        
+
         return FlashOfferInfo(
             id=flash_offer.id,
             discount_type=discount_type_value,
@@ -113,15 +112,14 @@ class ArticleService:
             end_time=flash_offer.end_time.isoformat() if flash_offer.end_time else None,
             max_quantity=flash_offer.max_quantity,
             remaining_quantity=(
-                (flash_offer.max_quantity - flash_offer.used_quantity) 
-                if flash_offer.max_quantity else None
-            )
+                (flash_offer.max_quantity - flash_offer.used_quantity) if flash_offer.max_quantity else None
+            ),
         )
-    
-    def _build_profit_discount_info(self, discount_row: Dict[str, Any]) -> ProfitDiscountInfo:
+
+    def _build_profit_discount_info(self, discount_row: dict[str, Any]) -> ProfitDiscountInfo:
         """Construye la información de descuento de Profit Plus para incluir en la respuesta."""
         from decimal import Decimal as D
-        
+
         # Construir rangos de descuento
         ranges = []
         for i in range(1, 6):
@@ -129,14 +127,10 @@ class ArticleService:
             porc_key = f"porc{i}"
             hasta = discount_row.get(hasta_key)
             porc = discount_row.get(porc_key)
-            
+
             if hasta and porc and D(str(hasta)) > 0 and D(str(porc)) > 0:
-                ranges.append({
-                    "max_quantity": float(hasta),
-                    "discount_percentage": float(porc),
-                    "range_number": i
-                })
-        
+                ranges.append({"max_quantity": float(hasta), "discount_percentage": float(porc), "range_number": i})
+
         # Determinar mejor descuento y cantidad mínima
         best_discount = None
         min_quantity = None
@@ -146,7 +140,7 @@ class ArticleService:
             best_discount = D(str(best_range["discount_percentage"]))
             # La cantidad mínima es la del primer rango
             min_quantity = D(str(ranges[0]["max_quantity"]))
-        
+
         return ProfitDiscountInfo(
             co_desc=(discount_row.get("co_desc") or "").strip(),
             des_des=discount_row.get("des_des"),
@@ -157,60 +151,60 @@ class ArticleService:
             fecha_fin=discount_row.get("fecha_fin"),
             is_active=True,  # Ya viene filtrado como activo
             best_discount_percentage=best_discount,
-            min_quantity_for_discount=min_quantity
+            min_quantity_for_discount=min_quantity,
         )
 
     @staticmethod
-    def _build_image_url(rowguid: Optional[str]) -> Optional[str]:
+    def _build_image_url(rowguid: str | None) -> str | None:
         """
         Construye la URL completa para servir una imagen por su GUID.
         """
         if not rowguid:
             return None
-        
+
         # Normalizar el GUID: convertir a string, limpiar y remover llaves
-        guid_str = str(rowguid).strip().upper().replace('{', '').replace('}', '')
+        guid_str = str(rowguid).strip().upper().replace("{", "").replace("}", "")
         if not guid_str:
             return None
-        
+
         base_url = settings.API_URL or "http://localhost:8000"
         # CORREGIDO: La ruta debe incluir /articles porque el router está registrado con ese prefijo
         url = f"{base_url}/api/v1/articles/images/{guid_str}"
         return url
 
-    def _load_descriptions(self) -> Dict[str, str]:
+    def _load_descriptions(self) -> dict[str, str]:
         """Carga las descripciones desde el archivo JSON y las mantiene en cache."""
         if self._descriptions_cache is not None:
             return self._descriptions_cache
-        
+
         self._descriptions_cache = {}
-        
+
         if not self._descriptions_file_path.exists():
             self.logger.warning(f"Archivo de descripciones no encontrado: {self._descriptions_file_path}")
             return self._descriptions_cache
-        
+
         try:
-            with open(self._descriptions_file_path, 'r', encoding='utf-8') as f:
+            with open(self._descriptions_file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            articles = data.get('articles', [])
+
+            articles = data.get("articles", [])
             for article in articles:
-                co_art = (article.get('co_art') or '').strip().upper()
-                description = article.get('description', '').strip()
+                co_art = (article.get("co_art") or "").strip().upper()
+                description = article.get("description", "").strip()
                 if co_art and description:
                     self._descriptions_cache[co_art] = description
-            
+
             self.logger.info(f"Cargadas {len(self._descriptions_cache)} descripciones desde JSON")
         except Exception as e:
-            self.logger.error(f"Error al cargar descripciones: {str(e)}")
-        
+            self.logger.error(f"Error al cargar descripciones: {e!s}")
+
         return self._descriptions_cache
-    
-    def _get_description(self, co_art: str) -> Optional[str]:
+
+    def _get_description(self, co_art: str) -> str | None:
         """Obtiene la descripción de un artículo desde el cache."""
         if not co_art:
             return None
-        
+
         descriptions = self._load_descriptions()
         normalized_co_art = co_art.strip().upper()
         return descriptions.get(normalized_co_art)
@@ -218,16 +212,16 @@ class ArticleService:
     def _get_all_catalog_items_for_demo_filter(
         self,
         *,
-        search: Optional[str],
-        line_code: Optional[str],
-        category_code: Optional[str],
-        min_price: Optional[Decimal],
-        max_price: Optional[Decimal],
+        search: str | None,
+        line_code: str | None,
+        category_code: str | None,
+        min_price: Decimal | None,
+        max_price: Decimal | None,
         sort_by: str,
         price_code: str,
         warehouse_code: str,
         in_stock_only: bool,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         DEMO ONLY:
         Obtiene todos los items del catálogo (sin paginar a nivel de API),
@@ -238,7 +232,7 @@ class ArticleService:
         """
         batch_size = 500
         page_num = 1
-        all_items: List[Dict[str, Any]] = []
+        all_items: list[dict[str, Any]] = []
 
         while True:
             result = self._source_service.get_articles_catalog(
@@ -268,9 +262,9 @@ class ArticleService:
             page_num += 1
 
         return all_items
-    
+
     @staticmethod
-    def _to_decimal(value: Any) -> Optional[Decimal]:
+    def _to_decimal(value: Any) -> Decimal | None:
         if value is None:
             return None
         if isinstance(value, Decimal):
@@ -284,22 +278,20 @@ class ArticleService:
         self,
         page: int = 1,
         limit: int = 20,
-        search: Optional[str] = None,
-        line_code: Optional[str] = None,
-        category_code: Optional[str] = None,
-        min_price: Optional[Decimal] = None,
-        max_price: Optional[Decimal] = None,
+        search: str | None = None,
+        line_code: str | None = None,
+        category_code: str | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
         sort_by: str = "art_des",
         price_code: str = "01",
         warehouse_code: str = "001",
         in_stock_only: bool = False,
-        db: Optional[Session] = None,
+        db: Session | None = None,
     ) -> ArticleListResponse:
         """Obtiene el catálogo paginado directamente desde Profit Plus con cache."""
         # Feature flag: este filtro es temporal (demo) y se controla SOLO por env var.
-        effective_cloudinary_images_only = bool(
-            getattr(settings, "ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER", False)
-        )
+        effective_cloudinary_images_only = bool(getattr(settings, "ENABLE_CLOUDINARY_IMAGES_ONLY_FILTER", False))
 
         # Generar clave de cache única basada en todos los parámetros
         cache_key = cache_service._generate_key(
@@ -317,19 +309,21 @@ class ArticleService:
             in_stock_only=in_stock_only,
             cloudinary_images_only=effective_cloudinary_images_only,
         )
-        
+
         # Intentar obtener del cache
         cached_response = cache_service.get(cache_key)
         if cached_response is not None:
             self.logger.debug(f"Cache hit para catálogo: {cache_key}")
             print(f"✅ CACHE HIT - Catálogo encontrado en cache: {cache_key}")
-            print(f"   Productos cacheados: {cached_response.get('total', 0)} artículos en página {cached_response.get('page', 1)}")
+            print(
+                f"   Productos cacheados: {cached_response.get('total', 0)} artículos en página {cached_response.get('page', 1)}"
+            )
             # Convertir el dict de vuelta a ArticleListResponse
             return ArticleListResponse(**cached_response)
-        
+
         self.logger.debug(f"Cache miss para catálogo: {cache_key}")
         print(f"❌ CACHE MISS - Catálogo no encontrado en cache: {cache_key}")
-        
+
         # Si está activo el filtro demo (solo con imágenes Cloudinary), primero construimos
         # el listado completo para filtrar y luego paginamos sobre el resultado filtrado.
         if effective_cloudinary_images_only:
@@ -353,9 +347,7 @@ class ArticleService:
 
             # Filtrar SOLO artículos con imagen principal en Cloudinary
             filtered_items = [
-                row
-                for row in all_items
-                if cloudinary_images_map.get((row.get("co_art") or "").strip().upper())
+                row for row in all_items if cloudinary_images_map.get((row.get("co_art") or "").strip().upper())
             ]
 
             total = len(filtered_items)
@@ -394,7 +386,7 @@ class ArticleService:
             tip_cli=None,  # Por ahora sin filtrar por tipo de cliente
         )
 
-        summaries: List[ArticleSummary] = []
+        summaries: list[ArticleSummary] = []
         for row in page_items:
             co_art = (row.get("co_art") or "").strip()
             art_des = row.get("art_des") or ""
@@ -405,29 +397,29 @@ class ArticleService:
             stock = self._to_decimal(row.get("stock"))
             warehouse = (row.get("warehouse_code") or "").strip() or None
             image_guid = row.get("image_guid")
-            
+
             # Normalizar el GUID si existe
             image_guid_normalized = None
             if image_guid:
-                image_guid_normalized = str(image_guid).strip().upper().replace('{', '').replace('}', '')
-            
+                image_guid_normalized = str(image_guid).strip().upper().replace("{", "").replace("}", "")
+
             # image_query = get_image_by_co_art(co_art)
-            
+
             image_url = self._build_image_url(image_guid_normalized)
-            
+
             # Obtener descuento de Profit Plus desde saDescArticulo si existe
             profit_discount = None
             normalized_co_art = co_art.upper().strip()
             profit_discount_row = profit_discounts_map.get(normalized_co_art)
             if profit_discount_row:
                 profit_discount = self._build_profit_discount_info(profit_discount_row)
-            
+
             # Obtener descripción desde JSON
             description = self._get_description(co_art)
-            
+
             # Obtener imagen de Cloudinary si existe
             cloudinary_image_url = cloudinary_images_map.get(normalized_co_art)
-            
+
             summaries.append(
                 ArticleSummary(
                     co_art=co_art,
@@ -448,7 +440,7 @@ class ArticleService:
                 )
             )
 
-        filters_applied: Dict[str, Any] = {}
+        filters_applied: dict[str, Any] = {}
         if search:
             filters_applied["search"] = search
         if line_code:
@@ -475,39 +467,36 @@ class ArticleService:
             has_prev=page > 1,
             filters_applied=filters_applied,
         )
-        
+
         # Almacenar en cache (usar model_dump para Pydantic v2 o dict() para v1)
         try:
-            cache_data = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+            cache_data = response.model_dump() if hasattr(response, "model_dump") else response.dict()
             cache_service.set(cache_key, cache_data)
             print(f"💾 CACHE SET - Catálogo almacenado en cache: {cache_key}")
             print(f"   Productos almacenados: {response.total} artículos en página {response.page}")
         except Exception as e:
             self.logger.warning(f"Error al almacenar en cache: {e}")
-        
+
         return response
 
-    def get_article_detail(self, co_art: str, db: Optional[Session] = None) -> ArticleDetail:
+    def get_article_detail(self, co_art: str, db: Session | None = None) -> ArticleDetail:
         """Obtiene el detalle de un artículo y lo transforma a schema con cache."""
         # Normalizar código de artículo
         normalized_co_art = (co_art or "").strip().upper()
-        
+
         # Generar clave de cache
         cache_key = cache_service._generate_key("article", normalized_co_art)
-        
+
         # Intentar obtener del cache
         cached_response = cache_service.get(cache_key)
         if cached_response is not None:
             self.logger.debug(f"Cache hit para detalle de artículo: {normalized_co_art}")
             print(f"✅ CACHE HIT - Detalle de artículo encontrado en cache: {normalized_co_art}")
-            
+
             # IMPORTANTE: Siempre consultar las imágenes de Cloudinary desde la BD,
             # incluso si hay cache, porque las imágenes pueden haber sido agregadas después
             # de que se cacheó la respuesta
-            cloudinary_images_raw = product_image_service.get_images_by_article(
-                co_art=normalized_co_art,
-                db=db
-            )
+            cloudinary_images_raw = product_image_service.get_images_by_article(co_art=normalized_co_art, db=db)
             cloudinary_images = [
                 CloudinaryImageInfo(
                     id=img["id"],
@@ -515,11 +504,11 @@ class ArticleService:
                     cloudinary_public_id=img.get("cloudinary_public_id"),
                     is_main=img.get("is_main", False),
                     display_order=img.get("display_order", 0),
-                    description=img.get("description")
+                    description=img.get("description"),
                 )
                 for img in cloudinary_images_raw
             ]
-            
+
             # Actualizar las imágenes de Cloudinary en la respuesta cacheada
             cached_response["cloudinary_images"] = [
                 {
@@ -528,16 +517,16 @@ class ArticleService:
                     "cloudinary_public_id": img.get("cloudinary_public_id"),
                     "is_main": img.get("is_main", False),
                     "display_order": img.get("display_order", 0),
-                    "description": img.get("description")
+                    "description": img.get("description"),
                 }
                 for img in cloudinary_images_raw
             ]
-            
+
             return ArticleDetail(**cached_response)
-        
+
         self.logger.debug(f"Cache miss para detalle de artículo: {normalized_co_art}")
         print(f"❌ CACHE MISS - Detalle de artículo no encontrado en cache: {normalized_co_art}")
-        
+
         detail = self._source_service.get_article_detail(normalized_co_art)
         if not detail:
             raise HTTPException(
@@ -554,7 +543,7 @@ class ArticleService:
             ArticlePriceDetail(
                 price_code=(item.get("price_code") or "").strip(),
                 price_name=item.get("price_name"),
-                amount=self._to_decimal(item.get("amount")) or Decimal("0"),
+                amount=self._to_decimal(item.get("amount")) or Decimal(0),
                 currency=(item.get("currency") or "VES").strip(),
                 desde=item.get("desde"),  # Fecha desde la cual es válido el precio
             )
@@ -565,7 +554,7 @@ class ArticleService:
             ArticleStockDetail(
                 warehouse_code=(item.get("warehouse_code") or "").strip(),
                 warehouse_name=item.get("warehouse_name"),
-                quantity=self._to_decimal(item.get("quantity")) or Decimal("0"),
+                quantity=self._to_decimal(item.get("quantity")) or Decimal(0),
             )
             for item in stock_raw
         ]
@@ -582,10 +571,9 @@ class ArticleService:
         # Obtener descuento de Profit Plus desde saDescArticulo
         profit_discount = None
         normalized_co_art = (co_art or "").upper().strip()
-        
+
         profit_discounts_map = self._source_service.get_active_discounts_for_articles(
-            article_codes=[normalized_co_art],
-            tip_cli=None
+            article_codes=[normalized_co_art], tip_cli=None
         )
         profit_discount_row = profit_discounts_map.get(normalized_co_art)
         if profit_discount_row:
@@ -593,15 +581,14 @@ class ArticleService:
 
         # Obtener descripción desde JSON
         description = self._get_description(normalized_co_art)
-        
+
         # Obtener imágenes de Cloudinary para este artículo
         # IMPORTANTE: Siempre consultar las imágenes desde la BD, incluso si hay cache
         # porque las imágenes pueden haber sido agregadas después de que se cacheó la respuesta
-        cloudinary_images_raw = product_image_service.get_images_by_article(
-            co_art=normalized_co_art,
-            db=db
+        cloudinary_images_raw = product_image_service.get_images_by_article(co_art=normalized_co_art, db=db)
+        self.logger.debug(
+            f"Imágenes de Cloudinary obtenidas para {normalized_co_art}: {len(cloudinary_images_raw)} imágenes"
         )
-        self.logger.debug(f"Imágenes de Cloudinary obtenidas para {normalized_co_art}: {len(cloudinary_images_raw)} imágenes")
         cloudinary_images = [
             CloudinaryImageInfo(
                 id=img["id"],
@@ -609,7 +596,7 @@ class ArticleService:
                 cloudinary_public_id=img.get("cloudinary_public_id"),
                 is_main=img.get("is_main", False),
                 display_order=img.get("display_order", 0),
-                description=img.get("description")
+                description=img.get("description"),
             )
             for img in cloudinary_images_raw
         ]
@@ -633,23 +620,23 @@ class ArticleService:
             flash_offer=None,  # Ya no se usan flash offers, solo descuentos de Profit Plus
             profit_discount=profit_discount,
         )
-        
+
         # Almacenar en cache
         try:
-            cache_data = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+            cache_data = response.model_dump() if hasattr(response, "model_dump") else response.dict()
             cache_service.set(cache_key, cache_data)
             print(f"💾 CACHE SET - Detalle de artículo almacenado en cache: {normalized_co_art}")
         except Exception as e:
             self.logger.warning(f"Error al almacenar detalle en cache: {e}")
-        
+
         return response
 
     def upload_image(
         self,
         co_art: str,
         image_bytes: bytes,
-        filename: Optional[str],
-        tip: Optional[str] = None,
+        filename: str | None,
+        tip: str | None = None,
         created_by: str = "API_USER",
     ) -> ImageUploadResponse:
         """Sube una imagen para un artículo y devuelve la respuesta de negocio."""
@@ -673,7 +660,7 @@ class ArticleService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),
             )
-        
+
         # Invalidar cache del artículo ya que cambió su información de imágenes
         normalized_co_art = (co_art or "").strip().upper()
         cache_key = cache_service._generate_key("article", normalized_co_art)
@@ -688,7 +675,7 @@ class ArticleService:
             url=self._build_image_url(guid),
         )
 
-    def get_image_binary(self, image_guid: str) -> Dict[str, Any]:
+    def get_image_binary(self, image_guid: str) -> dict[str, Any]:
         """Obtiene la imagen binaria y metadatos para servirla por HTTP."""
         row = self._source_service.get_image_by_guid(image_guid)
         if not row:
@@ -703,15 +690,15 @@ class ArticleService:
             )
         return row
 
-    def _map_images(self, rows: List[Dict[str, Any]]) -> List[ArticleImageResponse]:
+    def _map_images(self, rows: list[dict[str, Any]]) -> list[ArticleImageResponse]:
         """Convierte las filas de saArtImagen a schemas de respuesta."""
-        images: List[ArticleImageResponse] = []
+        images: list[ArticleImageResponse] = []
         for row in rows:
             guid = row.get("rowguid")
             if not guid:
                 continue
             # Normalizar el GUID a string consistente
-            guid_str = str(guid).strip().upper().replace('{', '').replace('}', '')
+            guid_str = str(guid).strip().upper().replace("{", "").replace("}", "")
             url = self._build_image_url(guid_str)
             images.append(
                 ArticleImageResponse(
@@ -725,4 +712,3 @@ class ArticleService:
 
 
 article_service = ArticleService()
-

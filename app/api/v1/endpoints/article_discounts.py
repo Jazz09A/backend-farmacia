@@ -1,18 +1,21 @@
-from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from app.services.source_system_service import source_system_service
-from app.schemas.article_discount import (
-    ArticleDiscountCreate,
-    ArticleDiscountResponse,
-    ArticleDiscountListResponse,
-    ArticleDiscountDetail,
-    ArticleDiscountUpdate
-)
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from app.core.dependencies import get_admin_user
 from app.models.user import User
+from app.schemas.article_discount import (
+    ArticleDiscountCreate,
+    ArticleDiscountDetail,
+    ArticleDiscountListResponse,
+    ArticleDiscountResponse,
+    ArticleDiscountUpdate,
+)
+from app.services.source_system_service import source_system_service
 from app.utils.timezone import get_ve_now
 
 router = APIRouter()
+
 
 @router.post("/", response_model=ArticleDiscountResponse)
 def create_article_discount(
@@ -30,19 +33,21 @@ def create_article_discount(
         profit_user_code = source_system_service.build_profit_user_code(customer_profile["customer_code"])
 
         discount_data = discount_in.model_dump(exclude_unset=True)
-        
+
         # Determinar el tip_cli a usar
         tip_cli_to_use = discount_data.get("tip_cli") or customer_profile["tip_cli"]
-        
+
         # Validar que el tip_cli existe en saTipoCliente
         if not source_system_service.validate_tip_cli(tip_cli_to_use):
             valid_codes = source_system_service.get_valid_tip_cli_codes()
-            valid_codes_str = ", ".join([f"{c['tip_cli'].strip()} ({c.get('des_tipo', 'N/A').strip()})" for c in valid_codes])
+            valid_codes_str = ", ".join(
+                [f"{c['tip_cli'].strip()} ({c.get('des_tipo', 'N/A').strip()})" for c in valid_codes]
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"El tipo de cliente '{tip_cli_to_use}' no es válido. Tipos válidos: {valid_codes_str}"
+                detail=f"El tipo de cliente '{tip_cli_to_use}' no es válido. Tipos válidos: {valid_codes_str}",
             )
-        
+
         discount_data.update(
             {
                 "co_desc": co_desc,
@@ -55,27 +60,20 @@ def create_article_discount(
         )
 
         success = source_system_service.create_article_discount(discount_data)
-        
+
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No se pudo crear el descuento en Profit Plus"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo crear el descuento en Profit Plus"
             )
-            
+
         return ArticleDiscountResponse(**discount_data)
-        
+
     except HTTPException:
         raise
     except ValueError as ve:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error de validación: {str(ve)}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error de validación: {ve!s}")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creando descuento: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error creando descuento: {e!s}")
 
 
 @router.get("/valid-customer-types")
@@ -87,21 +85,17 @@ def get_valid_customer_types(
     """
     try:
         valid_types = source_system_service.get_valid_tip_cli_codes()
-        return {
-            "success": True,
-            "customer_types": valid_types
-        }
+        return {"success": True, "customer_types": valid_types}
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo tipos de cliente: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error obteniendo tipos de cliente: {e!s}"
         )
 
 
 @router.get("/", response_model=ArticleDiscountListResponse)
 def list_article_discounts(
-    co_art: Optional[str] = Query(None, description="Filtrar por código de artículo"),
-    tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
+    co_art: str | None = Query(None, description="Filtrar por código de artículo"),
+    tip_cli: str | None = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(False, description="Solo descuentos activos"),
     page: int = Query(1, ge=1, description="Número de página"),
     limit: int = Query(50, ge=1, le=100, description="Registros por página"),
@@ -113,26 +107,21 @@ def list_article_discounts(
     """
     try:
         result = source_system_service.get_article_discounts(
-            co_art=co_art,
-            tip_cli=tip_cli,
-            only_active=only_active,
-            page=page,
-            limit=limit
+            co_art=co_art, tip_cli=tip_cli, only_active=only_active, page=page, limit=limit
         )
-        
+
         return ArticleDiscountListResponse(**result)
-        
+
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo descuentos: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error obteniendo descuentos: {e!s}"
         )
 
 
 @router.get("/{co_art}", response_model=ArticleDiscountListResponse)
 def get_article_discounts_by_code(
     co_art: str,
-    tip_cli: Optional[str] = Query(None, description="Filtrar por tipo de cliente"),
+    tip_cli: str | None = Query(None, description="Filtrar por tipo de cliente"),
     only_active: bool = Query(True, description="Solo descuentos activos"),
     current_user: User = Depends(get_admin_user),
 ) -> Any:
@@ -142,19 +131,15 @@ def get_article_discounts_by_code(
     """
     try:
         result = source_system_service.get_article_discounts(
-            co_art=co_art,
-            tip_cli=tip_cli,
-            only_active=only_active,
-            page=1,
-            limit=100
+            co_art=co_art, tip_cli=tip_cli, only_active=only_active, page=1, limit=100
         )
-        
+
         return ArticleDiscountListResponse(**result)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo descuentos del artículo {co_art}: {str(e)}"
+            detail=f"Error obteniendo descuentos del artículo {co_art}: {e!s}",
         )
 
 
@@ -168,60 +153,64 @@ def get_article_discount_detail(
     """
     try:
         discount = source_system_service.get_article_discount_by_code(co_desc)
-        
+
         if not discount:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Descuento {co_desc} no encontrado"
-            )
-            
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Descuento {co_desc} no encontrado")
+
         # Calcular estado activo
         is_active = True
         now = get_ve_now()
-        
-        start = discount.get('fecha_ini')
-        end = discount.get('fecha_fin')
-        
+
+        start = discount.get("fecha_ini")
+        end = discount.get("fecha_fin")
+
         # Convertir strings ISO a datetime si es necesario para comparar
         from datetime import datetime
-        
+
         # Asegurarse de que now tenga tzinfo
         if now.tzinfo is None:
-             from app.utils.timezone import VE_TIMEZONE
-             now = now.replace(tzinfo=VE_TIMEZONE)
+            from app.utils.timezone import VE_TIMEZONE
+
+            now = now.replace(tzinfo=VE_TIMEZONE)
 
         if isinstance(start, str):
-            try: start = datetime.fromisoformat(start)
-            except: pass
-        
+            try:
+                start = datetime.fromisoformat(start)
+            except Exception:
+                pass
+
         if isinstance(end, str):
-            try: end = datetime.fromisoformat(end)
-            except: pass
-            
+            try:
+                end = datetime.fromisoformat(end)
+            except Exception:
+                pass
+
         # Normalizar start/end a timezone-aware si son naive
         if start and isinstance(start, datetime) and start.tzinfo is None:
-             from app.utils.timezone import VE_TIMEZONE
-             start = start.replace(tzinfo=VE_TIMEZONE)
-             
+            from app.utils.timezone import VE_TIMEZONE
+
+            start = start.replace(tzinfo=VE_TIMEZONE)
+
         if end and isinstance(end, datetime) and end.tzinfo is None:
-             from app.utils.timezone import VE_TIMEZONE
-             end = end.replace(tzinfo=VE_TIMEZONE)
-            
-        if start and start > now:
+            from app.utils.timezone import VE_TIMEZONE
+
+            end = end.replace(tzinfo=VE_TIMEZONE)
+
+        if isinstance(start, datetime) and start > now:
             is_active = False
-        if end and end < now:
+        if isinstance(end, datetime) and end < now:
             is_active = False
-            
-        discount['is_active'] = is_active
-        
+
+        discount["is_active"] = is_active
+
         return ArticleDiscountDetail(**discount)
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error obteniendo detalle del descuento {co_desc}: {str(e)}"
+            detail=f"Error obteniendo detalle del descuento {co_desc}: {e!s}",
         )
 
 
@@ -238,31 +227,25 @@ def update_article_discount(
         # Verificar existencia
         existing = source_system_service.get_article_discount_by_code(co_desc)
         if not existing:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Descuento {co_desc} no encontrado"
-            )
-            
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Descuento {co_desc} no encontrado")
+
         update_data = discount_in.model_dump(exclude_unset=True)
-        
+
         if not update_data:
             return {"success": True, "message": "No hay cambios para aplicar"}
-            
+
         success = source_system_service.update_article_discount(co_desc, update_data)
-        
+
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No se pudo actualizar el descuento"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo actualizar el descuento"
             )
-            
+
         return {"success": True, "message": "Descuento actualizado exitosamente", "co_desc": co_desc}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error actualizando descuento {co_desc}: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error actualizando descuento {co_desc}: {e!s}"
         )
-
