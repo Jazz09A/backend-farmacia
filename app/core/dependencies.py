@@ -12,7 +12,7 @@ logger = get_logger("auth")
 
 settings = Settings()
 # HTTP Bearer security scheme
-security = HTTPBearer()
+security = HTTPBearer() 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
