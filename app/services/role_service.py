@@ -238,7 +238,7 @@ class RoleService:
             UserRoleResponse(
                 user_id=user.id,
                 email=user.email,
-                name=user.name,
+                name=user.full_name,  # el modelo no tiene .name (mismo bug que /admin/users)
                 role=user.role,
                 role_level=user.get_role_level(),
                 is_admin=user.is_admin(),

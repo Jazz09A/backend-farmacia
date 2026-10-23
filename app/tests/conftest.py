@@ -146,10 +146,11 @@ def client(db):
     """
 
     def override_get_db():
-        try:
-            yield db
-        finally:
-            db.close()
+        # NO hacer close() aquí: la sesión es compartida (hermética) y el
+        # fixture db_session la cierra en su teardown. Cerrarla al terminar
+        # el request dejaba detached a las instancias y rompía assertions
+        # post-request (db.refresh / queries de verificación).
+        yield db
 
     main_app.dependency_overrides[get_db] = override_get_db
     with TestClient(main_app) as test_client:

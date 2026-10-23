@@ -128,7 +128,7 @@ async def get_all_users(
             UserRoleResponse(
                 user_id=user.id,
                 email=user.email,
-                name=user.name,
+                name=user.full_name,  # el modelo no tiene .name (bug preexistente: 500 en /admin/users)
                 role=user.role,
                 role_level=user.get_role_level(),
                 is_admin=user.is_admin(),
