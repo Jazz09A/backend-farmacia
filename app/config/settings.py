@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     CACHE_STATIC_TTL: int = int(os.getenv("CACHE_STATIC_TTL", "7200"))  # 2 horas
     CACHE_DEFAULT_TTL: int = int(os.getenv("CACHE_DEFAULT_TTL", "1800"))  # 30 minutos por defecto
 
+    # Cache Backend Configuration (Redis)
+    # CACHE_DRIVER: 'memory' (default local/CI) o 'redis' (producción).
+    # Con driver 'redis', si Redis falla se degrada a memoria automáticamente
+    # y se reintenta cada CACHE_REDIS_HEALTH_INTERVAL segundos.
+    CACHE_DRIVER: str = os.getenv("CACHE_DRIVER", "memory")  # 'memory' | 'redis'
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    CACHE_REDIS_KEY_PREFIX: str = os.getenv("CACHE_REDIS_KEY_PREFIX", "farmacia:cache:")
+    CACHE_REDIS_HEALTH_INTERVAL: int = int(os.getenv("CACHE_REDIS_HEALTH_INTERVAL", "30"))  # segundos
+
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: str | None = os.getenv("CLOUDINARY_CLOUD_NAME", None)
     CLOUDINARY_API_KEY: str | None = os.getenv("CLOUDINARY_API_KEY", None)
@@ -80,3 +89,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # pydantic-settings >= 2.10 prohíbe campos extra del .env por defecto;
+        # ignorarlos restaura el comportamiento anterior (ej: PORT, NGINX_...)
+        extra = "ignore"

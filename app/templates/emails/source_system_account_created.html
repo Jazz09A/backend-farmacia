@@ -1,113 +1,149 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuenta Creada - FarmaPlus</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Cuenta creada - FarmaPlus</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 5px 5px 0 0;
-        }
-        .content {
-            background-color: #f9f9f9;
-            padding: 30px;
-            border-radius: 0 0 5px 5px;
-        }
-        .password-box {
-            background-color: #fff;
-            border: 2px dashed #4CAF50;
-            padding: 15px;
-            text-align: center;
-            margin: 20px 0;
-            border-radius: 5px;
-        }
-        .password {
-            font-size: 24px;
-            font-weight: bold;
-            color: #4CAF50;
-            letter-spacing: 2px;
-            font-family: 'Courier New', monospace;
-        }
-        .button {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .warning {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            color: #666;
-            font-size: 12px;
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+        body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        a { text-decoration: none; }
+        @media only screen and (max-width: 620px) {
+            .container { width: 100% !important; }
+            .px { padding-left: 24px !important; padding-right: 24px !important; }
+            .title { font-size: 24px !important; line-height: 30px !important; }
+            .password { font-size: 20px !important; letter-spacing: 1px !important; }
+            .btn a { padding: 14px 28px !important; }
         }
     </style>
 </head>
-<body>
-    <div class="header">
-        <h1>¡Bienvenido a FarmaPlus!</h1>
-        <p>Tu cuenta ha sido creada</p>
+<body style="margin:0; padding:0; background-color:#ffffff; font-family:Arial,Helvetica,sans-serif; color:#333333;">
+
+    <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#ffffff; opacity:0;">
+        Tu cuenta en FarmaPlus ya está lista. Aquí tienes tus datos de acceso.
+        &#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
     </div>
-    
-    <div class="content">
-        <p>Estimado/a <strong>{{ customer_name }}</strong>,</p>
-        <p>Nos complace informarte que hemos creado tu cuenta en FarmaPlus. 
-        A partir de ahora podrás acceder a nuestro sistema de pedidos en línea.</p>
-        <h2>Datos de Acceso</h2>
-        <p><strong>Email:</strong> {{ email }}</p>
-        <div class="password-box">
-            <p><strong>Contraseña Temporal:</strong></p>
-            <div class="password">{{ temporary_password }}</div>
-        </div>
-        <div class="warning">
-            <strong>⚠️ Importante:</strong>
-            <p>Esta es una contraseña temporal. Por tu seguridad, 
-            <strong>debes cambiar tu contraseña</strong> después de tu primer inicio de sesión.</p>
-        </div>
-        <h2>Próximos Pasos</h2>
-        <ol>
-            <li>Inicia sesión con tu email y la contraseña temporal</li>
-            <li>Cambia tu contraseña de inmediato</li>
-            <li>Explora tu historial de facturas históricas</li>
-            <li>Realiza tus pedidos en línea</li>
-        </ol>
-        <p style="text-align: center;">
-            <a href="{{ login_url }}" class="button">Iniciar Sesión</a>
-        </p>
-        <p style="text-align: center;">
-            <a href="{{ change_password_url }}">Cambiar Contraseña</a>
-        </p>
-        <p>Si tienes alguna pregunta o necesitas ayuda, no dudes en contactarnos.</p>
-        <p>¡Esperamos verte pronto!</p>
-        <p>Atentamente,<br>
-        <strong>Equipo FarmaPlus</strong><br>
-        Grupo Drozainka</p>
-    </div>
-    <div class="footer">
-        <p>© {{ year }} FarmaPlus - Grupo Drozainka. Todos los derechos reservados.</p>
-        <p>Este es un email automático, por favor no responder.</p>
-    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="background-color:#ffffff;">
+        <tr>
+            <td align="center" style="padding:32px 12px;">
+
+                <table role="presentation" class="container" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px; max-width:600px; border:1px solid #dddddd; border-radius:8px; overflow:hidden;">
+
+                    <tr>
+                        <td align="center" class="px" bgcolor="#4CAF50" style="background-color:#4CAF50; padding:40px 40px 36px;">
+                            <h1 class="title" style="margin:0 0 8px; font-size:28px; line-height:36px; font-weight:700; color:#ffffff; text-align:center;">Bienvenido a FarmaPlus</h1>
+                            <p style="margin:0; font-size:16px; line-height:24px; color:#ffffff; text-align:center;">Tu cuenta ha sido creada</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:40px 48px 8px;">
+                            <p style="margin:0 0 16px; font-size:16px; line-height:26px; color:#333333; text-align:left;">Estimado/a <strong>{{ customer_name }}</strong>,</p>
+                            <p style="margin:0; font-size:16px; line-height:26px; color:#333333; text-align:left;">Creamos tu cuenta en FarmaPlus. A partir de ahora podrás acceder a nuestro sistema de pedidos en línea.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:32px 48px 8px;">
+                            <h2 style="margin:0 0 12px; font-size:18px; line-height:26px; font-weight:700; color:#333333; text-align:left;">Datos de acceso</h2>
+                            <p style="margin:0 0 16px; font-size:15px; line-height:24px; color:#333333; text-align:left;"><strong>Email:</strong> {{ email }}</p>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td align="center" bgcolor="#ffffff" style="background-color:#ffffff; border:2px dashed #4CAF50; border-radius:8px; padding:20px 16px;">
+                                        <p style="margin:0 0 8px; font-size:13px; line-height:18px; font-weight:700; color:#333333; letter-spacing:1px; text-transform:uppercase; text-align:center;">Contraseña temporal</p>
+                                        <p class="password" style="margin:0; font-family:'Courier New',Courier,monospace; font-size:24px; line-height:32px; font-weight:700; color:#4CAF50; letter-spacing:2px; text-align:center; word-break:break-all;">{{ temporary_password }}</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:24px 48px 8px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td bgcolor="#fff3cd" style="background-color:#fff3cd; border-left:4px solid #ffc107; border-radius:4px; padding:18px 22px;">
+                                        <p style="margin:0 0 6px; font-size:15px; line-height:22px; font-weight:700; color:#856404; text-align:left;">Importante</p>
+                                        <p style="margin:0; font-size:14px; line-height:22px; color:#856404; text-align:left;">Esta es una contraseña temporal. Por tu seguridad, <strong>debes cambiarla</strong> después de tu primer inicio de sesión.</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:32px 48px 8px;">
+                            <h2 style="margin:0 0 16px; font-size:18px; line-height:26px; font-weight:700; color:#333333; text-align:left;">Próximos pasos</h2>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td width="36" valign="top" style="padding:0 0 14px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" width="24" height="24" bgcolor="#4CAF50" style="width:24px; height:24px; border-radius:12px; background-color:#4CAF50; font-size:13px; line-height:24px; font-weight:700; color:#ffffff;">1</td></tr></table>
+                                    </td>
+                                    <td valign="top" style="padding:2px 0 14px; font-size:15px; line-height:22px; color:#333333;">Inicia sesión con tu email y la contraseña temporal.</td>
+                                </tr>
+                                <tr>
+                                    <td width="36" valign="top" style="padding:0 0 14px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" width="24" height="24" bgcolor="#4CAF50" style="width:24px; height:24px; border-radius:12px; background-color:#4CAF50; font-size:13px; line-height:24px; font-weight:700; color:#ffffff;">2</td></tr></table>
+                                    </td>
+                                    <td valign="top" style="padding:2px 0 14px; font-size:15px; line-height:22px; color:#333333;">Cambia tu contraseña de inmediato.</td>
+                                </tr>
+                                <tr>
+                                    <td width="36" valign="top" style="padding:0 0 14px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" width="24" height="24" bgcolor="#4CAF50" style="width:24px; height:24px; border-radius:12px; background-color:#4CAF50; font-size:13px; line-height:24px; font-weight:700; color:#ffffff;">3</td></tr></table>
+                                    </td>
+                                    <td valign="top" style="padding:2px 0 14px; font-size:15px; line-height:22px; color:#333333;">Consulta tu historial de facturas.</td>
+                                </tr>
+                                <tr>
+                                    <td width="36" valign="top" style="padding:0;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td align="center" width="24" height="24" bgcolor="#4CAF50" style="width:24px; height:24px; border-radius:12px; background-color:#4CAF50; font-size:13px; line-height:24px; font-weight:700; color:#ffffff;">4</td></tr></table>
+                                    </td>
+                                    <td valign="top" style="padding:2px 0 0; font-size:15px; line-height:22px; color:#333333;">Realiza tus pedidos en línea.</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:32px 48px 8px;">
+                            <table role="presentation" class="btn" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;">
+                                <tr>
+                                    <td align="center" bgcolor="#4CAF50" style="border-radius:6px; background-color:#4CAF50;">
+                                        <a href="{{ login_url }}" target="_blank" style="display:inline-block; padding:15px 44px; font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:20px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:6px;">Iniciar sesión</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin:18px 0 0; font-size:14px; line-height:20px; text-align:center;">
+                                <a href="{{ change_password_url }}" target="_blank" style="color:#4CAF50; font-weight:700; text-decoration:underline;">Cambiar contraseña</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:32px 48px 40px;">
+                            <p style="margin:0 0 16px; font-size:16px; line-height:26px; color:#333333; text-align:left;">Si tienes alguna pregunta o necesitas ayuda, no dudes en contactarnos. ¡Esperamos verte pronto!</p>
+                            <p style="margin:0; font-size:16px; line-height:26px; color:#333333; text-align:left;">Atentamente,<br><strong>Equipo FarmaPlus</strong><br>Grupo Drozainka</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" class="px" bgcolor="#f9f9f9" style="background-color:#f9f9f9; padding:24px 40px 28px; border-top:1px solid #dddddd;">
+                            <p style="margin:0 0 4px; font-size:12px; line-height:18px; color:#666666;">&copy; {{ year }} FarmaPlus - Grupo Drozainka. Todos los derechos reservados.</p>
+                            <p style="margin:0; font-size:12px; line-height:18px; color:#666666;">Este es un correo automático, por favor no respondas a este mensaje.</p>
+                        </td>
+                    </tr>
+
+                </table>
+
+            </td>
+        </tr>
+    </table>
+
 </body>
 </html>

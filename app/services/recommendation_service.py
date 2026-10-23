@@ -54,7 +54,7 @@ class RecommendationService:
             price=price_code,
             warehouse=warehouse_code,
         )
-        cached = cache_service.get(cache_key)
+        cached = cache_service.get_sync(cache_key)
         if cached is not None:
             logger.debug(f"Cache HIT para artículos relacionados: {co_art}")
             return cached
@@ -201,7 +201,7 @@ class RecommendationService:
                 result = related[:limit]
 
                 # Guardar en caché
-                cache_service.set(cache_key, result, ttl=CACHE_TTL_RELATED)
+                cache_service.set_sync(cache_key, result, ttl=CACHE_TTL_RELATED)
                 logger.debug(f"Cache SET para artículos relacionados: {co_art} ({len(result)} items)")
 
                 return result
@@ -220,7 +220,7 @@ class RecommendationService:
         cache_key = cache_service._generate_key(
             f"{CACHE_PREFIX_RECOMMENDATIONS}:frequently_bought", co_art=co_art, limit=limit
         )
-        cached = cache_service.get(cache_key)
+        cached = cache_service.get_sync(cache_key)
         if cached is not None:
             logger.debug(f"Cache HIT para frecuentemente comprados: {co_art}")
             return cached
@@ -245,7 +245,7 @@ class RecommendationService:
                     cursor.close()
                     logger.debug(f"No se encontraron facturas con el artículo {co_art}")
                     # Cachear resultado vacío para evitar consultas repetidas
-                    cache_service.set(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
+                    cache_service.set_sync(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
                     return []
 
                 invoice_nums = [row.get("doc_num") for row in invoices]
@@ -269,7 +269,7 @@ class RecommendationService:
 
                 if not frequent_articles:
                     cursor.close()
-                    cache_service.set(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
+                    cache_service.set_sync(cache_key, [], ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
                     return []
 
                 # Obtener detalles de los artículos más frecuentes
@@ -332,7 +332,7 @@ class RecommendationService:
                 result = result[:limit]
 
                 # Guardar en caché
-                cache_service.set(cache_key, result, ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
+                cache_service.set_sync(cache_key, result, ttl=CACHE_TTL_FREQUENTLY_BOUGHT)
                 logger.debug(f"Cache SET para frecuentemente comprados: {co_art} ({len(result)} items)")
 
                 return result
@@ -360,7 +360,7 @@ class RecommendationService:
             price=price_code,
             warehouse=warehouse_code,
         )
-        cached = cache_service.get(cache_key)
+        cached = cache_service.get_sync(cache_key)
         if cached is not None:
             logger.debug(f"Cache HIT para recomendados: customer={customer_code}")
             return cached
@@ -541,7 +541,7 @@ class RecommendationService:
                 result = recommended[:limit]
 
                 # Guardar en caché
-                cache_service.set(cache_key, result, ttl=CACHE_TTL_RECOMMENDED)
+                cache_service.set_sync(cache_key, result, ttl=CACHE_TTL_RECOMMENDED)
                 logger.debug(f"Cache SET para recomendados: {len(result)} items")
 
                 return result
@@ -569,19 +569,19 @@ class RecommendationService:
     @staticmethod
     def invalidate_cache():
         """Invalida todo el caché de recomendaciones."""
-        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_RECOMMENDATIONS}:")
+        count = cache_service.invalidate_pattern_sync(f"{CACHE_PREFIX_RECOMMENDATIONS}:")
         logger.info(f"Caché de recomendaciones invalidado: {count} entradas eliminadas")
         return count
 
     @staticmethod
     def invalidate_article_cache(co_art: str):
         """Invalida el caché de recomendaciones para un artículo específico."""
-        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_RECOMMENDATIONS}:related:co_art={co_art}")
-        count += cache_service.invalidate_pattern(f"{CACHE_PREFIX_RECOMMENDATIONS}:frequently_bought:co_art={co_art}")
+        count = cache_service.invalidate_pattern_sync(f"{CACHE_PREFIX_RECOMMENDATIONS}:related:co_art={co_art}")
+        count += cache_service.invalidate_pattern_sync(f"{CACHE_PREFIX_RECOMMENDATIONS}:frequently_bought:co_art={co_art}")
         logger.debug(f"Caché de recomendaciones invalidado para {co_art}: {count} entradas")
         return count
 
     @staticmethod
     def get_cache_stats() -> dict:
         """Obtiene estadísticas del caché."""
-        return cache_service.get_stats()
+        return cache_service.get_stats_sync()

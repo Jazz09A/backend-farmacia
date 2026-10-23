@@ -135,9 +135,9 @@ class ProductImageService:
             # Invalidar cache del artículo ya que cambió su información de imágenes
             # Esto permite que los cambios se vean inmediatamente sin esperar a que expire el cache
             cache_key = cache_service._generate_key("article", co_art_normalized)
-            invalidated = cache_service.invalidate(cache_key)
+            invalidated = await cache_service.invalidate(cache_key)
             # También invalidar cualquier catálogo que pueda incluir este artículo
-            catalog_invalidated = cache_service.invalidate_pattern("catalog:")
+            catalog_invalidated = await cache_service.invalidate_pattern("catalog:")
             logger.info(
                 f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
@@ -234,9 +234,9 @@ class ProductImageService:
             # Invalidar cache del artículo ya que cambió su información de imágenes
             # Esto permite que los cambios se vean inmediatamente sin esperar a que expire el cache
             cache_key = cache_service._generate_key("article", co_art_normalized)
-            invalidated = cache_service.invalidate(cache_key)
+            invalidated = await cache_service.invalidate(cache_key)
             # También invalidar cualquier catálogo que pueda incluir este artículo
-            catalog_invalidated = cache_service.invalidate_pattern("catalog:")
+            catalog_invalidated = await cache_service.invalidate_pattern("catalog:")
             logger.info(
                 f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
@@ -542,9 +542,9 @@ class ProductImageService:
             co_art_normalized = co_art.strip().upper() if co_art else ""
             if co_art_normalized:
                 cache_key = cache_service._generate_key("article", co_art_normalized)
-                invalidated = cache_service.invalidate(cache_key)
+                invalidated = await cache_service.invalidate(cache_key)
                 # También invalidar cualquier catálogo que pueda incluir este artículo
-                catalog_invalidated = cache_service.invalidate_pattern("catalog:")
+                catalog_invalidated = await cache_service.invalidate_pattern("catalog:")
                 logger.info(
                     f"Cache invalidado - artículo {co_art_normalized}: "
                     f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
@@ -602,9 +602,9 @@ class ProductImageService:
             co_art_normalized = image.co_art_profit.strip().upper() if image.co_art_profit else ""
             if co_art_normalized:
                 cache_key = cache_service._generate_key("article", co_art_normalized)
-                invalidated = cache_service.invalidate(cache_key)
+                invalidated = await cache_service.invalidate(cache_key)
                 # También invalidar cualquier catálogo que pueda incluir este artículo
-                catalog_invalidated = cache_service.invalidate_pattern("catalog:")
+                catalog_invalidated = await cache_service.invalidate_pattern("catalog:")
                 logger.info(
                     f"Cache invalidado - artículo {co_art_normalized}: "
                     f"detalle={'invalidado' if invalidated else 'no encontrado'}, "
@@ -680,9 +680,9 @@ class ProductImageService:
             # Invalidar cache del artículo ya que cambió su información de imágenes
             # Esto permite que los cambios se vean inmediatamente sin esperar a que expire el cache
             cache_key = cache_service._generate_key("article", co_art_normalized)
-            invalidated = cache_service.invalidate(cache_key)
+            invalidated = await cache_service.invalidate(cache_key)
             # También invalidar cualquier catálogo que pueda incluir este artículo
-            catalog_invalidated = cache_service.invalidate_pattern("catalog:")
+            catalog_invalidated = await cache_service.invalidate_pattern("catalog:")
             logger.info(
                 f"Cache invalidado - artículo {co_art_normalized}: "
                 f"detalle={'invalidado' if invalidated else 'no encontrado'}, "

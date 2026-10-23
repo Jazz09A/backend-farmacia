@@ -38,14 +38,14 @@ class BlogService:
     @staticmethod
     def invalidate_posts_cache():
         """Invalida todo el caché de posts del blog."""
-        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_BLOG_POSTS}:")
+        count = cache_service.invalidate_pattern_sync(f"{CACHE_PREFIX_BLOG_POSTS}:")
         logger.info(f"Cache de posts invalidado: {count} entradas eliminadas")
         return count
 
     @staticmethod
     def invalidate_categories_cache():
         """Invalida todo el caché de categorías del blog."""
-        count = cache_service.invalidate_pattern(f"{CACHE_PREFIX_BLOG_CATEGORIES}:")
+        count = cache_service.invalidate_pattern_sync(f"{CACHE_PREFIX_BLOG_CATEGORIES}:")
         logger.info(f"Cache de categorías invalidado: {count} entradas eliminadas")
         return count
 
@@ -188,7 +188,7 @@ class BlogService:
         cache_key = None
         if use_cache and not include_deleted:
             cache_key = f"{CACHE_PREFIX_BLOG_CATEGORIES}:slug:{slug}"
-            cached = cache_service.get(cache_key)
+            cached = cache_service.get_sync(cache_key)
             if cached is not None:
                 return cached
 
@@ -199,7 +199,7 @@ class BlogService:
 
         # Guardar en caché
         if cache_key and category:
-            cache_service.set(cache_key, category, ttl=CACHE_TTL_BLOG_CATEGORIES)
+            cache_service.set_sync(cache_key, category, ttl=CACHE_TTL_BLOG_CATEGORIES)
 
         return category
 
@@ -208,7 +208,7 @@ class BlogService:
         # Intentar obtener del caché si está habilitado y no incluye eliminadas
         if use_cache and not include_deleted:
             cache_key = f"{CACHE_PREFIX_BLOG_CATEGORIES}:all"
-            cached = cache_service.get(cache_key)
+            cached = cache_service.get_sync(cache_key)
             if cached is not None:
                 logger.debug("Cache HIT para categorías del blog")
                 return cached
@@ -221,7 +221,7 @@ class BlogService:
 
         # Guardar en caché si aplica
         if use_cache and not include_deleted:
-            cache_service.set(cache_key, categories, ttl=CACHE_TTL_BLOG_CATEGORIES)
+            cache_service.set_sync(cache_key, categories, ttl=CACHE_TTL_BLOG_CATEGORIES)
             logger.debug(f"Cache SET para categorías del blog ({len(categories)} items)")
 
         return categories
@@ -412,7 +412,7 @@ class BlogService:
             cache_key = cache_service._generate_key(
                 CACHE_PREFIX_BLOG_POSTS, page=page, limit=limit, category=category_slug or ""
             )
-            cached = cache_service.get(cache_key)
+            cached = cache_service.get_sync(cache_key)
             if cached is not None:
                 logger.debug(f"Cache HIT para posts públicos: page={page}, limit={limit}")
                 return cached
@@ -520,7 +520,7 @@ class BlogService:
         # Guardar en caché si aplica (no cachear búsquedas)
         result = (posts, total)
         if cache_key:
-            cache_service.set(cache_key, result, ttl=CACHE_TTL_BLOG_POSTS)
+            cache_service.set_sync(cache_key, result, ttl=CACHE_TTL_BLOG_POSTS)
             logger.debug(f"Cache SET para posts públicos: {len(posts)} items")
 
         return result
@@ -546,7 +546,7 @@ class BlogService:
                 status=status_filter or "",
                 category=category_id or "",
             )
-            cached = cache_service.get(cache_key)
+            cached = cache_service.get_sync(cache_key)
             if cached is not None:
                 logger.debug(f"Cache HIT para posts admin: page={page}")
                 return cached
@@ -675,7 +675,7 @@ class BlogService:
         # Guardar en caché si aplica
         result_tuple = (posts, total)
         if cache_key:
-            cache_service.set(cache_key, result_tuple, ttl=CACHE_TTL_BLOG_POSTS)
+            cache_service.set_sync(cache_key, result_tuple, ttl=CACHE_TTL_BLOG_POSTS)
             logger.debug(f"Cache SET para posts admin: {len(posts)} items")
 
         return result_tuple

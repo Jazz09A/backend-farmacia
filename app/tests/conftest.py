@@ -102,11 +102,13 @@ def db(db_session):
 @pytest.fixture(autouse=True)
 def clean_cache_service():
     """Limpia el cache global entre tests (el singleton es compartido)."""
+    import asyncio
+
     from app.services.cache_service import cache_service
 
-    cache_service._cache.clear()
+    asyncio.run(cache_service.clear())
     yield
-    cache_service._cache.clear()
+    asyncio.run(cache_service.clear())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

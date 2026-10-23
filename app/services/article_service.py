@@ -311,7 +311,7 @@ class ArticleService:
         )
 
         # Intentar obtener del cache
-        cached_response = cache_service.get(cache_key)
+        cached_response = cache_service.get_sync(cache_key)
         if cached_response is not None:
             self.logger.debug(f"Cache hit para catálogo: {cache_key}")
             print(f"✅ CACHE HIT - Catálogo encontrado en cache: {cache_key}")
@@ -471,7 +471,7 @@ class ArticleService:
         # Almacenar en cache (usar model_dump para Pydantic v2 o dict() para v1)
         try:
             cache_data = response.model_dump() if hasattr(response, "model_dump") else response.dict()
-            cache_service.set(cache_key, cache_data)
+            cache_service.set_sync(cache_key, cache_data)
             print(f"💾 CACHE SET - Catálogo almacenado en cache: {cache_key}")
             print(f"   Productos almacenados: {response.total} artículos en página {response.page}")
         except Exception as e:
@@ -488,7 +488,7 @@ class ArticleService:
         cache_key = cache_service._generate_key("article", normalized_co_art)
 
         # Intentar obtener del cache
-        cached_response = cache_service.get(cache_key)
+        cached_response = cache_service.get_sync(cache_key)
         if cached_response is not None:
             self.logger.debug(f"Cache hit para detalle de artículo: {normalized_co_art}")
             print(f"✅ CACHE HIT - Detalle de artículo encontrado en cache: {normalized_co_art}")
@@ -624,7 +624,7 @@ class ArticleService:
         # Almacenar en cache
         try:
             cache_data = response.model_dump() if hasattr(response, "model_dump") else response.dict()
-            cache_service.set(cache_key, cache_data)
+            cache_service.set_sync(cache_key, cache_data)
             print(f"💾 CACHE SET - Detalle de artículo almacenado en cache: {normalized_co_art}")
         except Exception as e:
             self.logger.warning(f"Error al almacenar detalle en cache: {e}")
@@ -664,9 +664,9 @@ class ArticleService:
         # Invalidar cache del artículo ya que cambió su información de imágenes
         normalized_co_art = (co_art or "").strip().upper()
         cache_key = cache_service._generate_key("article", normalized_co_art)
-        cache_service.invalidate(cache_key)
+        cache_service.invalidate_sync(cache_key)
         # También invalidar cualquier catálogo que pueda incluir este artículo
-        cache_service.invalidate_pattern("catalog:")
+        cache_service.invalidate_pattern_sync("catalog:")
         self.logger.info(f"Cache invalidado para artículo {normalized_co_art} después de subir imagen")
 
         return ImageUploadResponse(

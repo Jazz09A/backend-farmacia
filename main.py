@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from app.config.settings import Settings
 from app.core.exceptions import FarmaException
+from app.services.cache_service import cache_service
 # from app.core.middleware import LoggingMiddleware, SecurityMiddleware
 from app.config.logging_config import (
     get_logger,
@@ -33,8 +34,17 @@ async def lifespan(app: FastAPI):
             'event': 'application_startup'
         }
     )
+
+    # ── Cache backend (Redis) ──
+    if getattr(settings, "CACHE_DRIVER", "memory") == "redis":
+        if await cache_service.ping_redis():
+            app_logger.info(f"Cache Redis listo ({settings.REDIS_URL})")
+        else:
+            app_logger.warning("Cache Redis NO disponible; cache degradado a memoria")
+
     yield
     # Shutdown
+    await cache_service.close()
     app_logger.info(
         f"Shutting down {settings.PROJECT_NAME}",
         extra={'project_name': settings.PROJECT_NAME, 'event': 'application_shutdown'}

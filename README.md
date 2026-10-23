@@ -143,7 +143,32 @@ MAX_FILE_SIZE=5242880
 
 # Modo debug
 DEBUG=True
+
+# Caché (Redis)
+CACHE_DRIVER=memory                       # 'memory' (dev/CI) | 'redis' (producción)
+REDIS_URL=redis://localhost:6379/0
+CACHE_REDIS_KEY_PREFIX=farmacia:cache:
+CACHE_REDIS_HEALTH_INTERVAL=30
 ```
+
+### Caché Redis (nueva arquitectura)
+
+El caché está detrás de un facade único con backend **Redis (`redis.asyncio`)** y
+**fallback automático a memoria** si Redis falla (re-sondeo cada
+`CACHE_REDIS_HEALTH_INTERVAL` segundos; vuelve a Redis cuando responde).
+
+- `CACHE_DRIVER` controla si se usa Redis o memoria. En producción usar `redis`
+  y arrancar Redis (p. ej. `docker run -d --name app-redis -p 6379:6379 redis:7-alpine`).
+- `invalidate_pattern` usa `SCAN` + `UNLINK` (prohibido `KEYS`/`FLUSH` en producción);
+  el namespace `CACHE_REDIS_KEY_PREFIX` permite convivir con otras apps en la
+  misma instancia de Redis.
+- Los servicios con DB síncrona (artículos/blog/recomendaciones) usan los puentes
+  `get_sync/set_sync/...`; los endpoints admin usan `await` directo (misma API).
+- Los valores complejos (objetos ORM, `Decimal`, `datetime`) se serializan con
+  orjson + envelope tipado y reviven con la semántica del caché en memoria
+  (deltas documentados en `app/services/cache_service.py`).
+- Los TTL por tipo de caché (`catalog:`, `article:`, `categories:`, `lines:`)
+  siguen siendo los mismos: `CACHE_CATALOG_TTL`, etc.
 
 ## 📚 Documentación
 

@@ -620,7 +620,7 @@ async def get_cache_stats(current_user: User = Depends(get_admin_user)):
     - Tasa de aciertos (hit rate)
     - Operaciones realizadas
     """
-    stats = cache_service.get_stats()
+    stats = await cache_service.get_stats()
     return CacheStatsResponse(**stats)
 
 
@@ -640,13 +640,13 @@ async def invalidate_cache(request: CacheInvalidateRequest, current_user: User =
 
     if request.cache_type:
         if request.cache_type == "all":
-            invalidated_count = cache_service.clear()
+            invalidated_count = await cache_service.clear()
             message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
         elif request.cache_type == "catalog":
-            invalidated_count = cache_service.invalidate_pattern("catalog:")
+            invalidated_count = await cache_service.invalidate_pattern("catalog:")
             message = f"Cache de catálogo invalidado. {invalidated_count} entradas eliminadas."
         elif request.cache_type == "article":
-            invalidated_count = cache_service.invalidate_pattern("article:")
+            invalidated_count = await cache_service.invalidate_pattern("article:")
             message = f"Cache de artículos invalidado. {invalidated_count} entradas eliminadas."
         else:
             raise HTTPException(
@@ -654,11 +654,11 @@ async def invalidate_cache(request: CacheInvalidateRequest, current_user: User =
                 detail=f"Tipo de cache inválido: {request.cache_type}. Use 'catalog', 'article', o 'all'",
             )
     elif request.pattern:
-        invalidated_count = cache_service.invalidate_pattern(request.pattern)
+        invalidated_count = await cache_service.invalidate_pattern(request.pattern)
         message = f"Cache invalidado para patrón '{request.pattern}'. {invalidated_count} entradas eliminadas."
     else:
         # Si no se especifica nada, limpiar todo
-        invalidated_count = cache_service.clear()
+        invalidated_count = await cache_service.clear()
         message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
 
     logger.info(f"Cache invalidado por {current_user.email}: {message}")
@@ -678,10 +678,10 @@ async def delete_cache_by_type(cache_type: str, current_user: User = Depends(get
     - `article`: Cache de detalles de artículos
     """
     if cache_type == "catalog":
-        invalidated_count = cache_service.invalidate_pattern("catalog:")
+        invalidated_count = await cache_service.invalidate_pattern("catalog:")
         message = f"Cache de catálogo eliminado. {invalidated_count} entradas eliminadas."
     elif cache_type == "article":
-        invalidated_count = cache_service.invalidate_pattern("article:")
+        invalidated_count = await cache_service.invalidate_pattern("article:")
         message = f"Cache de artículos eliminado. {invalidated_count} entradas eliminadas."
     else:
         raise HTTPException(
@@ -702,7 +702,7 @@ async def cleanup_expired_cache(current_user: User = Depends(get_admin_user)):
     Elimina todas las entradas expiradas del cache.
     Útil para liberar memoria sin afectar entradas activas.
     """
-    cleaned_count = cache_service.cleanup_expired()
+    cleaned_count = await cache_service.cleanup_expired()
 
     logger.info(f"Limpieza de cache expirado por {current_user.email}: {cleaned_count} entradas eliminadas")
 
