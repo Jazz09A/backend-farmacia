@@ -164,7 +164,9 @@ dev = [
     { name = "ruff" },
 ]
 test = [
+    { name = "fakeredis" },
     { name = "pytest-cov" },
+    { name = "pytest-env" },
 ]
 
 [package.dev-dependencies]
@@ -182,6 +184,7 @@ requires-dist = [
     { name = "bcrypt", specifier = "==3.2.0" },
     { name = "cloudinary", specifier = ">=1.46.3" },
     { name = "email-validator", specifier = ">=2.2.0" },
+    { name = "fakeredis", marker = "extra == 'test'", specifier = ">=2.40.0" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
@@ -201,6 +204,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=7.0" },
+    { name = "pytest-env", marker = "extra == 'test'", specifier = ">=1.8.1" },
     { name = "python-decouple", specifier = ">=3.8" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "redis", specifier = ">=5.0.1" },
