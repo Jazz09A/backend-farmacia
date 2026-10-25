@@ -62,7 +62,9 @@ class JWTSettings(BaseSettings):
         description="JWT signing secret. Required, min 32 chars.",
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(..., gt=0)
+    # Default 30 min (comportamiento heredado de la Settings monolítica);
+    # .env de producción lo sobreescribe. Requiere env en despliegues reales.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, gt=0)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, gt=0)
 
     @field_validator("ACCESS_TOKEN_EXPIRE_MINUTES")
