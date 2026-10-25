@@ -98,7 +98,7 @@ class RecommendationService:
 
                 # Construir condiciones de similitud
                 conditions = []
-                condition_params = []
+                condition_params: list[Any] = []
 
                 if base_category:
                     conditions.append("RTRIM(a.co_cat) = %s")
@@ -114,7 +114,7 @@ class RecommendationService:
 
                 # Rango de precio similar (±30%)
                 price_condition = None
-                price_params = []
+                price_params: list[Any] = []
                 if base_price:
                     price_range = base_price * Decimal("0.3")
                     min_price = base_price - price_range

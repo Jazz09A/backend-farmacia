@@ -1,9 +1,4 @@
 """Tests del modelo User (los del CacheService viven en test_cache_service.py)."""
-import uuid
-
-import pytest
-
-from app.models.user import User
 
 
 # =============================================================================

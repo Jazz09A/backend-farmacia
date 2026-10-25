@@ -3,9 +3,6 @@
 Estos tests usan FakeSourceSystemService para verificar que los repositorios
 deleguen correctamente al servicio subyacente sin abrir conexiones reales.
 """
-import pytest
-from decimal import Decimal
-from unittest.mock import MagicMock
 
 from app.repositories import (
     CustomerRepository,
@@ -23,26 +20,28 @@ def _setup_customer_results(fake: FakeSourceSystemService, results: list[dict]):
     # El CustomerRepository crea su propia conexión, así que configuramos
     # el mock en el método get_pooled_connection
     original_get_conn = fake.get_pooled_connection
-    
+
     def get_conn_with_results():
         conn = FakeConnection(results)
         return conn
-    
-    fake.get_pooled_connection = get_conn_with_results
+
+    fake.get_pooled_connection = get_conn_with_results  # type: ignore[method-assign]  # fixture de test
     return original_get_conn
 
 
 class TestCustomerRepository:
     def test_get_all_delegates_to_source(self):
         fake = FakeSourceSystemService()
-        results = [{
-            "co_cli": "CLI001",
-            "cli_des": "Cliente Test",
-            "email": "test@test.com",
-            "tip_cli": "001",
-        }]
+        results = [
+            {
+                "co_cli": "CLI001",
+                "cli_des": "Cliente Test",
+                "email": "test@test.com",
+                "tip_cli": "001",
+            }
+        ]
         _setup_customer_results(fake, results)
-        
+
         repo = CustomerRepository(fake)
         customers = repo.get_all()
         assert len(customers) == 1
@@ -50,14 +49,16 @@ class TestCustomerRepository:
 
     def test_get_by_id(self):
         fake = FakeSourceSystemService()
-        results = [{
-            "co_cli": "CLI001",
-            "cli_des": "Cliente Test",
-            "email": "test@test.com",
-            "tip_cli": "001",
-        }]
+        results = [
+            {
+                "co_cli": "CLI001",
+                "cli_des": "Cliente Test",
+                "email": "test@test.com",
+                "tip_cli": "001",
+            }
+        ]
         _setup_customer_results(fake, results)
-        
+
         repo = CustomerRepository(fake)
         customer = repo.get_by_id("CLI001")
         assert customer is not None
@@ -65,14 +66,16 @@ class TestCustomerRepository:
 
     def test_get_by_email(self):
         fake = FakeSourceSystemService()
-        results = [{
-            "co_cli": "CLI001",
-            "cli_des": "Cliente Test",
-            "email": "test@test.com",
-            "tip_cli": "001",
-        }]
+        results = [
+            {
+                "co_cli": "CLI001",
+                "cli_des": "Cliente Test",
+                "email": "test@test.com",
+                "tip_cli": "001",
+            }
+        ]
         _setup_customer_results(fake, results)
-        
+
         repo = CustomerRepository(fake)
         customer = repo.get_by_email("test@test.com")
         assert customer is not None
@@ -90,12 +93,14 @@ class TestCustomerRepository:
         # get_profit_profile usa get_by_email que ejecuta SQL.
         # Configuramos el fake connection para que retorne el cliente.
         # Usar un email único para evitar cache de tests anteriores
-        results = [{
-            "customer_code": "CLI001",
-            "customer_name": "Cliente Test",
-            "email": "profile@test.com",
-            "tip_cli": "001",
-        }]
+        results = [
+            {
+                "customer_code": "CLI001",
+                "customer_name": "Cliente Test",
+                "email": "profile@test.com",
+                "tip_cli": "001",
+            }
+        ]
         original_get_conn = fake.get_pooled_connection
 
         def get_conn_with_results():
@@ -117,17 +122,17 @@ class TestCustomerRepository:
         # count() ejecuta COUNT(*) SQL, así que configuramos el fake connection
         results = [{"total": 2}]
         original_get_conn = fake.get_pooled_connection
-        
+
         def get_conn_with_results():
             conn = FakeConnection(results)
             return conn
-        
+
         fake.get_pooled_connection = get_conn_with_results
-        
+
         repo = CustomerRepository(fake)
         count = repo.count()
         assert count == 2
-        
+
         # Restaurar
         fake.get_pooled_connection = original_get_conn
 
@@ -151,9 +156,9 @@ class TestArticleRepository:
         repo = ArticleRepository(fake)
         # El repo usa sus propias consultas SQL, no el fake.articles dict.
         # Solo verificamos que el repo se instancia y tiene los métodos.
-        assert hasattr(repo, 'get_detail')
-        assert hasattr(repo, 'search')
-        assert hasattr(repo, 'get_images')
+        assert hasattr(repo, "get_detail")
+        assert hasattr(repo, "search")
+        assert hasattr(repo, "get_images")
         # El test de integración real cubrirá la ejecución SQL
 
 
@@ -200,7 +205,7 @@ class TestHealthRepository:
         # HealthRepository ahora accede directamente al pool/conexión,
         # no delega de vuelta. Verificamos que el repo se instancia y
         # tiene el método. Los tests del flujo real están en test_source_system_service.
-        assert hasattr(repo, 'health_check')
+        assert hasattr(repo, "health_check")
         assert callable(repo.health_check)
 
     def test_get_pool_stats(self):

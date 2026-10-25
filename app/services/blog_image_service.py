@@ -471,7 +471,7 @@ class BlogImageService:
             .all()
         )
 
-        result = {}
+        result: dict[str, list[BlogImage]] = {}
         for img in images:
             if img.blog_post_id not in result:
                 result[img.blog_post_id] = []

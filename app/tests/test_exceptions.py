@@ -1,4 +1,5 @@
 """Tests de la jerarquía de excepciones y handlers globales."""
+
 import pytest
 from fastapi.testclient import TestClient
 

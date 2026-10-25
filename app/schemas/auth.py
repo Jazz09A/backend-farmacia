@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -31,15 +32,15 @@ class RegisterRequest(UserCreate):
     # Contactos especializados
     dueno_telefono: str | None = None
     dueno_email: str | None = None
-    dueno_cumpleanos: str | None = None
+    dueno_cumpleanos: date | None = None
 
     encargado_compra_telefono: str | None = None
     encargado_compra_email: str | None = None
-    encargado_compra_cumpleanos: str | None = None
+    encargado_compra_cumpleanos: date | None = None
 
     encargado_cobranza_telefono: str | None = None
     encargado_cobranza_email: str | None = None
-    encargado_cobranza_cumpleanos: str | None = None
+    encargado_cobranza_cumpleanos: date | None = None
 
     # Información adicional
     redes_sociales: str | None = None

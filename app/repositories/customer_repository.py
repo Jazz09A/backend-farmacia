@@ -54,7 +54,7 @@ class CustomerRepository(CustomerRepositoryProtocol):
                 WHERE 1=1
             """
 
-            params = []
+            params: list[Any] = []
 
             if not include_inactive:
                 query += " AND inactivo = 0"

@@ -9,13 +9,13 @@ Las fixtures están diseñadas para que cualquier test pueda ejecutarse sin
 acceder a servicios externos, sin requerir `.env.test` ni variables
 adicionales.
 """
+
 import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Generator, List, Dict, Any, Optional
+from typing import Generator, Any
 from unittest.mock import MagicMock
-from contextlib import contextmanager
 from decimal import Decimal
 from datetime import datetime
 
@@ -44,22 +44,6 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 # Importar modelos para que SQLAlchemy los registre en Base.metadata
 from app.models import (  # noqa: E402
     User,
-    Product,
-    CartItem,
-    Address,
-    UserPreferences,
-    Promotion,
-    PromotionUsage,
-    FlashOffer,
-    PromotionalCode,
-    DiscountType,
-    Category,
-    Brand,
-    UserFavorite,
-    BlogPost,
-    BlogCategory,
-    BlogImage,
-    ProductImage,
 )
 from app.config.database import Base, get_db  # noqa: E402
 from app.config.settings import Settings  # noqa: E402
@@ -81,6 +65,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
 
 # Forzar FKs en SQLite (off por defecto)
 @event.listens_for(engine, "connect")
@@ -127,6 +112,7 @@ def db_session(db):
 # =============================================================================
 # APP + CLIENT FIXTURES
 # =============================================================================
+
 
 @pytest.fixture(autouse=True)
 def clean_cache_service():
@@ -187,6 +173,7 @@ def client(app) -> Generator[TestClient, None, None]:
 # MOCKS / FAKES
 # =============================================================================
 
+
 class FakeEmailService:
     """Sustituye a `app.services.email_service.email_service` durante los tests."""
 
@@ -218,7 +205,8 @@ class FakeEmailService:
 
 class FakeCursor:
     """Fake cursor for testing pymssql interactions."""
-    def __init__(self, results: list[dict[str, Any]] = None):
+
+    def __init__(self, results: list[dict[str, Any]] | None = None):
         self._results = results or []
         self._index = 0
         self._closed = False
@@ -256,7 +244,8 @@ class FakeCursor:
 
 class FakeConnection:
     """Fake connection for testing pymssql interactions."""
-    def __init__(self, cursor_results: list[dict[str, Any]] = None):
+
+    def __init__(self, cursor_results: list[dict[str, Any]] | None = None):
         self._cursor_results = cursor_results or []
         self._closed = False
         self._in_transaction = False
@@ -332,7 +321,9 @@ class FakeSourceSystemService:
     def get_article_discount(self, article_code: str, quantity=None, existing_cursor=None):
         return None
 
-    def increment_discount_usage(self, co_desc: str, quantity_used: int, field_name: str = "campo1", existing_cursor=None):
+    def increment_discount_usage(
+        self, co_desc: str, quantity_used: int, field_name: str = "campo1", existing_cursor=None
+    ):
         pass
 
     # Stubs genéricos para métodos que no necesitamos cubrir en los
@@ -395,6 +386,7 @@ def mock_profit_service(monkeypatch):
 # USER FACTORIES
 # =============================================================================
 
+
 def _make_user(
     db: Session,
     *,
@@ -433,8 +425,10 @@ def _make_user(
 @pytest.fixture
 def user_factory(db):
     """Devuelve una factoría parametrizable de usuarios."""
+
     def _factory(**kwargs) -> User:
         return _make_user(db, **kwargs)
+
     return _factory
 
 
@@ -462,6 +456,7 @@ def manager_user(user_factory) -> User:
 # AUTH HELPERS
 # =============================================================================
 
+
 @pytest.fixture
 def make_token():
     """Devuelve una función que genera un JWT de acceso para el email dado."""
@@ -469,6 +464,7 @@ def make_token():
 
     def _make(email: str) -> str:
         return create_access_token({"sub": email})
+
     return _make
 
 
@@ -491,6 +487,7 @@ def super_admin_headers(super_admin_user, make_token) -> dict:
 # SETTINGS
 # =============================================================================
 
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings()
@@ -500,26 +497,27 @@ def settings() -> Settings:
 # PHASE 0 - CHARACTERIZATION TEST FIXTURES (God Services Refactor)
 # =============================================================================
 
+
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """Reset singleton instances between tests to ensure isolation."""
     from threading import Lock
     from app.services.source_system_service import SourceSystemService
     from app.services.cache_service import CacheService
-    
+
     # Save original lock to restore after
     original_sss_lock = SourceSystemService._instance_lock
     original_cache_lock = getattr(CacheService, "_instance_lock", None)
-    
+
     SourceSystemService._instance = None
     SourceSystemService._instance_lock = Lock()
-    
+
     if original_cache_lock is not None:
         CacheService._instance = None
         CacheService._instance_lock = Lock()
-    
+
     yield
-    
+
     # Cleanup after test
     SourceSystemService._instance = None
     SourceSystemService._instance_lock = original_sss_lock
@@ -528,66 +526,9 @@ def reset_singletons():
         CacheService._instance_lock = original_cache_lock
 
 
-class FakeCursor:
-    """Fake cursor for testing pymssql interactions."""
-    def __init__(self, results: List[Dict[str, Any]] = None):
-        self._results = results or []
-        self._index = 0
-        self._closed = False
-        self._last_query = ""
-        self._last_params = ()
-        self.rowcount = 0
-
-    def execute(self, query: str, params: tuple = ()) -> None:
-        self._last_query = query
-        self._last_params = params
-        self._index = 0
-        self.rowcount = len(self._results)
-
-    def fetchall(self) -> List[Dict[str, Any]]:
-        return self._results
-
-    def fetchone(self) -> Optional[Dict[str, Any]]:
-        if self._index < len(self._results):
-            result = self._results[self._index]
-            self._index += 1
-            return result
-        return None
-
-    def close(self) -> None:
-        self._closed = True
-
-    @property
-    def last_query(self) -> str:
-        return self._last_query
-
-    @property
-    def last_params(self) -> tuple:
-        return self._last_params
-
-
-class FakeConnection:
-    """Fake connection for testing pymssql interactions."""
-    def __init__(self, cursor_results: List[Dict[str, Any]] = None):
-        self._cursor_results = cursor_results or []
-        self._closed = False
-        self._in_transaction = False
-
-    def cursor(self) -> FakeCursor:
-        return FakeCursor(self._cursor_results)
-
-    def commit(self) -> None:
-        self._in_transaction = False
-
-    def rollback(self) -> None:
-        self._in_transaction = False
-
-    def close(self) -> None:
-        self._closed = True
-
-
 class FakePymssql:
     """Mock pymssql module for testing."""
+
     def __init__(self):
         self._connections = []
         self.OperationalError = Exception

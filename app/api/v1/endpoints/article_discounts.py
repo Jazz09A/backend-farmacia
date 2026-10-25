@@ -176,8 +176,28 @@ def get_article_discount_detail(
         start = discount.get("fecha_ini")
         end = discount.get("fecha_fin")
 
-        # Convertir strings ISO a datetime si es necesario para comparar
+        # Normalizar a datetime para poder comparar con `now` de forma segura.
+        # Si el string no parsea, se descarta el filtro (la comparación
+        # original era str vs datetime y fallaba en runtime).
         from datetime import datetime
+
+        start_dt: datetime | None = None
+        if isinstance(start, str):
+            try:
+                start_dt = datetime.fromisoformat(start)
+            except Exception:
+                start_dt = None
+        elif isinstance(start, datetime):
+            start_dt = start
+
+        end_dt: datetime | None = None
+        if isinstance(end, str):
+            try:
+                end_dt = datetime.fromisoformat(end)
+            except Exception:
+                end_dt = None
+        elif isinstance(end, datetime):
+            end_dt = end
 
         # Asegurarse de que now tenga tzinfo
         if now.tzinfo is None:
@@ -198,19 +218,19 @@ def get_article_discount_detail(
                 pass
 
         # Normalizar start/end a timezone-aware si son naive
-        if start and isinstance(start, datetime) and start.tzinfo is None:
+        if start_dt and start_dt.tzinfo is None:
             from app.utils.timezone import VE_TIMEZONE
 
-            start = start.replace(tzinfo=VE_TIMEZONE)
+            start_dt = start_dt.replace(tzinfo=VE_TIMEZONE)
 
-        if end and isinstance(end, datetime) and end.tzinfo is None:
+        if end_dt and end_dt.tzinfo is None:
             from app.utils.timezone import VE_TIMEZONE
 
-            end = end.replace(tzinfo=VE_TIMEZONE)
+            end_dt = end_dt.replace(tzinfo=VE_TIMEZONE)
 
-        if start and start > now:
+        if start_dt and start_dt > now:
             is_active = False
-        if end and end < now:
+        if end_dt and end_dt < now:
             is_active = False
 
         discount["is_active"] = is_active

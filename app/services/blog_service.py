@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func, or_, text
@@ -554,7 +555,7 @@ class BlogService:
 
         # Construir condiciones WHERE
         where_conditions = []
-        params = {}
+        params: dict[str, Any] = {}
 
         # Filtrar eliminados si no se incluyen
         if not include_deleted:

@@ -657,8 +657,13 @@ class ProductImageService:
                 }
 
             # Extraer public_ids de las URLs para eliminar de Cloudinary
-            public_ids = [self._extract_public_id_from_url(img.cloudinary_url) for img in images if img.cloudinary_url]
-            public_ids = [pid for pid in public_ids if pid]  # Filtrar None
+            public_ids = [
+                pid
+                for pid in (
+                    self._extract_public_id_from_url(img.cloudinary_url) for img in images if img.cloudinary_url
+                )
+                if pid is not None
+            ]
 
             # Eliminar de Cloudinary en batch
             cloudinary_result = None

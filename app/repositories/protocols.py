@@ -23,6 +23,9 @@ class _CursorProtocol(Protocol):
     def fetchone(self) -> dict[str, Any] | None: ...
     def close(self) -> None: ...
 
+    @property
+    def rowcount(self) -> int: ...
+
 
 class CustomerRepositoryProtocol(Protocol):
     """Protocolo para operaciones de clientes (saCliente)."""

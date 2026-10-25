@@ -35,8 +35,10 @@ class FlashOfferBase(BaseModel):
 
 
 class FlashOfferCreate(FlashOfferBase):
-    discount_type: DiscountTypeEnum | None = None
-    discount_value: float | None = Field(None, gt=0)
+    # Pydantic permite redeclarar más estrecho (opcional) en subclases de creación;
+    # los validators de abajo garantizan defaults coherentes.
+    discount_type: DiscountTypeEnum | None = None  # type: ignore[assignment]  # override pydantic válido
+    discount_value: float | None = Field(None, gt=0)  # type: ignore[assignment]  # override pydantic válido
     fixed_price: float | None = Field(None, gt=0)
 
     @model_validator(mode="after")

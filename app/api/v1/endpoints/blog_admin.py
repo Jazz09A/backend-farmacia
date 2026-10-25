@@ -163,8 +163,8 @@ async def create_blog_post(
     post = service.create_post(post_data, default_author_id=current_user.id)
 
     # Cargar relaciones para la respuesta
-    post = service.get_post_by_id(post.id, include_relations=True)
-    return post
+    post_with_relations = service.get_post_by_id(post.id, include_relations=True)
+    return post_with_relations if post_with_relations is not None else post
 
 
 @router.get("/posts", response_model=BlogPostListResponse)
@@ -210,7 +210,7 @@ async def get_all_blog_posts(
         )
 
         # Crear un diccionario para acceso rápido: post_id -> [imágenes]
-        images_by_post = {}
+        images_by_post: dict[str, list[BlogImage]] = {}
         for img in all_images:
             if img.blog_post_id not in images_by_post:
                 images_by_post[img.blog_post_id] = []
@@ -301,8 +301,8 @@ async def update_blog_post(
     post = service.update_post(post_id, post_data)
 
     # Cargar relaciones para la respuesta
-    post = service.get_post_by_id(post.id, include_relations=True)
-    return post
+    post_with_relations = service.get_post_by_id(post.id, include_relations=True)
+    return post_with_relations if post_with_relations is not None else post
 
 
 @router.delete("/posts/{post_id}")

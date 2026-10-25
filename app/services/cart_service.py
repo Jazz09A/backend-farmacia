@@ -54,7 +54,7 @@ class CartService:
 
         self.db.commit()
 
-    def update_item_quantity(self, user_id: str, item_id: str, new_quantity: int) -> CartItem:
+    def update_item_quantity(self, user_id: str, item_id: str, new_quantity: int) -> CartItem | None:
         """
         Updates the quantity of a specific item in the cart.
         """

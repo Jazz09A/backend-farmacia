@@ -87,7 +87,7 @@ async def get_blog_posts(
         )
 
         # Crear un diccionario para acceso rápido: post_id -> [imágenes]
-        images_by_post = {}
+        images_by_post: dict[str, list[BlogImage]] = {}
         for img in all_images:
             if img.blog_post_id not in images_by_post:
                 images_by_post[img.blog_post_id] = []

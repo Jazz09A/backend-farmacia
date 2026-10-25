@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -413,7 +414,7 @@ class QuoteService:
             """
             cursor.execute(query_articulos, tuple(co_arts))
             articulos_data = cursor.fetchall()
-            articulos_map = {
+            articulos_map: dict[str, dict[str, Any]] = {
                 (row.get("co_art") or "").strip(): {
                     "art_des": row.get("art_des"),
                     "tipo_imp": row.get("tipo_imp", "1"),
@@ -567,18 +568,18 @@ class QuoteService:
                 cantidad = Decimal(str(item.quantity))
 
                 # Obtener datos del artículo desde la BD
-                art_data = articulos_map.get(co_art)
-                if not art_data:
+                articulo_row = articulos_map.get(co_art)
+                if not articulo_row:
                     raise ValueError(f"Artículo no encontrado: {co_art}")
 
                 # Usar precio de la BD (ignorar el del payload)
-                precio_unit = art_data.get("precio_base", Decimal("0.00"))
+                precio_unit = articulo_row.get("precio_base", Decimal("0.00"))
                 if precio_unit <= 0:
                     raise ValueError(f"Artículo sin precio configurado: {co_art} (lista '01')")
 
-                des_art = art_data.get("art_des") or ""
-                tipo_imp = art_data.get("tipo_imp", "1")
-                co_uni = art_data.get("co_uni", "UND")
+                des_art = articulo_row.get("art_des") or ""
+                tipo_imp = articulo_row.get("tipo_imp", "1")
+                co_uni = articulo_row.get("co_uni", "UND")
 
                 # Calcular descuento desde saDescArticulo si no se proporciona en el payload
                 monto_desc = Decimal(str(item.discount_amount or "0.00"))
@@ -799,7 +800,8 @@ class QuoteService:
         except Exception as e:
             # Revertir transacción en caso de error
             try:
-                conn.rollback()
+                if conn is not None:
+                    conn.rollback()
             except Exception as rollback_error:
                 logger.error(f"Error al hacer rollback: {rollback_error}")
 

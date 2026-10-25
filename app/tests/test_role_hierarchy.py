@@ -1,7 +1,6 @@
 """Tests de jerarquía de roles y permisos."""
-import pytest
 
-from app.models.user import User
+import pytest
 
 
 pytestmark = pytest.mark.admin
@@ -73,17 +72,13 @@ class TestAdminEndpointAccess:
     """Tests sobre los endpoints admin — usan una ruta simple para
     verificar el dependency `get_admin_user`."""
 
-    def test_user_cannot_access_admin_endpoint(
-        self, client, default_user, auth_headers
-    ):
+    def test_user_cannot_access_admin_endpoint(self, client, default_user, auth_headers):
         # /api/v1/auth/me es para cualquier usuario autenticado; lo usamos
         # para confirmar que el token funciona. Luego probamos un endpoint
         # admin. Aquí comprobamos el comportamiento de has_role_level
         # directamente (más fiable que asumir rutas específicas).
         assert default_user.has_role_level("admin") is False
 
-    def test_admin_passes_hierarchy_check(
-        self, client, admin_user, admin_headers
-    ):
+    def test_admin_passes_hierarchy_check(self, client, admin_user, admin_headers):
         assert admin_user.has_role_level("admin") is True
         assert admin_user.has_role_level("super_admin") is False

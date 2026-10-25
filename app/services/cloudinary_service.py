@@ -9,7 +9,7 @@ Proporciona funcionalidades para:
 """
 
 from enum import Enum
-from typing import Any, Optional, Self
+from typing import Any, Optional
 
 import cloudinary
 import cloudinary.api
@@ -57,11 +57,11 @@ class CloudinaryService:
     _instance: Optional["CloudinaryService"] = None
     _configured: bool = False
 
-    def __new__(cls) -> Self:
+    def __new__(cls) -> "CloudinaryService":
         """Implementa patrón Singleton para reutilizar la configuración."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+        if CloudinaryService._instance is None:
+            CloudinaryService._instance = super().__new__(cls)
+        return CloudinaryService._instance
 
     def __init__(self):
         """Inicializa y configura Cloudinary si aún no está configurado."""
@@ -536,7 +536,7 @@ class CloudinaryService:
         transformation = []
 
         if width or height:
-            transform = {"crop": crop, "gravity": gravity}
+            transform: dict[str, Any] = {"crop": crop, "gravity": gravity}
             if width:
                 transform["width"] = width
             if height:

@@ -6,6 +6,7 @@ Tests for prod-readiness P0 fixes:
 - /api/v1/info endpoints reflect real routes
 - Health endpoints (live, ready)
 """
+
 import pytest
 
 
@@ -122,22 +123,16 @@ class TestCreditModuleRemoved:
 
     def test_credit_service_module_removed(self):
         with pytest.raises(ImportError):
-            importlib_import = __import__(
-                "importlib", fromlist=["import_module"]
-            ).import_module
+            importlib_import = __import__("importlib", fromlist=["import_module"]).import_module
             importlib_import("app.services.credit_service")
 
     def test_credit_payment_service_removed(self):
-        importlib_import = __import__(
-            "importlib", fromlist=["import_module"]
-        ).import_module
+        importlib_import = __import__("importlib", fromlist=["import_module"]).import_module
         with pytest.raises(ImportError):
             importlib_import("app.services.credit_payment_service")
 
     def test_credit_payment_model_removed(self):
-        importlib_import = __import__(
-            "importlib", fromlist=["import_module"]
-        ).import_module
+        importlib_import = __import__("importlib", fromlist=["import_module"]).import_module
         with pytest.raises(ImportError):
             importlib_import("app.models.credit_payment")
 

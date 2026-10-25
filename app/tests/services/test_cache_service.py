@@ -16,7 +16,6 @@ import time
 import uuid
 from datetime import date, datetime, time as dt_time
 from decimal import Decimal
-from unittest.mock import MagicMock
 
 import fakeredis
 import pytest
@@ -367,7 +366,7 @@ class TestFallback:
         async def broken_get(_key: str):
             raise cache_module.RedisConnectionError("boom")
 
-        orig_get = redis_backend.get
+        orig_get = redis_backend.get  # noqa: F841  # se preserva para restaurar manualmente si hace falta
         monkeypatch.setattr(redis_backend, "get", broken_get)
 
         assert await svc.get("f:k") == "mem-value"  # ❗ no lanza: la request del usuario no se cae

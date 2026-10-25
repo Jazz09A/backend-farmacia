@@ -12,7 +12,6 @@ Contrato que se verifica (por qué importa):
 
 import pytest
 
-from app.services import cache_service as cache_module
 from app.services.cache_service import cache_service
 
 # Contrato original de CacheStatsResponse (11 campos exactos, el frontend no espera más)

@@ -179,7 +179,7 @@ class ImageRepository(ImageRepositoryProtocol):
                     f"co_art: '{article_code_clean}' ({len(article_code_clean)} chars), "
                     f"imagen_des: '{description_clean}' ({len(description_clean) if description_clean else 0} chars), "
                     f"co_us_in: '{created_by_clean}' ({len(created_by_clean)} chars), "
-                    f"tip: '{tip}' ({len(tip)} chars). "
+                    f"tip: '{tip}' ({len(tip) if tip else 0} chars). "
                     f"Error original: {error_msg}"
                 )
             raise

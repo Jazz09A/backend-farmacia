@@ -177,8 +177,12 @@ class CurrencyService:
             if amount < min_amount:
                 return False
 
-            # Verificar que no tenga más de 2 decimales
-            return not amount.as_tuple().exponent < -2
+            # Verificar que no tenga más de 2 decimales (exponente < -2).
+            # as_tuple().exponent es str para valores especiales ('n' NaN, 'F' Inf).
+            if amount.is_nan() or amount.is_infinite():
+                return False
+            exponent = amount.as_tuple().exponent
+            return isinstance(exponent, int) and not exponent < -2
 
         except Exception:
             return False

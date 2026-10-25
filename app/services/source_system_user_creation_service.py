@@ -202,7 +202,11 @@ class SourceSystemUserCreationService:
     async def create_multiple_users_from_source_system(
         self, customer_codes: list[str], use_alternate_emails: bool = False
     ) -> dict[str, Any]:
-        results = {"total": len(customer_codes), "successful": [], "failed": []}
+        results: dict[str, Any] = {
+            "total": len(customer_codes),
+            "successful": [],
+            "failed": [],
+        }
         for code in customer_codes:
             result = await self.create_user_from_source_system(code, use_alternate_emails)
             if result["success"]:

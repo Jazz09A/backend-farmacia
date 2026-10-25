@@ -62,7 +62,7 @@ class ConnectionPool:
         self._recycle = recycle
         self._logger = logger
 
-        self._pool = Queue(maxsize=pool_size)
+        self._pool: Queue[object] = Queue(maxsize=pool_size)
         self._overflow_count = 0
         self._lock = RLock()
         self._connection_times: dict[int, float] = {}

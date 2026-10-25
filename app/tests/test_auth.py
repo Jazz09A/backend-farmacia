@@ -8,7 +8,6 @@ Estos tests usan fixtures de `conftest.py`:
 """
 
 import pytest
-from fastapi import HTTPException
 
 
 pytestmark = pytest.mark.auth
@@ -33,9 +32,7 @@ class TestLogin:
         assert data["token_type"] == "bearer"
         assert "expires_in" in data
 
-    def test_login_invalid_password_returns_401(
-        self, client, user_factory, mock_source_system_service
-    ):
+    def test_login_invalid_password_returns_401(self, client, user_factory, mock_source_system_service):
         user_factory(email="a@a.com", password="Password1")
         response = client.post(
             "/api/v1/auth/login",
@@ -46,9 +43,7 @@ class TestLogin:
         body = response.json()
         assert "detail" in body
 
-    def test_login_nonexistent_email_no_demoa_returns_401(
-        self, client, mock_source_system_service
-    ):
+    def test_login_nonexistent_email_no_demoa_returns_401(self, client, mock_source_system_service):
         # sin usuario en BD y sin DEMOA hit → 401
         response = client.post(
             "/api/v1/auth/login",
@@ -56,9 +51,7 @@ class TestLogin:
         )
         assert response.status_code == 401
 
-    def test_login_inactive_user_returns_401(
-        self, client, user_factory, mock_source_system_service
-    ):
+    def test_login_inactive_user_returns_401(self, client, user_factory, mock_source_system_service):
         user_factory(email="a@a.com", password="Password1", is_active=False)
         response = client.post(
             "/api/v1/auth/login",
@@ -102,9 +95,7 @@ class TestRefresh:
         assert "access_token" in data
         assert "refresh_token" in data
 
-    def test_refresh_with_access_token_returns_401(
-        self, client, user_factory, mock_source_system_service
-    ):
+    def test_refresh_with_access_token_returns_401(self, client, user_factory, mock_source_system_service):
         user_factory(email="a@a.com")
         login_response = client.post(
             "/api/v1/auth/login",
@@ -115,9 +106,7 @@ class TestRefresh:
         assert response.status_code == 401
 
     def test_refresh_with_garbage_token_returns_401(self, client):
-        response = client.post(
-            "/api/v1/auth/refresh", json={"refresh_token": "not-a-jwt"}
-        )
+        response = client.post("/api/v1/auth/refresh", json={"refresh_token": "not-a-jwt"})
         assert response.status_code == 401
 
     def test_refresh_with_empty_token_returns_400(self, client):
@@ -168,9 +157,7 @@ class TestRegister:
         assert response.status_code in (400, 409)
         assert response.json().get("success") is False or "detail" in response.json()
 
-    def test_register_weak_password_returns_422(
-        self, client, juridico_payload, mock_source_system_service
-    ):
+    def test_register_weak_password_returns_422(self, client, juridico_payload, mock_source_system_service):
         juridico_payload["password"] = "short"
         response = client.post("/api/v1/auth/register", json=juridico_payload)
         assert response.status_code == 422
@@ -186,9 +173,7 @@ class TestPasswordReset:
         self, client, user_factory, mock_source_system_service, mock_email_service
     ):
         user_factory(email="a@a.com")
-        response = client.post(
-            "/api/v1/auth/forgot-password", json={"email": "a@a.com"}
-        )
+        response = client.post("/api/v1/auth/forgot-password", json={"email": "a@a.com"})
         # No debe enumerar
         assert response.status_code == 200
         assert response.json()["success"] is True
@@ -197,17 +182,13 @@ class TestPasswordReset:
     def test_forgot_password_nonexistent_email_does_not_enumerate(
         self, client, mock_source_system_service, mock_email_service
     ):
-        response = client.post(
-            "/api/v1/auth/forgot-password", json={"email": "ghost@nope.com"}
-        )
+        response = client.post("/api/v1/auth/forgot-password", json={"email": "ghost@nope.com"})
         assert response.status_code == 200
         assert response.json()["success"] is True
         # No debe enviar email cuando el usuario no existe
         assert len(mock_email_service.sent_emails) == 0
 
-    def test_reset_password_with_garbage_token_returns_400(
-        self, client, mock_source_system_service
-    ):
+    def test_reset_password_with_garbage_token_returns_400(self, client, mock_source_system_service):
         response = client.post(
             "/api/v1/auth/reset-password",
             json={"token": "garbage", "new_password": "Password1"},
@@ -223,9 +204,7 @@ class TestPasswordReset:
 
 
 class TestChangePassword:
-    def test_change_password_uses_body_not_query(
-        self, client, default_user, auth_headers, mock_source_system_service
-    ):
+    def test_change_password_uses_body_not_query(self, client, default_user, auth_headers, mock_source_system_service):
         # Si se pasa por query string, FastAPI no acepta los params y
         # el body está vacío, por lo que se rechaza con 422 (Pydantic)
         # o se devuelve 403 (token no se envía correctamente). Lo
@@ -242,9 +221,7 @@ class TestChangePassword:
         )
         assert response_body.status_code == 200
 
-    def test_change_password_ok(
-        self, client, default_user, auth_headers, mock_source_system_service
-    ):
+    def test_change_password_ok(self, client, default_user, auth_headers, mock_source_system_service):
         response = client.post(
             "/api/v1/auth/change-password",
             headers=auth_headers,

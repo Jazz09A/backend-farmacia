@@ -690,7 +690,7 @@ async def get_customer_addresses(current_user: User = Depends(get_current_active
     if not customer or not customer.get("customer_code"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado en Profit Plus")
 
-    customer_code = customer.get("customer_code")
+    customer_code = customer.get("customer_code") or ""
 
     # Obtener direcciones desde Profit Plus
     addresses = source_system_service.get_customer_addresses(customer_code)

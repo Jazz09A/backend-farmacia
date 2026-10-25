@@ -6,9 +6,6 @@ Tests para el sistema de logging:
 - redacción de secretos
 - log_security_event no expone Authorization
 """
-import logging
-import re
-import uuid
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -21,6 +18,7 @@ from fastapi.testclient import TestClient
 class TestRequestIdContext:
     def test_new_request_id_format(self):
         from app.utils.logging_helpers import new_request_id
+
         rid = new_request_id()
         assert isinstance(rid, str)
         assert len(rid) == 16
@@ -29,9 +27,13 @@ class TestRequestIdContext:
 
     def test_set_and_get_request_id(self):
         from app.utils.logging_helpers import (
-            set_request_context, clear_request_context,
-            get_current_request_id, get_current_user_id, get_current_user_email,
+            set_request_context,
+            clear_request_context,
+            get_current_request_id,
+            get_current_user_id,
+            get_current_user_email,
         )
+
         set_request_context(request_id="abc12345", user_id="u1", user_email="a@b.com")
         assert get_current_request_id() == "abc12345"
         assert get_current_user_id() == "u1"
@@ -42,8 +44,11 @@ class TestRequestIdContext:
 
     def test_contextvar_isolated_between_requests(self):
         from app.utils.logging_helpers import (
-            set_request_context, clear_request_context, get_current_request_id,
+            set_request_context,
+            clear_request_context,
+            get_current_request_id,
         )
+
         set_request_context(request_id="rid-A")
         # Simulamos que llega otro request: set con otro id
         set_request_context(request_id="rid-B")
@@ -54,10 +59,12 @@ class TestRequestIdContext:
 class TestRedaction:
     def test_redact_password(self):
         from app.utils.logging_helpers import redact_message
+
         assert "[REDACTED]" in redact_message("password=super_secret_123")
 
     def test_redact_token(self):
         from app.utils.logging_helpers import redact_message
+
         # Test different token formats
         assert "[REDACTED]" in redact_message("Bearer abcdef1234567890abcdef1234567890")
         assert "[REDACTED]" in redact_message("token=abcdef1234567890abcdef1234567890")
@@ -65,6 +72,7 @@ class TestRedaction:
 
     def test_redact_db_url(self):
         from app.utils.logging_helpers import redact_message
+
         msg = "server=myserver.example.com;database=mydb;user=admin"
         redacted = redact_message(msg)
         assert "myserver" not in redacted
@@ -72,11 +80,13 @@ class TestRedaction:
 
     def test_redact_empty_or_none(self):
         from app.utils.logging_helpers import redact_message
+
         assert redact_message("") == ""
         assert redact_message(None) is None
 
     def test_preserves_normal_text(self):
         from app.utils.logging_helpers import redact_message
+
         msg = "User tried to login with invalid credentials"
         assert redact_message(msg) == msg
 
@@ -84,6 +94,7 @@ class TestRedaction:
 class TestLogInternalError:
     def test_returns_tracking_id(self):
         from app.utils.logging_helpers import log_internal_error
+
         tid = log_internal_error(None, ValueError("boom"))
         assert tid is not None and len(tid) > 0
         # El tracking_id debe ser un UUID hex corto
@@ -92,12 +103,14 @@ class TestLogInternalError:
 
     def test_returns_different_tracking_id_per_call(self):
         from app.utils.logging_helpers import log_internal_error
+
         tid1 = log_internal_error(None, ValueError("boom1"))
         tid2 = log_internal_error(None, ValueError("boom2"))
         assert tid1 != tid2
 
     def test_redacts_secrets_in_returned_message(self):
         from app.utils.logging_helpers import log_internal_error
+
         # El tracking_id se genera y el error no filtra el secreto
         tid = log_internal_error(None, RuntimeError("password=hunter2 leaked"))
         assert tid is not None
@@ -105,6 +118,7 @@ class TestLogInternalError:
 
     def test_uses_existing_request_id_if_set(self):
         from app.utils.logging_helpers import log_internal_error, set_request_context, clear_request_context
+
         set_request_context(request_id="my-custom-rid")
         try:
             tid = log_internal_error(None, ValueError("test"))
@@ -116,6 +130,7 @@ class TestLogInternalError:
 class TestLogSecurityEvent:
     def test_security_event_logged(self):
         from app.utils.logging_helpers import log_security_event
+
         # No debe lanzar excepción
         log_security_event("login_attempt", user_email="foo@bar.com")
         log_security_event("rate_limit_exceeded", extra={"limit": "5/min"})
@@ -130,8 +145,11 @@ class TestLogSecurityEvent:
 def tiny_app_with_router():
     """Crea una mini-app con el middleware y los handlers del main.py."""
     from app.utils.logging_helpers import (
-        set_request_context, clear_request_context,
-        log_request, log_response, log_internal_error,
+        set_request_context,
+        clear_request_context,
+        log_request,
+        log_response,
+        log_internal_error,
     )
     import time
     from starlette.responses import JSONResponse
@@ -141,6 +159,7 @@ def tiny_app_with_router():
     @app.middleware("http")
     async def _mw(request, call_next):
         from app.utils.logging_helpers import new_request_id
+
         incoming_rid = request.headers.get("x-request-id")
         rid = incoming_rid if incoming_rid and len(incoming_rid) <= 64 else new_request_id()
         set_request_context(request_id=rid)

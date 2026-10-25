@@ -114,7 +114,7 @@ class DiscountRepository(DiscountRepositoryProtocol):
         conn = None
 
         try:
-            if use_existing:
+            if existing_cursor is not None:
                 cursor = existing_cursor
                 try:
                     cursor.execute("SELECT 1 AS test")
@@ -574,7 +574,7 @@ class DiscountRepository(DiscountRepositoryProtocol):
         conn = None
 
         try:
-            if use_existing:
+            if existing_cursor is not None:
                 cursor = existing_cursor
                 try:
                     cursor.execute("SELECT 1 AS test")

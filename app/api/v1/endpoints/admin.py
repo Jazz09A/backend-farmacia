@@ -4,6 +4,8 @@ Endpoints de administración para gestión de usuarios, roles y productos.
 
 from datetime import timedelta
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -330,7 +332,7 @@ async def get_customer_statistics(
     # Las cotizaciones se manejan a través de Profit Plus directamente
     # from app.models.order import OrderItem
     # orders = db.query(Order).filter(Order.user_id == customer_id).all()
-    orders = []  # Order no existe, usar cotizaciones de Profit Plus en el futuro
+    orders: list[Any] = []  # Order no existe, usar cotizaciones de Profit Plus en el futuro
 
     if not orders:
         # Si no hay órdenes, devolver estadísticas vacías
@@ -373,14 +375,14 @@ async def get_customer_statistics(
         most_used_shipping_zone=None,
     )
 
-    top_purchased_products = []
-    order_status_distribution = []
+    top_purchased_products: list[dict[str, Any]] = []
+    order_status_distribution: list[dict[str, Any]] = []
 
     # Estadísticas mensuales - ELIMINADO (Order no existe)
-    monthly_stats = []
+    monthly_stats: list[dict[str, Any]] = []
 
     # Categorías favoritas - ELIMINADO (Order no existe)
-    favorite_categories = []
+    favorite_categories: list[dict[str, Any]] = []
 
     # Tendencias de compra - ELIMINADO (Order no existe)
     purchase_trends = {
