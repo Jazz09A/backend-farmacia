@@ -22,11 +22,12 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.10.1",
+    "pyjwt[crypto]>=2.13.0",
     "pymssql>=2.3.8",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "python-decouple>=3.8",
-    "python-jose[cryptography]>=3.5.0",
+    "pyjwt[crypto]>=2.8",
     "python-multipart>=0.0.20",
     "redis>=5.0.1",
     "requests>=2.32.5",
@@ -34,23 +35,25 @@ dependencies = [
     "uvicorn>=0.35.0",
     "vulture>=2.14",
     "xlrd>=2.0.2",
+    "slowapi>=0.1.10",
 ]
-[tool.setuptools]
-packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "ruff>=0.16.5",
+    "pytest-cov>=7.0",
+    "fakeredis>=2.40.0",
+    "pytest-env>=1.8.1",
+]
 
 [project.optional-dependencies]
 # CI runs `pip install -e ".[dev,test]"` (deploy-backend.yml test job).
 dev = ["mypy>=2.4", "ruff>=0.16"]
 test = ["pytest-cov>=7.0"]
 
-[dependency-groups]
-dev = [
-    "mypy",
-    "ruff",
-    "pytest-cov",
-    "fakeredis>=2.40.0",
-    "pytest-env>=1.8.1",
-]
+[tool.setuptools]
+packages = ["app"]
 
 [tool.mypy]
 python_version = "3.12"

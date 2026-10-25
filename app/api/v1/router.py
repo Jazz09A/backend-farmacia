@@ -14,6 +14,9 @@ from app.api.v1.endpoints import (
     user,
 )
 
+# Nota FE Fase 1 (aprobada): el frontend no montará crédito ni llamará APIs
+# legacy de orders/quantity-discounts/addresses; flujo comercial = cotizaciones.
+# No reactivar routers de crédito solo por código BE existente sin acuerdo FE/BE.
 api_router = APIRouter()
 
 # =============================================================================
@@ -42,6 +45,7 @@ api_router.include_router(
     user.router,
     tags=["🔐 Usuario Autenticado"],
 )
+
 
 
 # Órdenes del usuario

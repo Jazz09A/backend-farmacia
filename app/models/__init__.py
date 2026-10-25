@@ -8,7 +8,6 @@ from .cart import CartItem
 # ShippingZone eliminado - no se usa con Profit Plus
 # from .shipping import ShippingZone
 from .category import Brand, Category
-from .credit_payment import CreditPayment
 from .favorites import UserFavorite
 from .product import Product
 from .product_image import ProductImage
@@ -16,33 +15,40 @@ from .product_image import ProductImage
 # Order models eliminados - Order no se usa con Profit Plus
 # from .order import Order, OrderItem, OrderAddress
 # from .order_discount import OrderDiscount, DiscountType as OrderDiscountType
-from .promotion import DiscountType, FlashOffer, Promotion, PromotionalCode, PromotionUsage
+from .promotion import (
+    DiscountType,
+    FlashOffer,
+    Promotion,
+    PromotionalCode,
+    PromotionUsage,
+)
+from .types import ArrayType
 from .user import User
 
 __all__ = [
-    "User",
-    "Product",
-    "CartItem",
     "Address",
-    "UserPreferences",
+    "ArrayType",
+    "BlogCategory",
+    "BlogImage",
+    "BlogPost",
+    "Brand",
+    "CartItem",
+    # "ShippingZone",  # Eliminado - no se usa con Profit Plus
+    "Category",
+    "DiscountType",
+    "FlashOffer",
+    "Product",
+    "ProductImage",
     # Order models eliminados
     # "Order",
-    # "OrderItem",
+    # "OrderItem", 
     # "OrderAddress",
     # "OrderDiscount",
     # "OrderDiscountType",
     "Promotion",
     "PromotionUsage",
-    "FlashOffer",
     "PromotionalCode",
-    "DiscountType",
-    # "ShippingZone",  # Eliminado - no se usa con Profit Plus
-    "Category",
-    "Brand",
+    "User",
     "UserFavorite",
-    "CreditPayment",
-    "BlogPost",
-    "BlogCategory",
-    "BlogImage",
-    "ProductImage",
-]
+    "UserPreferences",
+] 

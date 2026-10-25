@@ -1,13 +1,13 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.config.database import Base
 from app.utils.timezone import get_ve_now
 
 
-class CartItem(Base):  # type: ignore[valid-type, misc]
+class CartItem(Base):
     __tablename__ = "cart_items"
 
     # Primary key
@@ -29,10 +29,13 @@ class CartItem(Base):  # type: ignore[valid-type, misc]
     user = relationship("User", back_populates="cart_items")
     product = relationship("Product", back_populates="cart_items")
 
+    # Índices compuestos para optimizar detección de duplicados y listado por usuario
+    __table_args__ = (
+        Index('idx_cart_user_product_pres', 'user_id', 'product_id', 'selected_presentation'),
+    )
+
     def __repr__(self):
-        return (
-            f"<CartItem(id={self.id}, user_id={self.user_id}, product_id={self.product_id}, quantity={self.quantity})>"
-        )
+        return f"<CartItem(id={self.id}, user_id={self.user_id}, product_id={self.product_id}, quantity={self.quantity})>"
 
     @property
     def total_price(self):

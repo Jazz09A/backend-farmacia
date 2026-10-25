@@ -1,7 +1,6 @@
 """
 Servicio para manejar la lógica de negocio de Flash Offers
 """
-
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -23,52 +22,52 @@ from app.utils.timezone import get_ve_now
 
 class FlashOffersService:
     """Servicio para gestionar flash offers."""
-
+    
     def __init__(self, db: Session, article_service: ArticleService | None = None):
         self.db = db
         self.article_service = article_service or ArticleService()
-
+    
     def create_flash_offer(self, flash_offer_data: FlashOfferCreate) -> FlashOffer:
         """Crear una nueva flash offer."""
         product = None
         if flash_offer_data.product_id:
-            product = self.db.query(Product).filter(Product.id == flash_offer_data.product_id).first()
+            product = (
+                self.db.query(Product)
+                .filter(Product.id == flash_offer_data.product_id)
+                .first()
+            )
             if not product:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Producto local no encontrado",
                 )
-            existing_offers = (
-                self.db.query(FlashOffer)
-                .filter(
-                    and_(
-                        FlashOffer.product_id == flash_offer_data.product_id,
-                        FlashOffer.is_active == True,
-                        or_(
-                            and_(
-                                FlashOffer.start_time <= flash_offer_data.start_time,
-                                FlashOffer.end_time >= flash_offer_data.start_time,
-                            ),
-                            and_(
-                                FlashOffer.start_time <= flash_offer_data.end_time,
-                                FlashOffer.end_time >= flash_offer_data.end_time,
-                            ),
-                            and_(
-                                FlashOffer.start_time >= flash_offer_data.start_time,
-                                FlashOffer.end_time <= flash_offer_data.end_time,
-                            ),
+            existing_offers = self.db.query(FlashOffer).filter(
+                and_(
+                    FlashOffer.product_id == flash_offer_data.product_id,
+                    FlashOffer.is_active == True,
+                    or_(
+                        and_(
+                            FlashOffer.start_time <= flash_offer_data.start_time,
+                            FlashOffer.end_time >= flash_offer_data.start_time,
                         ),
-                    )
+                        and_(
+                            FlashOffer.start_time <= flash_offer_data.end_time,
+                            FlashOffer.end_time >= flash_offer_data.end_time,
+                        ),
+                        and_(
+                            FlashOffer.start_time >= flash_offer_data.start_time,
+                            FlashOffer.end_time <= flash_offer_data.end_time,
+                        ),
+                    ),
                 )
-                .first()
-            )
+            ).first()
 
             if existing_offers:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Ya existe una flash offer activa para este producto en el rango de fechas especificado",
                 )
-
+        
         payload = flash_offer_data.dict()
         fixed_price = payload.pop("fixed_price", None)
         article_code = (payload.get("article_code") or "").strip().upper()
@@ -94,7 +93,7 @@ class FlashOffersService:
                     detail="El precio objetivo debe ser menor al precio del artículo en Profit Plus",
                 )
             discount_percentage = ((source_price - fixed_price_decimal) / source_price) * Decimal(100)
-            payload["discount_type"] = DiscountType.PERCENTAGE
+            payload["discount_type"] = DiscountType.PERCENTAGE 
             payload["discount_value"] = float(discount_percentage.quantize(Decimal("0.01")))
         else:
             discount_value = payload.get("discount_value")
@@ -110,13 +109,13 @@ class FlashOffersService:
         self.db.add(flash_offer)
         self.db.commit()
         self.db.refresh(flash_offer)
-
+        
         return flash_offer
-
+    
     def get_flash_offer(self, offer_id: str) -> FlashOffer | None:
         """Obtener una flash offer por ID."""
         return self.db.query(FlashOffer).filter(FlashOffer.id == offer_id).first()
-
+    
     def get_flash_offers(
         self,
         skip: int = 0,
@@ -127,26 +126,28 @@ class FlashOffersService:
         article_code: str | None = None,
     ) -> tuple[list[FlashOffer], int]:
         """Obtener lista de flash offers desde Source System (saDescArticulo)."""
-
+        
         # Obtener datos crudos de Profit Plus
         raw_offers, total = source_system_service.get_all_active_flash_offers(
-            skip=skip, limit=limit, article_code=article_code
+            skip=skip, 
+            limit=limit,
+            article_code=article_code
         )
-
+        
         flash_offers = []
         from app.utils.timezone import VE_TIMEZONE, get_ve_now
-
+        
         for item in raw_offers:
             # Procesar fechas para asegurar que tengan zona horaria (Venezuela)
-            start_time = item.get("start_time")
+            start_time = item.get('start_time')
             if start_time:
                 if start_time.tzinfo is None:
                     start_time = start_time.replace(tzinfo=VE_TIMEZONE)
             else:
                 # Si es NULL, asumir inicio en el pasado
                 start_time = get_ve_now().replace(year=2020, month=1, day=1)
-
-            end_time = item.get("end_time")
+                
+            end_time = item.get('end_time')
             if end_time:
                 if end_time.tzinfo is None:
                     end_time = end_time.replace(tzinfo=VE_TIMEZONE)
@@ -157,82 +158,87 @@ class FlashOffersService:
             # Convertir dict a objeto FlashOffer para compatibilidad
             # Usamos DiscountType.PERCENTAGE directamente ya que Profit solo maneja porcentajes
             offer = FlashOffer(
-                id=item["id"],
-                article_code=item["article_code"],
+                id=item['id'],
+                article_code=item['article_code'],
                 discount_type=DiscountType.PERCENTAGE,
-                discount_value=float(item["discount_value"] or 0),
+                discount_value=float(item['discount_value'] or 0),
                 start_time=start_time,
                 end_time=end_time,
-                max_quantity=item.get("max_quantity"),
-                used_quantity=int(item.get("campo2") or 0),
-                is_active=item["is_active"],
-                created_at=item.get("created_at") or get_ve_now(),
-                updated_at=item.get("updated_at") or get_ve_now(),
+                max_quantity=item.get('max_quantity'),
+                used_quantity=int(item.get('campo2') or 0),
+                is_active=item['is_active'],
+                created_at=item.get('created_at') or get_ve_now(),
+                updated_at=item.get('updated_at') or get_ve_now()
             )
             # Atributos adicionales que no están en el modelo ORM pero son útiles para el response
             # Se asignan dinámicamente al objeto
-            offer.remaining_quantity = item.get("remaining_quantity")
-
+            offer.remaining_quantity = item.get('remaining_quantity')
+            
             flash_offers.append(offer)
-
+        
         return flash_offers, total
-
+    
     def update_flash_offer(self, offer_id: str, update_data: FlashOfferUpdate) -> FlashOffer | None:
         """Actualizar una flash offer existente."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
             return None
-
+        
         # Actualizar solo los campos proporcionados
         update_dict = update_data.dict(exclude_unset=True)
-
+        
         # Si se actualizan fechas, verificar conflictos
-        if "start_time" in update_dict or "end_time" in update_dict:
-            new_start = update_dict.get("start_time", flash_offer.start_time)
-            new_end = update_dict.get("end_time", flash_offer.end_time)
-
+        if 'start_time' in update_dict or 'end_time' in update_dict:
+            new_start = update_dict.get('start_time', flash_offer.start_time)
+            new_end = update_dict.get('end_time', flash_offer.end_time)
+            
             # Verificar que end_time sea posterior a start_time
             if new_end <= new_start:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="La fecha de fin debe ser posterior a la fecha de inicio",
+                    detail="La fecha de fin debe ser posterior a la fecha de inicio"
                 )
-
+            
             # Verificar conflictos con otras ofertas
-            existing_offers = (
-                self.db.query(FlashOffer)
-                .filter(
-                    and_(
-                        FlashOffer.product_id == flash_offer.product_id,
-                        FlashOffer.id != offer_id,
-                        FlashOffer.is_active == True,
-                        or_(
-                            and_(FlashOffer.start_time <= new_start, FlashOffer.end_time >= new_start),
-                            and_(FlashOffer.start_time <= new_end, FlashOffer.end_time >= new_end),
-                            and_(FlashOffer.start_time >= new_start, FlashOffer.end_time <= new_end),
+            existing_offers = self.db.query(FlashOffer).filter(
+                and_(
+                    FlashOffer.product_id == flash_offer.product_id,
+                    FlashOffer.id != offer_id,
+                    FlashOffer.is_active == True,
+                    or_(
+                        and_(
+                            FlashOffer.start_time <= new_start,
+                            FlashOffer.end_time >= new_start
                         ),
+                        and_(
+                            FlashOffer.start_time <= new_end,
+                            FlashOffer.end_time >= new_end
+                        ),
+                        and_(
+                            FlashOffer.start_time >= new_start,
+                            FlashOffer.end_time <= new_end
+                        )
                     )
                 )
-                .first()
-            )
-
+            ).first()
+            
             if existing_offers:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Conflicto con otra flash offer activa en el rango de fechas especificado",
+                    detail="Conflicto con otra flash offer activa en el rango de fechas especificado"
                 )
-
+        
         # Aplicar actualizaciones
         for field, value in update_dict.items():
             if field == "article_code" and value:
                 setattr(flash_offer, field, value.strip().upper())
             else:
                 setattr(flash_offer, field, value)
-
+        
         flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
-
+        
         return flash_offer
 
     def _get_source_price(self, article_code: str) -> Decimal:
@@ -293,16 +299,20 @@ class FlashOffersService:
         detail = self._fetch_article_detail(flash_offer.article_code)
         original_price, currency = self._extract_price_info(detail)
         discount_percentage = float(flash_offer.discount_value or 0)
-        offer_price = (original_price * (Decimal(100) - Decimal(str(discount_percentage))) / Decimal(100)).quantize(
-            Decimal("0.01")
-        )
+        offer_price = (
+            original_price
+            * (Decimal(100) - Decimal(str(discount_percentage)))
+            / Decimal(100)
+        ).quantize(Decimal("0.01"))
 
         gallery = [img.url for img in getattr(detail, "images", []) if getattr(img, "url", None)]
         image_url = gallery[0] if gallery else None
 
         stock_total = None
         if getattr(detail, "stock_by_warehouse", None):
-            stock_total = sum(Decimal(str(item.quantity or 0)) for item in detail.stock_by_warehouse)
+            stock_total = sum(
+                Decimal(str(item.quantity or 0)) for item in detail.stock_by_warehouse
+            )
 
         return FlashOfferArticleData(
             article_code=flash_offer.article_code,
@@ -315,30 +325,30 @@ class FlashOffersService:
             image_url=image_url,
             gallery=gallery,
         )
-
+    
     def delete_flash_offer(self, offer_id: str) -> bool:
         """Eliminar una flash offer."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
             return False
-
+        
         self.db.delete(flash_offer)
         self.db.commit()
         return True
-
+    
     def toggle_flash_offer_status(self, offer_id: str) -> FlashOffer | None:
         """Activar/desactivar una flash offer."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
             return None
-
+        
         flash_offer.is_active = not flash_offer.is_active
         flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
-
+        
         return flash_offer
-
+    
     def get_active_flash_offers_for_article(self, article_code: str) -> list[FlashOffer]:
         """Obtener todas las flash offers válidas para un artículo específico."""
         now = get_ve_now()
@@ -349,58 +359,60 @@ class FlashOffersService:
                 detail="Debes indicar un código de artículo (co_art) válido",
             )
 
-        return (
-            self.db.query(FlashOffer)
-            .filter(
-                and_(
-                    FlashOffer.article_code == normalized_code,
-                    FlashOffer.is_active == True,
-                    FlashOffer.start_time <= now,
-                    FlashOffer.end_time >= now,
-                    or_(
-                        FlashOffer.max_quantity.is_(None),
-                        FlashOffer.used_quantity < FlashOffer.max_quantity,
-                    ),
-                )
+        return self.db.query(FlashOffer).filter(
+            and_(
+                FlashOffer.article_code == normalized_code,
+                FlashOffer.is_active == True,
+                FlashOffer.start_time <= now,
+                FlashOffer.end_time >= now,
+                or_(
+                    FlashOffer.max_quantity.is_(None),
+                    FlashOffer.used_quantity < FlashOffer.max_quantity,
+                ),
             )
-            .all()
-        )
-
+        ).all()
+    
     def increment_usage(self, offer_id: str, quantity: int = 1) -> FlashOffer | None:
         """Incrementar el uso de una flash offer."""
         flash_offer = self.get_flash_offer(offer_id)
         if not flash_offer:
             return None
-
+        
         # Verificar que no se exceda la cantidad máxima
         if flash_offer.max_quantity and (flash_offer.used_quantity + quantity) > flash_offer.max_quantity:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="No hay suficiente stock disponible para esta oferta"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No hay suficiente stock disponible para esta oferta"
             )
-
+        
         flash_offer.used_quantity += quantity
         flash_offer.updated_at = get_ve_now()
         self.db.commit()
         self.db.refresh(flash_offer)
-
+        
         return flash_offer
-
+    
     def get_expired_flash_offers(self) -> list[FlashOffer]:
         """Obtener flash offers expiradas."""
         now = get_ve_now()
-        return self.db.query(FlashOffer).filter(and_(FlashOffer.is_active == True, FlashOffer.end_time < now)).all()
-
+        return self.db.query(FlashOffer).filter(
+            and_(
+                FlashOffer.is_active == True,
+                FlashOffer.end_time < now
+            )
+        ).all()
+    
     def cleanup_expired_offers(self) -> int:
         """Desactivar automáticamente ofertas expiradas."""
         expired_offers = self.get_expired_flash_offers()
         count = 0
-
+        
         for offer in expired_offers:
             offer.is_active = False
             offer.updated_at = get_ve_now()
             count += 1
-
+        
         if count > 0:
             self.db.commit()
-
+        
         return count

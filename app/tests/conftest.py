@@ -1,103 +1,133 @@
 """
-Configuración global de fixtures para tests con BD hermética (SQLite en memoria).
+Configuración global de fixtures para tests.
 
-Los tests NO dependen de PostgreSQL ni de Profit Plus:
-- La BD de usuarios se resuelve con SQLite en memoria (tablas creadas desde Base).
-- Profit Plus (source_system_service / pymssql) se simula con fixtures de mock.
-- El email se simula con mock_email_service.
+Esta versión extiende la conftest previa (que cubría tests de auth, roles,
+excepciones, etc.) con fixtures adicionales para los characterization tests
+de los god services (Phase 0 del plan de refactorización).
 
-IMPORTANTE: Este archivo carga .env.test ANTES de importar Settings
-para asegurar que los tests usen la configuración correcta.
+Las fixtures están diseñadas para que cualquier test pueda ejecutarse sin
+acceder a servicios externos, sin requerir `.env.test` ni variables
+adicionales.
 """
-
-import sys
 import os
+import sys
+import uuid
 from pathlib import Path
+from typing import Generator, List, Dict, Any, Optional
+from unittest.mock import MagicMock
+from contextlib import contextmanager
+from decimal import Decimal
+from datetime import datetime
 
-# Obtener el directorio raíz del proyecto (donde está main.py)
+# Directorio raíz del proyecto (donde está main.py)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Forzar modo test antes de importar nada del proyecto
+os.environ.setdefault("TESTING", "1")
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-chars-long-XXXX")
+os.environ.setdefault("SMTP_PASSWORD", "test-smtp-password")
+# Reducir ruido de logs durante los tests
+os.environ.setdefault("CACHE_ENABLED", "False")
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker, Session
+
+# Cargar .env del proyecto (si existe) para variables no críticas,
+# pero las variables de testing ya están fijadas arriba y tienen prioridad.
 from dotenv import load_dotenv
-import uuid
 
-# Cargar variables de entorno para tests ANTES de importar Settings
-# override=True asegura que sobrescriba cualquier .env existente
-env_test_path = PROJECT_ROOT / ".env.test"
-if env_test_path.exists():
-    load_dotenv(env_test_path, override=True)
-else:
-    # Si no existe .env.test, intentar cargar .env
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
-# Ahora importar módulos de la aplicación
-from main import app as main_app  # main.py está en la raíz
-from app.config.database import Base as AppBase, get_db
-from app.config.settings import Settings
-from app.core.security import create_access_token, get_password_hash
-from app.models.user import User
-from app.utils.timezone import get_ve_now
-
-# Registrar todos los modelos en Base.metadata antes de create_all
-import app.models  # noqa: F401,E402
-
-
-# Los modelos usan ARRAY de PostgreSQL, tipo que SQLite no soporta:
-# solo para tests se cumple con TEXT.
-@compiles(ARRAY, "sqlite")
-def _pg_array_as_text(element, compiler, **kw):  # pragma: no cover
-    return "TEXT"
-
-
-# Instancia de Settings que usará las variables de .env.test
-# Settings() lee automáticamente de os.getenv() y .env.test ya está cargado
-test_settings = Settings()
-
-SesionLocalTests = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False)
+# Importar modelos para que SQLAlchemy los registre en Base.metadata
+from app.models import (  # noqa: E402
+    User,
+    Product,
+    CartItem,
+    Address,
+    UserPreferences,
+    Promotion,
+    PromotionUsage,
+    FlashOffer,
+    PromotionalCode,
+    DiscountType,
+    Category,
+    Brand,
+    UserFavorite,
+    BlogPost,
+    BlogCategory,
+    BlogImage,
+    ProductImage,
+)
+from app.config.database import Base, get_db  # noqa: E402
+from app.config.settings import Settings  # noqa: E402
+from app.core.security import get_password_hash  # noqa: E402
+from app.utils.timezone import get_ve_now  # noqa: E402
+from app.schemas.role import UserRole  # noqa: E402
 
 
-def _make_test_engine():
-    """Crea un engine SQLite en memoria con todas las tablas de Base creadas."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    AppBase.metadata.create_all(bind=engine)
-    return engine
+# =============================================================================
+# DATABASE FIXTURES
+# =============================================================================
+
+# Usamos StaticPool para que múltiples conexiones al in-memory DB compartan
+# la misma BD (caso típico con TestClient + threadpool de FastAPI).
+from sqlalchemy.pool import StaticPool
+
+engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+
+# Forzar FKs en SQLite (off por defecto)
+@event.listens_for(engine, "connect")
+def _enable_sqlite_fks(dbapi_conn, _):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def _create_all_tables() -> None:
+    # Importar modelos aquí garantiza que Base.metadata conoce todas las tablas
+    Base.metadata.create_all(bind=engine)
 
 
 @pytest.fixture(scope="function")
-def db_session():
+def db() -> Generator[Session, None, None]:
+    """Sesión de BD SQLite in-memory, transaccional.
+
+    Cada test obtiene una BD limpia (todas las tablas creadas) y la sesión
+    se cierra automáticamente al final. No se hace rollback explícito
+    porque la BD vive solo durante la vida del engine, que es
+    singleton pero se recrea con create_all para cada test (ver
+    ``_create_all_tables``).
     """
-    Sesión SQLite en memoria (hermética). Cada test opera dentro de una
-    transacción que se revierte al finalizar, garantizando aislamiento total.
-    """
-    engine = _make_test_engine()
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = SesionLocalTests(bind=connection, join_transaction_mode="create_savepoint")
+    _create_all_tables()
+    session = TestingSessionLocal()
     try:
         yield session
     finally:
         session.close()
-        transaction.rollback()
-        connection.close()
-        engine.dispose()
+        # Limpiar todas las tablas para el siguiente test
+        Base.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture(scope="function")
-def db(db_session):
-    """Alias hermético de db_session (BD en memoria)."""
-    return db_session
+@pytest.fixture
+def db_session(db):
+    """Alias de `db` para compatibilidad con tests del plan de refactorización."""
+    return db
 
+
+# =============================================================================
+# APP + CLIENT FIXTURES
+# =============================================================================
 
 @pytest.fixture(autouse=True)
 def clean_cache_service():
@@ -111,312 +141,558 @@ def clean_cache_service():
     asyncio.run(cache_service.clear())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper de creación de usuarios (lo importan los tests de endpoints)
-# ─────────────────────────────────────────────────────────────────────────────
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Limpia el rate-limiter de slowapi entre tests para evitar
+    contaminación cruzada."""
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
-def _make_user(db, email, role="user", **overrides):
-    """Crea un usuario de prueba en la sesión indicada y lo devuelve."""
-    user = User(
+@pytest.fixture(scope="function")
+def app(db):
+    """FastAPI app con `get_db` overridden hacia la BD in-memory.
+
+    Importante: ``main.py`` crea la app a nivel de módulo, lo cual
+    inicializa singletons (CacheService, SourceSystemService, etc.).
+    Para tests que tocan estos singletons, usar los fixtures
+    ``mock_source_system_service`` y ``mock_email_service``.
+    """
+    # Importar dentro del fixture para que el override de DATABASE_URL
+    # ya esté aplicado al import-time de los módulos.
+    from main import app as fastapi_app
+
+    def _override_get_db():
+        try:
+            yield db
+        finally:
+            # La sesión se cierra en el fixture `db`
+            pass
+
+    fastapi_app.dependency_overrides[get_db] = _override_get_db
+    yield fastapi_app
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def client(app) -> Generator[TestClient, None, None]:
+    """TestClient de FastAPI con la BD in-memory."""
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+# =============================================================================
+# MOCKS / FAKES
+# =============================================================================
+
+class FakeEmailService:
+    """Sustituye a `app.services.email_service.email_service` durante los tests."""
+
+    def __init__(self):
+        self.sent_emails: list[dict] = []
+
+    async def send_email(self, to_email: str, subject: str, template_name: str, context: dict):
+        self.sent_emails.append(
+            {
+                "to": to_email,
+                "subject": subject,
+                "template": template_name,
+                "context": context,
+            }
+        )
+        return True
+
+    async def send_password_reset_email(self, to_email: str, reset_link: str, user_name: str | None = None):
+        self.sent_emails.append(
+            {
+                "to": to_email,
+                "subject": "password_reset",
+                "template": "password_reset",
+                "context": {"reset_link": reset_link, "user_name": user_name},
+            }
+        )
+        return True
+
+
+class FakeCursor:
+    """Fake cursor for testing pymssql interactions."""
+    def __init__(self, results: list[dict[str, Any]] = None):
+        self._results = results or []
+        self._index = 0
+        self._closed = False
+        self._last_query = ""
+        self._last_params = ()
+        self.rowcount = 0
+
+    def execute(self, query: str, params: tuple = ()) -> None:
+        self._last_query = query
+        self._last_params = params
+        self._index = 0
+        self.rowcount = len(self._results)
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._results
+
+    def fetchone(self) -> dict[str, Any] | None:
+        if self._index < len(self._results):
+            result = self._results[self._index]
+            self._index += 1
+            return result
+        return None
+
+    def close(self) -> None:
+        self._closed = True
+
+    @property
+    def last_query(self) -> str:
+        return self._last_query
+
+    @property
+    def last_params(self) -> tuple:
+        return self._last_params
+
+
+class FakeConnection:
+    """Fake connection for testing pymssql interactions."""
+    def __init__(self, cursor_results: list[dict[str, Any]] = None):
+        self._cursor_results = cursor_results or []
+        self._closed = False
+        self._in_transaction = False
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self._cursor_results)
+
+    def commit(self) -> None:
+        self._in_transaction = False
+
+    def rollback(self) -> None:
+        self._in_transaction = False
+
+    def close(self) -> None:
+        self._closed = True
+
+
+class FakeSourceSystemService:
+    """Sustituye a `app.services.source_system_service.source_system_service`.
+
+    No abre conexiones reales. Los tests que necesiten valores específicos
+    deben inyectarlos vía atributos del mock o usar `monkeypatch.setattr`
+    sobre la instancia.
+    """
+
+    def __init__(self):
+        self.customers: dict[str, dict] = {}
+        self.articles: dict[str, dict] = {}
+        self.health_status: dict = {"status": "healthy", "latency_ms": 1.0}
+        # Control de conexiones para tests
+        self._fake_connections: dict[str, FakeConnection] = {}
+        self._next_conn_id = 0
+
+    def get_customer_by_email(self, email: str):
+        return self.customers.get(email.lower())
+
+    def get_article_detail(self, co_art: str):
+        return self.articles.get(co_art)
+
+    def health_check(self):
+        return self.health_status
+
+    def get_pool_stats(self):
+        return {
+            "pool_size": 15,
+            "max_overflow": 10,
+            "available": 15,
+            "in_use": 0,
+        }
+
+    def get_pooled_connection(self):
+        """Retorna una fake connection para tests."""
+        conn_id = f"conn_{self._next_conn_id}"
+        self._next_conn_id += 1
+        conn = FakeConnection()
+        self._fake_connections[conn_id] = conn
+        return conn
+
+    def return_connection(self, conn):
+        """No-op para fake connection."""
+        pass
+
+    def dispose(self):
+        self._fake_connections.clear()
+
+    # Métodos que delegan a source_system_service real para tests de integración
+    def get_articles_catalog(self, **kwargs):
+        return {"items": [], "total": 0}
+
+    def get_flash_offers_paginated(self, skip=0, limit=10, article_code=None):
+        return [], 0
+
+    def get_article_discount(self, article_code: str, quantity=None, existing_cursor=None):
+        return None
+
+    def increment_discount_usage(self, co_desc: str, quantity_used: int, field_name: str = "campo1", existing_cursor=None):
+        pass
+
+    # Stubs genéricos para métodos que no necesitamos cubrir en los
+    # tests de auth/roles/exceptions/modelo. Si un test específico
+    # los necesita, debe monkeypatchear el método concreto.
+    def __getattr__(self, name):
+        return MagicMock()
+
+
+@pytest.fixture
+def mock_email_service(monkeypatch):
+    fake = FakeEmailService()
+    # Reemplazar en todos los módulos que importaron la instancia singleton
+    import app.services.email_service as email_module
+    import app.services.auth_service as auth_module
+    import app.services.source_system_user_creation_service as ssc_module
+
+    monkeypatch.setattr(email_module, "email_service", fake)
+    monkeypatch.setattr(auth_module, "email_service", fake)
+    monkeypatch.setattr(ssc_module, "email_service", fake)
+    return fake
+
+
+@pytest.fixture
+def mock_source_system_service(monkeypatch):
+    fake = FakeSourceSystemService()
+    import app.services.source_system_service as ss_module
+    import app.services.auth_service as auth_module
+    import app.services.quote_service as quote_module
+    import app.services.dashboard_service as dashboard_module
+    import app.services.user_service as user_module
+    import app.services.article_service as article_module
+
+    for mod in (ss_module, auth_module, quote_module, dashboard_module, user_module, article_module):
+        if hasattr(mod, "source_system_service"):
+            monkeypatch.setattr(mod, "source_system_service", fake)
+    return fake
+
+
+# =============================================================================
+# USER FACTORIES
+# =============================================================================
+
+def _make_user(
+    db: Session,
+    *,
+    email: str = "user@example.com",
+    password: str = "Password1",
+    role: str = UserRole.USER.value,
+    is_active: bool = True,
+    is_verified: bool = True,
+    **kwargs,
+) -> User:
+    """Construye un usuario con defaults razonables para tests."""
+    now = get_ve_now()
+    base_kwargs = dict(
         id=str(uuid.uuid4()),
         email=email,
-        hashed_password=get_password_hash("testpass123"),
-        user_type="natural",
-        phone="+584121234567",
-        first_name="Usuario",
-        last_name="Prueba",
-        is_active=True,
-        is_verified=True,
+        hashed_password=get_password_hash(password),
+        user_type=kwargs.pop("user_type", "natural"),
+        phone=kwargs.pop("phone", "+584121234567"),
+        first_name=kwargs.pop("first_name", "Test"),
+        last_name=kwargs.pop("last_name", "User"),
+        preferred_currency=kwargs.pop("preferred_currency", "VES"),
+        is_active=is_active,
+        is_verified=is_verified,
         role=role,
-        created_at=get_ve_now(),
+        created_at=now,
+        updated_at=now,
     )
-    for field, value in overrides.items():
-        setattr(user, field, value)
+    base_kwargs.update(kwargs)
+    user = User(**base_kwargs)
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-@pytest.fixture(scope="function")
-def client(db):
-    """
-    Cliente de prueba FastAPI con BD hermética (SQLite en memoria).
-    """
-
-    def override_get_db():
-        # NO hacer close() aquí: la sesión es compartida (hermética) y el
-        # fixture db_session la cierra en su teardown. Cerrarla al terminar
-        # el request dejaba detached a las instancias y rompía assertions
-        # post-request (db.refresh / queries de verificación).
-        yield db
-
-    main_app.dependency_overrides[get_db] = override_get_db
-    with TestClient(main_app) as test_client:
-        yield test_client
-    main_app.dependency_overrides.clear()
-
-
-# =============================================================================
-# AUTENTICACIÓN REAL (usando TEST_CUSTOMER_EMAIL y TEST_CUSTOMER_PASSWORD)
-# =============================================================================
-
-
 @pytest.fixture
-def test_customer_email():
-    """Email del cliente de prueba desde .env"""
-    return os.getenv("TEST_CUSTOMER_EMAIL", "test@farmacia.com")
-
-
-@pytest.fixture
-def test_customer_password():
-    """Contraseña del cliente de prueba desde .env"""
-    return os.getenv("TEST_CUSTOMER_PASSWORD", "testpass123")
-
-
-@pytest.fixture
-def auth_token_real(client, test_user):
-    """
-    Token JWT para el usuario de prueba (ya existe en la BD hermética gracias a test_user).
-    """
-    return create_access_token({"sub": test_user.email})
-
-
-@pytest.fixture
-def auth_headers(auth_token_real):
-    """Headers con autenticación REAL obtenida del login"""
-    return {"Authorization": f"Bearer {auth_token_real}"}
-
-
-@pytest.fixture
-def admin_headers(client, db):
-    """
-    Headers con autenticación de admin.
-
-    Crea (o reutiliza) un usuario admin real en la BD hermética para que
-    get_current_user pueda resolver el token.
-    """
-    # Buscar usuario admin en la BD
-    admin_user = db.query(User).filter(User.role.in_(["admin", "super_admin"])).first()
-
-    if admin_user is None:
-        admin_created = _make_user(db, email="admin@farmacia.com", role="admin")
-        admin_token = create_access_token({"sub": admin_created.email})
-    else:
-        admin_token = create_access_token({"sub": admin_user.email})
-
-    return {"Authorization": f"Bearer {admin_token}"}
-
-
-# =============================================================================
-# USUARIOS DE PRUEBA (para referencia, pero la autenticación es real)
-# =============================================================================
-
-
-@pytest.fixture
-def test_user(db, test_customer_email, test_customer_password):
-    """
-    Usuario de prueba creado en la BD hermética (SQLite en memoria).
-    """
-    from app.utils.timezone import get_ve_now
-
-    user = db.query(User).filter(User.email == test_customer_email).first()
-
-    if not user:
-        user = User(
-            id=str(uuid.uuid4()),
-            email=test_customer_email,
-            hashed_password=get_password_hash(test_customer_password),
-            user_type="natural",
-            phone="+584121234567",
-            first_name="Usuario",
-            last_name="Prueba",
-            is_active=True,
-            is_verified=True,
-            role="user",
-            created_at=get_ve_now(),
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-    return user
-
-
-# =============================================================================
-# DATOS DE PROFIT PLUS (códigos reales de tu BD)
-# =============================================================================
-
-
-@pytest.fixture
-def sample_article_code():
-    """
-    Código de artículo real de Profit Plus.
-    IMPORTANTE: Debe existir en tu base de datos.
-    Si no existe, los tests usarán códigos reales obtenidos de la lista.
-    """
-    return os.getenv("TEST_ARTICLE_CODE", "FITOS004")  # Código por defecto que existe
-
-
-@pytest.fixture
-def sample_customer_code():
-    """Código de cliente real de Profit Plus"""
-    return os.getenv("TEST_CUSTOMER_CODE", "CLI001")
-
-
-@pytest.fixture
-def profit_settings():
-    """
-    Fixture que retorna la configuración de Profit Plus para tests.
-    Usa Settings() que carga desde .env.test
-
-    Esta configuración incluye:
-    - SOURCE_SYSTEM_SERVER: Servidor de Profit Plus
-    - SOURCE_SYSTEM_PORT: Puerto (default: 49571)
-    - SOURCE_SYSTEM_DATABASE: Base de datos (default: GDROZAINK_A)
-    - SOURCE_SYSTEM_USER: Usuario (opcional)
-    - SOURCE_SYSTEM_PASSWORD: Contraseña (opcional)
-
-    El SourceSystemService usa pymssql para conectarse con estos parámetros.
-    """
-    return test_settings
-
-
-@pytest.fixture
-def verify_profit_connection(profit_settings):
-    """
-    Fixture para verificar que la conexión a Profit Plus está configurada.
-    Útil para tests que requieren conexión real.
-    """
-    if not profit_settings.SOURCE_SYSTEM_SERVER:
-        pytest.skip("SOURCE_SYSTEM_SERVER no configurado en .env.test")
-    if not profit_settings.SOURCE_SYSTEM_DATABASE:
-        pytest.skip("SOURCE_SYSTEM_DATABASE no configurado en .env.test")
-    return True
-
-
-@pytest.fixture
-def sample_warehouse_code():
-    """Código de almacén para tests"""
-    return "001"
-
-
-@pytest.fixture
-def sample_price_code():
-    """Código de lista de precios para tests"""
-    return "01"
-
-
-# =============================================================================
-# PAYLOADS DE PRUEBA
-# =============================================================================
-
-
-@pytest.fixture
-def sample_cart_validation_payload(sample_article_code):
-    """Payload para validar carrito"""
-    return {"items": [{"co_art": sample_article_code, "cantidad": 2}]}
-
-
-@pytest.fixture
-def sample_quote_payload(sample_article_code):
-    """Payload para crear cotización"""
-    return {
-        "items": [{"co_art": sample_article_code, "quantity": 3}],
-        "payment_terms": "CONTADO",
-        "observations": "Cotización de prueba automatizada",
-    }
-
-
-@pytest.fixture
-def source_system_headers():
-    """Headers con X-Source-System"""
-    return {"X-Source-System": "DEMOA"}
-
-
-# =============================================================================
-# FIXTURES HERMÉTICAS (BD en memoria + mocks de servicios externos)
-# =============================================================================
-
-
-@pytest.fixture
-def user_factory(db_session):
-    """Fábrica de usuarios en la BD hermética.
-
-    Acepta email opcional y role; devuelve el modelo User persistido.
-    """
-
-    def _factory(email=None, role="user", **overrides):
-        return _make_user(
-            db_session,
-            email=email or f"user-{uuid.uuid4().hex[:10]}@test.local",
-            role=role,
-            **overrides,
-        )
-
+def user_factory(db):
+    """Devuelve una factoría parametrizable de usuarios."""
+    def _factory(**kwargs) -> User:
+        return _make_user(db, **kwargs)
     return _factory
 
 
 @pytest.fixture
-def fake_pymssql():
-    """Mock del módulo pymssql que SourceSystemService usaría para conectar."""
-    from unittest.mock import MagicMock
-
-    return MagicMock(name="fake_pymssql")
+def default_user(user_factory) -> User:
+    return user_factory()
 
 
 @pytest.fixture
-def mock_source_system_service(monkeypatch):
-    """MagicMock del servicio de Profit Plus inyectado en ArticleService.
-
-    Los tests configuran métodos como get_articles_catalog / get_article_detail
-    y el fixture restaura el original al terminar (via monkeypatch).
-    """
-    from unittest.mock import MagicMock
-    from app.services.article_service import article_service
-
-    mock = MagicMock(name="mock_source_system_service")
-    # Defaults silenciosos para evitar llamadas sorpresa: sin descuentos,
-    # catálogo vacío y detalle inexistente. Cada test sobreescribe lo que necesita.
-    mock.get_active_discounts_for_articles.return_value = {}
-    mock.get_articles_catalog.return_value = {"items": [], "total": 0}
-    mock.get_article_detail.return_value = None
-    monkeypatch.setattr(article_service, "_source_service", mock)
-    return mock
+def admin_user(user_factory) -> User:
+    return user_factory(email="admin@example.com", role=UserRole.ADMIN.value)
 
 
 @pytest.fixture
-def mock_email_service(monkeypatch):
-    """Reemplaza el singleton email_service en los módulos que lo importan."""
-    from unittest.mock import MagicMock
-    import importlib
+def super_admin_user(user_factory) -> User:
+    return user_factory(email="superadmin@example.com", role=UserRole.SUPER_ADMIN.value)
 
-    mock = MagicMock(name="mock_email_service")
-    mock.sent_emails = []
 
-    for module_name in (
-        "app.api.v1.endpoints.quotes",
-        "app.services.auth_service",
-        "app.services.source_system_user_creation_service",
-        "app.services.credit_payment_service",
-    ):
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError:  # pragma: no cover
-            continue
-        if hasattr(module, "email_service"):
-            monkeypatch.setattr(module, "email_service", mock)
-    return mock
+@pytest.fixture
+def manager_user(user_factory) -> User:
+    return user_factory(email="manager@example.com", role=UserRole.MANAGER.value)
+
+
+# =============================================================================
+# AUTH HELPERS
+# =============================================================================
+
+@pytest.fixture
+def make_token():
+    """Devuelve una función que genera un JWT de acceso para el email dado."""
+    from app.core.security import create_access_token
+
+    def _make(email: str) -> str:
+        return create_access_token({"sub": email})
+    return _make
+
+
+@pytest.fixture
+def auth_headers(default_user, make_token) -> dict:
+    return {"Authorization": f"Bearer {make_token(default_user.email)}"}
+
+
+@pytest.fixture
+def admin_headers(admin_user, make_token) -> dict:
+    return {"Authorization": f"Bearer {make_token(admin_user.email)}"}
+
+
+@pytest.fixture
+def super_admin_headers(super_admin_user, make_token) -> dict:
+    return {"Authorization": f"Bearer {make_token(super_admin_user.email)}"}
+
+
+# =============================================================================
+# SETTINGS
+# =============================================================================
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings()
+
+
+# =============================================================================
+# PHASE 0 - CHARACTERIZATION TEST FIXTURES (God Services Refactor)
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances between tests to ensure isolation."""
+    from threading import Lock
+    from app.services.source_system_service import SourceSystemService
+    from app.services.cache_service import CacheService
+    
+    # Save original lock to restore after
+    original_sss_lock = SourceSystemService._instance_lock
+    original_cache_lock = getattr(CacheService, "_instance_lock", None)
+    
+    SourceSystemService._instance = None
+    SourceSystemService._instance_lock = Lock()
+    
+    if original_cache_lock is not None:
+        CacheService._instance = None
+        CacheService._instance_lock = Lock()
+    
+    yield
+    
+    # Cleanup after test
+    SourceSystemService._instance = None
+    SourceSystemService._instance_lock = original_sss_lock
+    if original_cache_lock is not None:
+        CacheService._instance = None
+        CacheService._instance_lock = original_cache_lock
+
+
+class FakeCursor:
+    """Fake cursor for testing pymssql interactions."""
+    def __init__(self, results: List[Dict[str, Any]] = None):
+        self._results = results or []
+        self._index = 0
+        self._closed = False
+        self._last_query = ""
+        self._last_params = ()
+        self.rowcount = 0
+
+    def execute(self, query: str, params: tuple = ()) -> None:
+        self._last_query = query
+        self._last_params = params
+        self._index = 0
+        self.rowcount = len(self._results)
+
+    def fetchall(self) -> List[Dict[str, Any]]:
+        return self._results
+
+    def fetchone(self) -> Optional[Dict[str, Any]]:
+        if self._index < len(self._results):
+            result = self._results[self._index]
+            self._index += 1
+            return result
+        return None
+
+    def close(self) -> None:
+        self._closed = True
+
+    @property
+    def last_query(self) -> str:
+        return self._last_query
+
+    @property
+    def last_params(self) -> tuple:
+        return self._last_params
+
+
+class FakeConnection:
+    """Fake connection for testing pymssql interactions."""
+    def __init__(self, cursor_results: List[Dict[str, Any]] = None):
+        self._cursor_results = cursor_results or []
+        self._closed = False
+        self._in_transaction = False
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self._cursor_results)
+
+    def commit(self) -> None:
+        self._in_transaction = False
+
+    def rollback(self) -> None:
+        self._in_transaction = False
+
+    def close(self) -> None:
+        self._closed = True
+
+
+class FakePymssql:
+    """Mock pymssql module for testing."""
+    def __init__(self):
+        self._connections = []
+        self.OperationalError = Exception
+        self.ProgrammingError = Exception
+        self.IntegrityError = Exception
+
+    def connect(self, **kwargs) -> FakeConnection:
+        conn = FakeConnection()
+        self._connections.append(conn)
+        return conn
+
+
+@pytest.fixture
+def fake_pymssql(monkeypatch):
+    """Mock pymssql with controllable fake connections and cursors."""
+    fake = FakePymssql()
+    monkeypatch.setattr("pymssql.connect", fake.connect)
+    monkeypatch.setattr("pymssql.OperationalError", fake.OperationalError)
+    monkeypatch.setattr("pymssql.ProgrammingError", fake.ProgrammingError)
+    monkeypatch.setattr("pymssql.IntegrityError", fake.IntegrityError)
+    return fake
+
+
+@pytest.fixture
+def fake_cursor():
+    """Create a fake cursor with configurable results."""
+    return FakeCursor()
+
+
+@pytest.fixture
+def fake_connection(fake_cursor):
+    """Create a fake connection with a fake cursor."""
+    conn = FakeConnection()
+    conn.cursor = lambda: fake_cursor
+    return conn
 
 
 @pytest.fixture
 def sample_customer():
-    """Cliente hipotético de Profit Plus con el shape que devuelve source_system_service."""
+    """Sample customer data from Profit Plus (saCliente)."""
     return {
         "customer_code": "CLI001",
+        "customer_name": "Cliente de Prueba C.A.",
         "email": "cliente@test.com",
-        "nombre": "Cliente Test",
-        "co_cli": "CLI001",
+        "alternate_email": "alt@test.com",
+        "rif": "J-12345678-9",
+        "phones": "0212-555-0000",
+        "address1": "Av. Principal, Edificio Test, Piso 1",
+        "address2": "Oficina 101",
         "tip_cli": "001",
+        "inactive": 0,
+        "is_juridico": True,
+        "registration_date": datetime(2023, 1, 15, 10, 30),
     }
+
+
+@pytest.fixture
+def sample_article():
+    """Sample article data from Profit Plus (saArticulo)."""
+    return {
+        "co_art": "ART001",
+        "art_des": "Artículo de Prueba",
+        "ref": "REF-001",
+        "co_lin": "001",
+        "co_subl": "001",
+        "co_cat": "CAT001",
+        "category_name": "Categoría Test",
+        "tipo": "P",
+        "fecha_reg": datetime(2023, 1, 1),
+        "modelo": "MODELO-001",
+    }
+
+
+@pytest.fixture
+def sample_quote():
+    """Sample quote data from Profit Plus (saCotizacionCliente)."""
+    return {
+        "doc_num": "0000000001",
+        "co_cli": "CLI001",
+        "cli_des": "Cliente de Prueba C.A.",
+        "fec_emis": datetime(2024, 1, 15, 10, 30),
+        "fec_venc": datetime(2024, 2, 14, 10, 30),
+        "total_neto": Decimal("1160.00"),
+        "saldo": Decimal("1160.00"),
+        "co_mone": "VES",
+        "currency_name": "Bolívares",
+        "status": "0",
+        "anulado": 0,
+    }
+
+
+@pytest.fixture
+def sample_cart_items():
+    """Sample cart items for validation tests."""
+    return [
+        {"co_art": "ART001", "cantidad": 2},
+        {"co_art": "ART002", "cantidad": 1},
+    ]
+
+
+@pytest.fixture
+def juridico_payload():
+    """Sample registration payload for juridico user."""
+    return {
+        "email": "newuser@example.com",
+        "password": "Password1",
+        "user_type": "juridico",
+        "phone": "+584121234567",
+        "first_name": "Test",
+        "last_name": "User",
+        "company_name": "Test Company C.A.",
+        "rif": "J-12345678-9",
+    }
+
+
+# Markers for test categorization
+pytestmark = [
+    pytest.mark.asyncio,
+]
+
+
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line("markers", "unit: Unit tests (no external dependencies)")
+    config.addinivalue_line("markers", "integration: Integration tests (require DB/external services)")
+    config.addinivalue_line("markers", "slow: Slow running tests")

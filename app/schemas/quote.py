@@ -26,15 +26,12 @@ class QuoteDelivery(BaseModel):
     notes: str | None = None
     co_tran: str | None = None  # Código de transporte (001, 002, 003, etc.)
 
-
 class QuoteCreate(BaseModel):
     customer: QuoteCustomer | None = None  # Si no se envía, se obtiene del usuario autenticado
     channel: str | None = "web_b2b"
     valid_until: str | None = None  # ISO 8601 string
     currency: str | None = "VES"
-    payment_terms: str | None = (
-        "CON"  # Código de condición de pago (CON, 3D, 5D, 7D, 10D, 12D, 14D, 15D, 16D, 20D, 21D, 30D, 360D)
-    )
+    payment_terms: str | None = "CON"  # Código de condición de pago (CON, 3D, 5D, 7D, 10D, 12D, 14D, 15D, 16D, 20D, 21D, 30D, 360D)
     delivery: QuoteDelivery | None = None
     direc: str | None = None  # Dirección de entrega. Si no se envía, se usa la dirección principal (direc1) del cliente
     notes: str | None = None
@@ -52,9 +49,7 @@ class QuoteCreatedResponse(BaseModel):
     total_gross: str
     expires_at: str | None = None
     email_sent_at: str | None = None
-    items_data: list[dict] | None = Field(
-        default=None, description="Datos de los items obtenidos de la BD para el email"
-    )
+    items_data: list[dict] | None = Field(default=None, description="Datos de los items obtenidos de la BD para el email")
 
 
 class QuoteVerifyItemRequest(BaseModel):
@@ -167,13 +162,11 @@ class QuoteStatus(BaseModel):
 # Cart Validation Schemas (for /api/cotizaciones/verificar)
 # ============================================================================
 
-
 class CartItemRequest(BaseModel):
     """
     Item mínimo que el frontend debe enviar para validación.
     Solo se acepta co_art y cantidad. Todos los demás campos se ignoran.
     """
-
     co_art: str = Field(..., description="Código del artículo")
     cantidad: float = Field(..., gt=0, description="Cantidad deseada")
 
@@ -183,7 +176,6 @@ class CartValidationRequest(BaseModel):
     Payload que envía el frontend para validar un carrito.
     No requiere co_cli ya que se obtiene del usuario autenticado.
     """
-
     items: list[CartItemRequest] = Field(..., description="Lista de artículos a validar")
 
 
@@ -192,7 +184,6 @@ class CartValidationItemResult(BaseModel):
     Resultado de validación para un artículo individual.
     Contiene la información autoritativa calculada por el backend.
     """
-
     co_art: str = Field(..., description="Código del artículo")
     descripcion: str | None = Field(None, description="Descripción real del artículo desde la BD")
     cantidad: float = Field(..., description="Cantidad solicitada")
@@ -200,9 +191,7 @@ class CartValidationItemResult(BaseModel):
     subtotal: str = Field(..., description="Subtotal (precio_unitario_real * cantidad)")
     impuestos: str = Field(..., description="Impuestos calculados")
     descuento: str = Field(default="0.00", description="Monto del descuento aplicado a este artículo")
-    descuento_info: dict | None = Field(
-        None, description="Información del descuento aplicado (co_desc, porcentaje, disponibles, limite_total)"
-    )
+    descuento_info: dict | None = Field(None, description="Información del descuento aplicado (co_desc, porcentaje, disponibles, limite_total)")
     stock_ok: bool = Field(..., description="True si hay stock suficiente, False en caso contrario")
     error: str | None = Field(None, description="Mensaje de error si la validación falló")
 
@@ -211,7 +200,6 @@ class CartValidationTotals(BaseModel):
     """
     Totales calculados para todo el carrito.
     """
-
     bruto: str = Field(..., description="Total bruto (suma de subtotales)")
     impuestos: str = Field(..., description="Total de impuestos")
     descuentos: str = Field(default="0.00", description="Total de descuentos aplicados")
@@ -223,8 +211,9 @@ class CartValidationResponse(BaseModel):
     Respuesta autoritativa del backend con la validación completa del carrito.
     Este es el único objeto en el que el frontend debe confiar.
     """
-
     success: bool = Field(default=True, description="Indica si la validación se completó exitosamente")
     valido: bool = Field(..., description="True si todos los artículos son válidos, False si hay errores")
     items_verificados: list[CartValidationItemResult] = Field(..., description="Lista de artículos verificados")
     totales: CartValidationTotals = Field(..., description="Totales calculados")
+
+

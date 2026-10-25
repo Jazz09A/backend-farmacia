@@ -1,57 +1,29 @@
 import enum
-import json
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
-from sqlalchemy.types import JSON, TypeDecorator
 
 from app.config.database import Base
+from app.models.types import ArrayType
 from app.utils.timezone import get_ve_now
-
-
-# Custom array type for SQLite compatibility
-class ArrayType(TypeDecorator):
-    """Custom type that stores arrays as JSON in SQLite and as ARRAY in PostgreSQL"""
-
-    impl = JSON
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(ARRAY(String))
-        else:
-            return dialect.type_descriptor(JSON())
-
-    def process_bind_param(self, value, dialect):
-        if dialect.name == "postgresql":
-            return value
-        else:
-            if value is None:
-                return None
-            return json.dumps(value) if isinstance(value, list) else value
-
-    def process_result_value(self, value, dialect):
-        if dialect.name == "postgresql":
-            return value
-        else:
-            if value is None:
-                return None
-            if isinstance(value, str):
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    return []
-            return value if isinstance(value, list) else []
 
 
 class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
 
-
-class FlashOffer(Base):  # type: ignore[valid-type, misc]
+class FlashOffer(Base):
     __tablename__ = "flash_offers"
 
     # Primary key
@@ -59,7 +31,7 @@ class FlashOffer(Base):  # type: ignore[valid-type, misc]
 
     # Product reference
     product_id = Column(String, ForeignKey("products.id"), nullable=True, index=True)
-
+    
     # Article code from Profit Plus (co_art)
     article_code = Column(String, nullable=False, index=True)
 
@@ -93,9 +65,9 @@ class FlashOffer(Base):  # type: ignore[valid-type, misc]
         """Check if flash offer is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active
-            and self.start_time <= now <= self.end_time
-            and (self.max_quantity is None or self.used_quantity < self.max_quantity)
+            self.is_active and
+            self.start_time <= now <= self.end_time and
+            (self.max_quantity is None or self.used_quantity < self.max_quantity)
         )
 
     def calculate_discount_amount(self, original_price: float) -> float:
@@ -105,8 +77,7 @@ class FlashOffer(Base):  # type: ignore[valid-type, misc]
         else:
             return min(self.discount_value, original_price)
 
-
-class PromotionalCode(Base):  # type: ignore[valid-type, misc]
+class PromotionalCode(Base):
     __tablename__ = "promotional_codes"
 
     # Primary key
@@ -155,9 +126,9 @@ class PromotionalCode(Base):  # type: ignore[valid-type, misc]
         """Check if promotional code is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active
-            and self.valid_from <= now <= self.valid_until
-            and (self.usage_limit is None or self.used_count < self.usage_limit)
+            self.is_active and
+            self.valid_from <= now <= self.valid_until and
+            (self.usage_limit is None or self.used_count < self.usage_limit)
         )
 
     def can_be_used_by_user(self, user_id: str) -> bool:
@@ -186,8 +157,7 @@ class PromotionalCode(Base):  # type: ignore[valid-type, misc]
 
         return discount
 
-
-class PromotionUsage(Base):  # type: ignore[valid-type, misc]
+class PromotionUsage(Base):
     __tablename__ = "promotion_usages"
 
     # Primary key
@@ -216,10 +186,8 @@ class PromotionUsage(Base):  # type: ignore[valid-type, misc]
     def __repr__(self):
         return f"<PromotionUsage(id={self.id}, code_id={self.promotional_code_id}, user_id={self.user_id})>"
 
-
-class QuantityDiscount(Base):  # type: ignore[valid-type, misc]
+class QuantityDiscount(Base):
     """Modelo para descuentos automáticos basados en cantidad total de productos."""
-
     __tablename__ = "quantity_discounts"
 
     # Primary key
@@ -252,9 +220,7 @@ class QuantityDiscount(Base):  # type: ignore[valid-type, misc]
         """Check if this discount applies to the given quantity."""
         if total_quantity < self.min_quantity:
             return False
-        if self.max_quantity and total_quantity > self.max_quantity:
-            return False
-        return True
+        return not (self.max_quantity and total_quantity > self.max_quantity)
 
     def calculate_discount(self, total_quantity: int, total_amount: float) -> float:
         """Calculate discount amount for given quantity and amount."""
@@ -265,7 +231,6 @@ class QuantityDiscount(Base):  # type: ignore[valid-type, misc]
             return total_amount * (self.discount_value / 100)
         else:
             return min(self.discount_value, total_amount)
-
 
 # Legacy Promotion class for backward compatibility
 class Promotion(FlashOffer):
