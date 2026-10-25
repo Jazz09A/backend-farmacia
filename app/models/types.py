@@ -1,4 +1,5 @@
 """Tipos personalizados compartidos entre modelos."""
+
 import json
 from typing import Any
 

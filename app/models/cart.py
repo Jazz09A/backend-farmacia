@@ -30,12 +30,12 @@ class CartItem(Base):
     product = relationship("Product", back_populates="cart_items")
 
     # Índices compuestos para optimizar detección de duplicados y listado por usuario
-    __table_args__ = (
-        Index('idx_cart_user_product_pres', 'user_id', 'product_id', 'selected_presentation'),
-    )
+    __table_args__ = (Index("idx_cart_user_product_pres", "user_id", "product_id", "selected_presentation"),)
 
     def __repr__(self):
-        return f"<CartItem(id={self.id}, user_id={self.user_id}, product_id={self.product_id}, quantity={self.quantity})>"
+        return (
+            f"<CartItem(id={self.id}, user_id={self.user_id}, product_id={self.product_id}, quantity={self.quantity})>"
+        )
 
     @property
     def total_price(self):

@@ -14,12 +14,14 @@ class CategoryBase(BaseModel):
     is_active: bool = True
     sort_order: int = 0
 
+
 class CategoryCreate(CategoryBase):
-    @validator('slug')
+    @validator("slug")
     def validate_slug(cls, v):
-        if not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError('Slug debe contener solo letras, números, guiones y guiones bajos')
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Slug debe contener solo letras, números, guiones y guiones bajos")
         return v.lower()
+
 
 class CategoryUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
@@ -29,11 +31,12 @@ class CategoryUpdate(BaseModel):
     is_active: bool | None = None
     sort_order: int | None = None
 
-    @validator('slug')
+    @validator("slug")
     def validate_slug(cls, v):
-        if v is not None and not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError('Slug debe contener solo letras, números, guiones y guiones bajos')
+        if v is not None and not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Slug debe contener solo letras, números, guiones y guiones bajos")
         return v.lower() if v else v
+
 
 class CategoryResponse(CategoryBase):
     id: str
@@ -41,12 +44,14 @@ class CategoryResponse(CategoryBase):
     updated_at: datetime
     full_path: str
     product_count: int | None = 0
-    
+
     class Config:
         from_attributes = True
 
+
 class CategoryWithSubcategories(CategoryResponse):
     subcategories: list[CategoryResponse] = []
+
 
 # Brand Schemas
 class BrandBase(BaseModel):
@@ -56,12 +61,14 @@ class BrandBase(BaseModel):
     is_featured: bool = False
     is_active: bool = True
 
+
 class BrandCreate(BrandBase):
-    @validator('slug')
+    @validator("slug")
     def validate_slug(cls, v):
-        if not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError('Slug debe contener solo letras, números, guiones y guiones bajos')
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Slug debe contener solo letras, números, guiones y guiones bajos")
         return v.lower()
+
 
 class BrandUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
@@ -70,20 +77,22 @@ class BrandUpdate(BaseModel):
     is_featured: bool | None = None
     is_active: bool | None = None
 
-    @validator('slug')
+    @validator("slug")
     def validate_slug(cls, v):
-        if v is not None and not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError('Slug debe contener solo letras, números, guiones y guiones bajos')
+        if v is not None and not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Slug debe contener solo letras, números, guiones y guiones bajos")
         return v.lower() if v else v
+
 
 class BrandResponse(BrandBase):
     id: str
     created_at: datetime
     updated_at: datetime
     product_count: int | None = 0
-    
+
     class Config:
         from_attributes = True
+
 
 # List responses
 class CategoryListResponse(BaseModel):
@@ -92,11 +101,13 @@ class CategoryListResponse(BaseModel):
     page: int
     pages: int
 
+
 class BrandListResponse(BaseModel):
     brands: list[BrandResponse]
     total: int
     page: int
     pages: int
+
 
 # Simple responses for dropdowns
 class CategorySimple(BaseModel):
@@ -104,7 +115,8 @@ class CategorySimple(BaseModel):
     name: str
     slug: str
 
+
 class BrandSimple(BaseModel):
     id: str
     name: str
-    slug: str 
+    slug: str

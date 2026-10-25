@@ -1,4 +1,5 @@
 """Implementación del repositorio de artículos (saArticulo, saArtPrecio, saStockAlmacen, saArtImagen)."""
+
 from __future__ import annotations
 from decimal import Decimal
 from typing import Any, TYPE_CHECKING
@@ -99,6 +100,7 @@ class ArticleRepository(ArticleRepositoryProtocol):
         Delega a DiscountRepository para evitar duplicación.
         """
         from app.repositories import DiscountRepository
+
         discount_repo = DiscountRepository(self._source)
         return discount_repo.get_discount_for_article(
             article_code=article_code,
@@ -239,24 +241,30 @@ class ArticleRepository(ArticleRepositoryProtocol):
     ) -> list[dict[str, Any]]:
         if connection:
             _, cursor = connection
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     rowguid, imagen_des, tip, co_us_in, fe_us_in
                 FROM dbo.saArtImagen WITH (NOLOCK)
                 WHERE co_art = %s
                 ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
-            """, (article_code,))
+            """,
+                (article_code,),
+            )
             return cursor.fetchall() or []
         else:
             conn, cursor = self._cursor()
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT
                         rowguid, imagen_des, tip, co_us_in, fe_us_in
                     FROM dbo.saArtImagen WITH (NOLOCK)
                     WHERE co_art = %s
                     ORDER BY CASE WHEN tip = 'PRINC' THEN 0 ELSE 1 END, fe_us_in DESC
-                """, (article_code,))
+                """,
+                    (article_code,),
+                )
                 return cursor.fetchall() or []
             finally:
                 cursor.close()

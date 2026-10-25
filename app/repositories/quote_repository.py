@@ -1,7 +1,7 @@
 """Implementación del repositorio de cotizaciones (saCotizacionCliente, saCotizacionClienteReng)."""
+
 from __future__ import annotations
-from decimal import Decimal
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from app.repositories.protocols import _CursorProtocol
 
@@ -84,12 +84,15 @@ class QuoteRepository:
     def get_by_doc_num(self, co_cli: str, doc_num: str) -> dict[str, Any] | None:
         conn, cursor = self._cursor()
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT doc_num, fec_emis, fec_venc, status, anulado,
                        total_neto, saldo, co_mone, co_ven, co_cond, co_tran
                 FROM saCotizacionCliente WITH (NOLOCK)
                 WHERE co_cli = %s AND doc_num = %s AND anulado = 0
-            """, (co_cli, doc_num))
+            """,
+                (co_cli, doc_num),
+            )
             return cursor.fetchone()
         finally:
             cursor.close()
@@ -98,12 +101,15 @@ class QuoteRepository:
     def get_items(self, doc_num: str) -> list[dict[str, Any]]:
         conn, cursor = self._cursor()
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT co_art, art_des, cantidad, precio, descuento, total_neto
                 FROM saCotizacionClienteReng WITH (NOLOCK)
                 WHERE doc_num = %s
                 ORDER BY reng_num
-            """, (doc_num,))
+            """,
+                (doc_num,),
+            )
             return cursor.fetchall()
         finally:
             cursor.close()
@@ -112,11 +118,14 @@ class QuoteRepository:
     def get_discounts_for_quote(self, doc_num: str) -> list[dict[str, Any]]:
         conn, cursor = self._cursor()
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT co_desc, co_art, cantidad, valor, porciento
                 FROM saCotizacionClienteDesc WITH (NOLOCK)
                 WHERE doc_num = %s
-            """, (doc_num,))
+            """,
+                (doc_num,),
+            )
             return cursor.fetchall()
         finally:
             cursor.close()

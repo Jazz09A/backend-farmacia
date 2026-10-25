@@ -1,6 +1,7 @@
 """
 Endpoints de administración para gestión de usuarios, roles y productos.
 """
+
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -38,6 +39,7 @@ class SourceSystemCustomerResponse(BaseModel):
     inactive: bool
     is_juridico: bool
 
+
 class SourceSystemCustomerListResponse(BaseModel):
     success: bool = True  # Nuevo campo
     customers: list[SourceSystemCustomerResponse]
@@ -45,9 +47,11 @@ class SourceSystemCustomerListResponse(BaseModel):
     page: int
     limit: int
 
+
 class CreateUsersFromSourceSystemRequest(BaseModel):
     customer_codes: list[str]
     use_alternate_emails: bool = False
+
 
 class UserCreationResult(BaseModel):
     success: bool
@@ -59,12 +63,14 @@ class UserCreationResult(BaseModel):
     email_sent: bool | None
     email_error: str | None
 
+
 class CreateUsersResponse(BaseModel):
     success: bool = True  # Nuevo campo
     total: int
     successful: list[UserCreationResult]
     failed: list[UserCreationResult]
     summary: dict
+
 
 router = APIRouter(prefix="/admin")
 image_service = ImageService()
@@ -73,15 +79,16 @@ logger = get_logger("app")
 # INDEX ADMIN PAGE
 # =============================================================================
 
+
 @router.get("/dashboard", response_model=DashboardData)
 async def get_admin_dashboard(
     time_range: int = Query(7, ge=1, le=365, description="Número de días para el rango de fechas (1-365)"),
     current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get aggregated data for the admin dashboard.
-    
+
     Args:
         time_range: Número de días hacia atrás para calcular las estadísticas (por defecto 7 días)
     """
@@ -93,23 +100,22 @@ async def get_admin_dashboard(
 # GESTIÓN DE USUARIOS
 # =============================================================================
 
+
 @router.get("/users", response_model=list[UserRoleResponse])
 async def get_all_users(
     pagination: PaginationParams = Depends(get_pagination_params),
     role_filter: str = Query(None, description="Filtrar por rol específico"),
     current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     👥 **Listar todos los usuarios**
-    
+
     Obtiene lista paginada de usuarios con información de roles.
     Opcionalmente filtrar por rol específico.
     """
     if role_filter:
-        users = RoleService.get_users_by_role(
-            db, role_filter, pagination.skip, pagination.limit
-        )
+        users = RoleService.get_users_by_role(db, role_filter, pagination.skip, pagination.limit)
     else:
         db_users = db.query(User).offset(pagination.skip).limit(pagination.limit).all()
         users = [
@@ -120,30 +126,25 @@ async def get_all_users(
                 role=user.role,
                 role_level=user.get_role_level(),
                 is_admin=user.is_admin(),
-                is_super_admin=user.is_super_admin()
-            ) for user in db_users
+                is_super_admin=user.is_super_admin(),
+            )
+            for user in db_users
         ]
-    
+
     return users
 
+
 @router.get("/users/{user_id}", response_model=UserRoleResponse)
-async def get_user_details(
-    user_id: str,
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
+async def get_user_details(user_id: str, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     """
     👤 **Obtener detalles de usuario**
-    
+
     Obtiene información detallada de un usuario específico.
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
     return UserRoleResponse(
         user_id=user.id,
         email=user.email,
@@ -151,8 +152,9 @@ async def get_user_details(
         role=user.role,
         role_level=user.get_role_level(),
         is_admin=user.is_admin(),
-        is_super_admin=user.is_super_admin()
+        is_super_admin=user.is_super_admin(),
     )
+
 
 # @router.put("/users/{user_id}/ban")
 # async def ban_user(
@@ -162,7 +164,7 @@ async def get_user_details(
 # ):
 #     """
 #     🚫 **Banear usuario**
-    
+
 #     Desactiva la cuenta de un usuario.
 #     """
 #     user = db.query(User).filter(User.id == user_id).first()
@@ -171,23 +173,23 @@ async def get_user_details(
 #             status_code=status.HTTP_404_NOT_FOUND,
 #             detail="Usuario no encontrado"
 #         )
-    
+
 #     if user.id == current_user.id:
 #         raise HTTPException(
 #             status_code=status.HTTP_400_BAD_REQUEST,
 #             detail="No puedes banearte a ti mismo"
 #         )
-    
+
 #     # No permitir banear usuarios de nivel igual o superior
 #     if user.get_role_level() >= current_user.get_role_level():
 #         raise HTTPException(
 #             status_code=status.HTTP_403_FORBIDDEN,
 #             detail="No puedes banear usuarios de tu mismo nivel o superior"
 #         )
-    
+
 #     user.is_active = False
 #     db.commit()
-    
+
 #     return {"message": f"Usuario {user.email} ha sido baneado"}
 
 # @router.put("/users/{user_id}/unban")
@@ -198,7 +200,7 @@ async def get_user_details(
 # ):
 #     """
 #     ✅ **Desbanear usuario**
-    
+
 #     Reactiva la cuenta de un usuario baneado.
 #     """
 #     user = db.query(User).filter(User.id == user_id).first()
@@ -207,10 +209,10 @@ async def get_user_details(
 #             status_code=status.HTTP_404_NOT_FOUND,
 #             detail="Usuario no encontrado"
 #         )
-    
+
 #     user.is_active = True
 #     db.commit()
-    
+
 #     return {"message": f"Usuario {user.email} ha sido desbaneado"}
 
 # =============================================================================
@@ -227,7 +229,7 @@ async def get_user_details(
 # ):
 #     """
 #     🚀 **Promover usuario**
-    
+
 #     Promover un usuario a un rol superior.
 #     Solo disponible para super_admin.
 #     """
@@ -249,7 +251,7 @@ async def get_user_details(
 # ):
 #     """
 #     ⬇️ **Degradar usuario**
-    
+
 #     Degradar un usuario a un rol inferior.
 #     Solo disponible para super_admin.
 #     """
@@ -261,64 +263,55 @@ async def get_user_details(
 #         reason=reason
 #     )
 
+
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
     confirmation: str = Query(..., description="Escribe 'CONFIRMAR' para proceder"),
     current_user: User = Depends(get_super_admin_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     🗑️ **Eliminar usuario**
-    
+
     Eliminar permanentemente un usuario del sistema.
     ⚠️ **ACCIÓN IRREVERSIBLE** - Solo para super_admin.
     """
     if confirmation != "CONFIRMAR":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Debe escribir 'CONFIRMAR' para proceder con la eliminación"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Debe escribir 'CONFIRMAR' para proceder con la eliminación"
         )
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario no encontrado"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
     if user.id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No puedes eliminarte a ti mismo"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puedes eliminarte a ti mismo")
+
     # No permitir eliminar otros super_admins
     if user.is_super_admin():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No se pueden eliminar super administradores"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se pueden eliminar super administradores")
+
     email = user.email
     db.delete(user)
     db.commit()
-    
+
     return {"message": f"Usuario {email} ha sido eliminado permanentemente"}
+
 
 # =============================================================================
 # ESTADÍSTICAS DETALLADAS DE CLIENTES
 # =============================================================================
 
+
 @router.get("/customers/{customer_id}/stats", response_model=CustomerDetailedStats)
 async def get_customer_statistics(
-    customer_id: str,
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
+    customer_id: str, current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)
 ):
     """
     📊 **Obtener estadísticas detalladas de un cliente**
-    
+
     Obtiene información completa y estadísticas de compra de un cliente específico.
     Incluye:
     - Información general del cliente
@@ -331,17 +324,14 @@ async def get_customer_statistics(
     # Verificar que el cliente existe
     customer = db.query(User).filter(User.id == customer_id).first()
     if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cliente no encontrado"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
+
     # Obtener todas las órdenes del cliente - ELIMINADO (Order no se usa con Profit Plus)
     # Las cotizaciones se manejan a través de Profit Plus directamente
     # from app.models.order import OrderItem
     # orders = db.query(Order).filter(Order.user_id == customer_id).all()
     orders = []  # Order no existe, usar cotizaciones de Profit Plus en el futuro
-    
+
     if not orders:
         # Si no hay órdenes, devolver estadísticas vacías
         return CustomerDetailedStats(
@@ -355,22 +345,22 @@ async def get_customer_statistics(
                 days_as_customer=0,
                 order_frequency_days=None,
                 preferred_payment_method=None,
-                most_used_shipping_zone=None
+                most_used_shipping_zone=None,
             ),
             top_purchased_products=[],
             order_status_distribution=[],
             monthly_stats=[],
             favorite_categories=[],
-            purchase_trends={}
+            purchase_trends={},
         )
-    
+
     # Código de estadísticas eliminado - Order no se usa con Profit Plus
     # Las estadísticas deben obtenerse de las cotizaciones en Profit Plus
     # TODO: Implementar estadísticas usando cotizaciones de Profit Plus
-    
+
     # Días como cliente
     days_as_customer = (get_ve_now() - customer.created_at).days
-    
+
     general_stats = CustomerStats(
         total_orders=0,  # TODO: Obtener de cotizaciones de Profit Plus
         total_spent=0.0,  # TODO: Obtener de cotizaciones de Profit Plus
@@ -380,27 +370,27 @@ async def get_customer_statistics(
         days_as_customer=days_as_customer,
         order_frequency_days=None,
         preferred_payment_method=None,
-        most_used_shipping_zone=None
+        most_used_shipping_zone=None,
     )
-    
+
     top_purchased_products = []
     order_status_distribution = []
-    
+
     # Estadísticas mensuales - ELIMINADO (Order no existe)
     monthly_stats = []
-    
+
     # Categorías favoritas - ELIMINADO (Order no existe)
     favorite_categories = []
-    
+
     # Tendencias de compra - ELIMINADO (Order no existe)
     purchase_trends = {
-        'most_active_month': None,
-        'average_monthly_orders': 0,
-        'average_monthly_spend': 0,
-        'is_recurring_customer': False,
-        'customer_type': 'Ocasional'
+        "most_active_month": None,
+        "average_monthly_orders": 0,
+        "average_monthly_spend": 0,
+        "is_recurring_customer": False,
+        "customer_type": "Ocasional",
     }
-    
+
     # Construir respuesta
     return CustomerDetailedStats(
         user_info=UserResponse.model_validate(customer),
@@ -409,8 +399,9 @@ async def get_customer_statistics(
         order_status_distribution=order_status_distribution,
         monthly_stats=monthly_stats,
         favorite_categories=favorite_categories,
-        purchase_trends=purchase_trends
+        purchase_trends=purchase_trends,
     )
+
 
 # =============================================================================
 # ESTADÍSTICAS Y REPORTES
@@ -423,18 +414,18 @@ async def get_customer_statistics(
 # ):
 #     """
 #     📊 **Estadísticas de usuarios por rol**
-    
+
 #     Obtiene conteo de usuarios agrupados por rol.
 #     """
 #     stats = {}
 #     for role in User.ROLE_HIERARCHY.keys():
 #         count = db.query(User).filter(User.role == role).count()
 #         stats[role] = count
-    
+
 #     total_users = db.query(User).count()
 #     active_users = db.query(User).filter(User.is_active == True).count()
 #     verified_users = db.query(User).filter(User.is_verified == True).count()
-    
+
 #     stats = {
 #         "users_by_role": stats,
 #         "total_users": total_users,
@@ -443,43 +434,42 @@ async def get_customer_statistics(
 #         "inactive_users": total_users - active_users,
 #         "unverified_users": total_users - verified_users
 #     }
-    
+
 #     return stats
 
+
 @router.get("/stats/dashboard")
-async def get_admin_dashboard(
-    current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
-):
+async def get_admin_stats_dashboard(current_user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     """
     📈 **Dashboard de administración**
-    
+
     Obtiene información general del dashboard de admin.
     """
     # Estadísticas básicas
     total_users = db.query(User).count()
     active_users = db.query(User).filter(User.is_active == True).count()
     admin_users = db.query(User).filter(User.role.in_(["admin", "super_admin"])).count()
-    
+
     # Usuarios recientes (últimos 7 días)
     week_ago = get_ve_now() - timedelta(days=7)
     recent_users = db.query(User).filter(User.created_at >= week_ago).count()
-    
+
     return {
         "summary": {
             "total_users": total_users,
             "active_users": active_users,
             "admin_users": admin_users,
-            "recent_users": recent_users
+            "recent_users": recent_users,
         },
         "current_user": {
             "id": current_user.id,
             "email": current_user.email,
             "role": current_user.role,
-            "permissions": RoleService.get_user_permissions(current_user).permissions
-        }
-    } 
-    
+            "permissions": RoleService.get_user_permissions(current_user).permissions,
+        },
+    }
+
+
 # =============================================================================
 # GESTIÓN DE IMÁGENES
 # =============================================================================
@@ -489,6 +479,7 @@ async def get_admin_dashboard(
 
 # Endpoint update_payment_status eliminado - Order no se usa con Profit Plus
 
+
 # SourceSystem imports y endpoints
 @router.get("/source-system/customers", response_model=SourceSystemCustomerListResponse)
 async def get_source_system_customers(
@@ -497,7 +488,7 @@ async def get_source_system_customers(
     only_with_email: bool = Query(True, description="Solo clientes con email"),
     search: str | None = Query(None, description="Buscar por nombre o código"),
     current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     try:
         # Obtener clientes paginados con búsqueda en SQL
@@ -506,44 +497,38 @@ async def get_source_system_customers(
             only_with_email=only_with_email,
             limit=pagination.limit,
             offset=pagination.skip,
-            search=search  # Búsqueda ahora se hace en SQL
+            search=search,  # Búsqueda ahora se hace en SQL
         )
-        
+
         # Obtener total usando COUNT(*) eficiente (no trae todos los registros)
         total = source_system_service.count_customers(
             include_inactive=include_inactive,
             only_with_email=only_with_email,
-            search=search  # Búsqueda ahora se hace en SQL
+            search=search,  # Búsqueda ahora se hace en SQL
         )
-        
-        customer_responses = [
-            SourceSystemCustomerResponse(**customer)
-            for customer in customers
-        ]
+
+        customer_responses = [SourceSystemCustomerResponse(**customer) for customer in customers]
         return SourceSystemCustomerListResponse(
-            customers=customer_responses,
-            total=total,
-            page=pagination.page,
-            limit=pagination.limit
+            customers=customer_responses, total=total, page=pagination.page, limit=pagination.limit
         )
     except Exception as e:
         logger.error(f"Error obteniendo clientes SourceSystem: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al obtener clientes de SourceSystem: {e!s}"
+            detail=f"Error al obtener clientes de SourceSystem: {e!s}",
         )
+
 
 @router.post("/source-system/create-users", response_model=CreateUsersResponse)
 async def create_users_from_source_system(
     request: CreateUsersFromSourceSystemRequest,
     current_user: User = Depends(get_admin_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     try:
         service = SourceSystemUserCreationService(db)
         results = await service.create_multiple_users_from_source_system(
-            customer_codes=request.customer_codes,
-            use_alternate_emails=request.use_alternate_emails
+            customer_codes=request.customer_codes, use_alternate_emails=request.use_alternate_emails
         )
         successful = [UserCreationResult(**r) for r in results["successful"]]
         failed = [UserCreationResult(**r) for r in results["failed"]]
@@ -558,42 +543,32 @@ async def create_users_from_source_system(
             "users_failed": total_failed,
             "emails_sent": emails_sent_count,
             "emails_failed": emails_failed_count,
-            "success_rate": round((total_successful / total_attempted * 100) if total_attempted > 0 else 0, 2)
+            "success_rate": round((total_successful / total_attempted * 100) if total_attempted > 0 else 0, 2),
         }
-        
+
         # Si todos los usuarios fallaron, devolver error HTTP
         if total_successful == 0 and total_attempted > 0:
             error_messages = [f.error for f in failed if f.error]
             if not error_messages:
                 error_messages = ["Error desconocido"]
-            
+
             error_detail = f"No se pudieron crear/actualizar usuarios. Errores: {'; '.join(error_messages[:3])}"
             if len(error_messages) > 3:
                 error_detail += f" y {len(error_messages) - 3} más..."
-            
+
             logger.error(f"Todos los usuarios fallaron al crear: {error_detail}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_detail
-            )
-        
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_detail)
+
         # Si algunos usuarios fallaron pero otros tuvieron éxito, devolver 200 con información
         # Si todos tuvieron éxito, devolver 200 OK
-        return CreateUsersResponse(
-            total=total_attempted,
-            successful=successful,
-            failed=failed,
-            summary=summary
-        )
+        return CreateUsersResponse(total=total_attempted, successful=successful, failed=failed, summary=summary)
     except HTTPException:
         # Re-lanzar HTTPException sin modificar
         raise
     except Exception as e:
         logger.error(f"Error creando usuarios desde SourceSystem: {e!s}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al crear usuarios: {e!s}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al crear usuarios: {e!s}")
+
 
 # =============================================================================
 # GESTIÓN DE CACHE
@@ -617,22 +592,23 @@ class CacheStatsResponse(BaseModel):
     hit_rate: float
     total_requests: int
 
+
 class CacheInvalidateRequest(BaseModel):
     pattern: str | None = None
     cache_type: str | None = None  # 'catalog', 'article', 'all'
+
 
 class CacheInvalidateResponse(BaseModel):
     success: bool
     message: str
     invalidated_count: int
 
+
 @router.get("/cache/stats", response_model=CacheStatsResponse)
-async def get_cache_stats(
-    current_user: User = Depends(get_admin_user)
-):
+async def get_cache_stats(current_user: User = Depends(get_admin_user)):
     """
     📊 **Estadísticas del cache**
-    
+
     Obtiene estadísticas detalladas del sistema de cache:
     - Entradas activas y expiradas
     - Tasa de aciertos (hit rate)
@@ -641,37 +617,35 @@ async def get_cache_stats(
     stats = await cache_service.get_stats()
     return CacheStatsResponse(**stats)
 
+
 @router.post("/cache/invalidate", response_model=CacheInvalidateResponse)
-async def invalidate_cache(
-    request: CacheInvalidateRequest,
-    current_user: User = Depends(get_admin_user)
-):
+async def invalidate_cache(request: CacheInvalidateRequest, current_user: User = Depends(get_admin_user)):
     """
     🗑️ **Invalidar cache**
-    
+
     Invalida entradas del cache según el tipo o patrón especificado.
-    
+
     - `cache_type`: 'catalog', 'article', o 'all' para limpiar todo
     - `pattern`: Patrón personalizado (ej: 'catalog:1:', 'article:ABC123')
-    
+
     Si no se especifica ninguno, se limpia todo el cache.
     """
     invalidated_count = 0
-    
+
     if request.cache_type:
-        if request.cache_type == 'all':
+        if request.cache_type == "all":
             invalidated_count = await cache_service.clear()
             message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
-        elif request.cache_type == 'catalog':
+        elif request.cache_type == "catalog":
             invalidated_count = await cache_service.invalidate_pattern("catalog:")
             message = f"Cache de catálogo invalidado. {invalidated_count} entradas eliminadas."
-        elif request.cache_type == 'article':
+        elif request.cache_type == "article":
             invalidated_count = await cache_service.invalidate_pattern("article:")
             message = f"Cache de artículos invalidado. {invalidated_count} entradas eliminadas."
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tipo de cache inválido: {request.cache_type}. Use 'catalog', 'article', o 'all'"
+                detail=f"Tipo de cache inválido: {request.cache_type}. Use 'catalog', 'article', o 'all'",
             )
     elif request.pattern:
         invalidated_count = await cache_service.invalidate_pattern(request.pattern)
@@ -680,77 +654,67 @@ async def invalidate_cache(
         # Si no se especifica nada, limpiar todo
         invalidated_count = await cache_service.clear()
         message = f"Cache completamente limpiado. {invalidated_count} entradas eliminadas."
-    
+
     logger.info(f"Cache invalidado por {current_user.email}: {message}")
-    
-    return CacheInvalidateResponse(
-        success=True,
-        message=message,
-        invalidated_count=invalidated_count
-    )
+
+    return CacheInvalidateResponse(success=True, message=message, invalidated_count=invalidated_count)
+
 
 @router.delete("/cache/{cache_type}", response_model=CacheInvalidateResponse)
-async def delete_cache_by_type(
-    cache_type: str,
-    current_user: User = Depends(get_admin_user)
-):
+async def delete_cache_by_type(cache_type: str, current_user: User = Depends(get_admin_user)):
     """
     🗑️ **Eliminar cache por tipo**
-    
+
     Elimina todas las entradas de un tipo específico de cache.
-    
+
     Tipos disponibles:
     - `catalog`: Cache del catálogo de artículos
     - `article`: Cache de detalles de artículos
     """
-    if cache_type == 'catalog':
+    if cache_type == "catalog":
         invalidated_count = await cache_service.invalidate_pattern("catalog:")
         message = f"Cache de catálogo eliminado. {invalidated_count} entradas eliminadas."
-    elif cache_type == 'article':
+    elif cache_type == "article":
         invalidated_count = await cache_service.invalidate_pattern("article:")
         message = f"Cache de artículos eliminado. {invalidated_count} entradas eliminadas."
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de cache inválido: {cache_type}. Use 'catalog' o 'article'"
+            detail=f"Tipo de cache inválido: {cache_type}. Use 'catalog' o 'article'",
         )
-    
+
     logger.info(f"Cache {cache_type} eliminado por {current_user.email}: {message}")
-    
-    return CacheInvalidateResponse(
-        success=True,
-        message=message,
-        invalidated_count=invalidated_count
-    )
+
+    return CacheInvalidateResponse(success=True, message=message, invalidated_count=invalidated_count)
+
 
 @router.post("/cache/cleanup")
-async def cleanup_expired_cache(
-    current_user: User = Depends(get_admin_user)
-):
+async def cleanup_expired_cache(current_user: User = Depends(get_admin_user)):
     """
     🧹 **Limpiar cache expirado**
-    
+
     Elimina todas las entradas expiradas del cache.
     Útil para liberar memoria sin afectar entradas activas.
     """
     cleaned_count = await cache_service.cleanup_expired()
-    
+
     logger.info(f"Limpieza de cache expirado por {current_user.email}: {cleaned_count} entradas eliminadas")
-    
+
     return {
         "success": True,
         "message": f"Limpieza completada. {cleaned_count} entradas expiradas eliminadas.",
-        "cleaned_count": cleaned_count
+        "cleaned_count": cleaned_count,
     }
+
 
 @router.post("/cache/toggle")
 async def toggle_cache(
     enable: bool = Query(..., description="True para habilitar, False para deshabilitar"),
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_admin_user),
 ):
     """
     🔄 **Habilitar/Deshabilitar cache**
-    
+
     Habilita o deshabilita el sistema de cache globalmente.
     Cuando está deshabilitado, todas las operaciones de cache se ignoran.
     """
@@ -760,11 +724,7 @@ async def toggle_cache(
     else:
         cache_service.disable()
         message = "Cache deshabilitado"
-    
+
     logger.info(f"Cache {message.lower()} por {current_user.email}")
-    
-    return {
-        "success": True,
-        "message": message,
-        "enabled": cache_service._enabled
-    }
+
+    return {"success": True, "message": message, "enabled": cache_service._enabled}

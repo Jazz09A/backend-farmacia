@@ -1,4 +1,3 @@
-
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -181,6 +180,7 @@ cache = CacheSettings()
 redis = RedisSettings()
 source_system = SourceSystemSettings()
 cloudinary = CloudinarySettings()
+
 
 # Backwards compatibility - single Settings object that composes sub-settings
 class Settings:

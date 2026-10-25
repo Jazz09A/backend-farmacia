@@ -15,9 +15,11 @@ class AddressBase(BaseModel):
     delivery_instructions: str | None = Field(None, description="Special instructions for delivery.")
     is_default: bool = Field(False, description="Is this the default address?")
     # shipping_zone_id eliminado - ShippingZone no se usa con Profit Plus
-    
+
+
 class AddressCreate(AddressBase):
     pass
+
 
 class AddressUpdate(BaseModel):
     street: str | None = None
@@ -30,6 +32,7 @@ class AddressUpdate(BaseModel):
     address_type: str | None = None
     delivery_instructions: str | None = None
     is_default: bool | None = None
+
 
 class AddressResponse(AddressBase):
     id: str

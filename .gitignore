@@ -506,7 +506,7 @@ run_tests.py
 *.md
 scripts/
 static/
-tests/
+/tests/
 alembic/
 sqlserverscripts/
 docs/

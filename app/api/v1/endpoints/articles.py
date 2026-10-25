@@ -54,9 +54,7 @@ async def list_articles(
     pagination: PaginationParams = Depends(get_pagination_params),
     search: str | None = Query(None, description="Buscar por código o descripción"),
     line_code: str | None = Query(None, description="Filtrar por línea (co_lin)"),
-    category_code: str | None = Query(
-        None, description="Filtrar por categoría (co_cat)"
-    ),
+    category_code: str | None = Query(None, description="Filtrar por categoría (co_cat)"),
     min_price: float | None = Query(None, ge=0, description="Precio mínimo"),
     max_price: float | None = Query(None, ge=0, description="Precio máximo"),
     sort_by: str = Query(
@@ -117,7 +115,7 @@ async def get_article_recommendations(
 ):
     """
     🎯 **Recomendaciones de artículo**
-    
+
     Obtiene artículos relacionados y recomendados para un artículo específico.
     Incluye:
     - Artículos relacionados (misma categoría, línea, etc.)
@@ -127,68 +125,59 @@ async def get_article_recommendations(
     # Verificar que el artículo existe
     article_detail = article_service.get_article_detail(co_art)
     if not article_detail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artículo no encontrado"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artículo no encontrado")
+
     recommendation_service = RecommendationService()
-    
+
     # Obtener código de cliente si el usuario está autenticado
     customer_code = None
     try:
         customer = source_system_service.get_customer_by_email(current_user.email)
         if customer:
-            customer_code = customer.get('customer_code')
+            customer_code = customer.get("customer_code")
     except Exception as e:
         logger = article_service.logger
         logger.debug(f"No se pudo obtener código de cliente para recomendaciones: {e}")
-    
+
     # Obtener artículos relacionados
     related = recommendation_service.get_related_articles(
-        co_art, 
-        limit=3, 
-        price_code=price_code, 
-        warehouse_code=warehouse_code
+        co_art, limit=3, price_code=price_code, warehouse_code=warehouse_code
     )
-    
+
     # Obtener artículos frecuentemente comprados juntos
     frequently_bought = recommendation_service.get_frequently_bought_together(co_art, limit=4)
-    
+
     # Obtener recomendaciones personalizadas
     you_may_like = recommendation_service.get_recommended_articles(
-        customer_code=customer_code,
-        limit=3,
-        price_code=price_code,
-        warehouse_code=warehouse_code
+        customer_code=customer_code, limit=3, price_code=price_code, warehouse_code=warehouse_code
     )
-    
+
     # Convertir a ArticleSummary
     def row_to_summary(row: dict) -> ArticleSummary:
-        image_guid = row.get('image_guid')
+        image_guid = row.get("image_guid")
         image_guid_normalized = None
         if image_guid:
-            image_guid_normalized = str(image_guid).strip().upper().replace('{', '').replace('}', '')
-        
+            image_guid_normalized = str(image_guid).strip().upper().replace("{", "").replace("}", "")
+
         image_url = article_service._build_image_url(image_guid_normalized)
-        
+
         return ArticleSummary(
-            co_art=(row.get('co_art') or '').strip(),
-            art_des=row.get('art_des') or '',
-            category_code=(row.get('category_code') or '').strip() if row.get('category_code') else None,
-            category_name=row.get('category_name'),
-            price=article_service._to_decimal(row.get('price')),
-            currency=(row.get('currency') or 'VES').strip(),
-            stock=article_service._to_decimal(row.get('stock')),
-            warehouse_code=(row.get('warehouse_code') or '').strip() if row.get('warehouse_code') else None,
+            co_art=(row.get("co_art") or "").strip(),
+            art_des=row.get("art_des") or "",
+            category_code=(row.get("category_code") or "").strip() if row.get("category_code") else None,
+            category_name=row.get("category_name"),
+            price=article_service._to_decimal(row.get("price")),
+            currency=(row.get("currency") or "VES").strip(),
+            stock=article_service._to_decimal(row.get("stock")),
+            warehouse_code=(row.get("warehouse_code") or "").strip() if row.get("warehouse_code") else None,
             image_url=image_url,
-            has_image=bool(image_guid_normalized)
+            has_image=bool(image_guid_normalized),
         )
-    
+
     return ArticleRecommendations(
         related_articles=[row_to_summary(row) for row in related],
         frequently_bought_together=[row_to_summary(row) for row in frequently_bought],
-        you_may_also_like=[row_to_summary(row) for row in you_may_like]
+        you_may_also_like=[row_to_summary(row) for row in you_may_like],
     )
 
 
@@ -208,7 +197,7 @@ async def upload_article_image(
 ):
     """
     Sube una imagen para un artículo en Profit Plus (requiere perfil administrador).
-    
+
     - Si `tip` no se proporciona, se genera automáticamente un código único (IMG001, IMG002, etc.).
     - Si `tip` se proporciona, se verifica que no exista ya para ese artículo.
     - El código `tip` debe ser único por artículo (máximo 6 caracteres).
@@ -249,23 +238,23 @@ async def get_article_image(
     Devuelve los bytes de una imagen almacenada en saArtImagen.
     Permite acceso público (sin autenticación requerida) para facilitar
     la carga de imágenes en el frontend.
-    
+
     Args:
         image_guid: GUID único de la imagen (formato UUID)
     """
     # Normalizar el GUID: quitar espacios, convertir a mayúsculas, remover llaves
-    image_guid_clean = image_guid.strip().upper().replace('{', '').replace('}', '')
-    
+    image_guid_clean = image_guid.strip().upper().replace("{", "").replace("}", "")
+
     if not image_guid_clean:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="GUID de imagen inválido",
         )
-    
+
     try:
         row = article_service.get_image_binary(image_guid_clean)
         description = (row.get("imagen_des") or "").lower()
-        
+
         # Determinar el tipo de contenido basado en la descripción o usar JPEG por defecto
         if description.endswith(".png"):
             media_type = "image/png"
@@ -275,7 +264,7 @@ async def get_article_image(
             media_type = "image/webp"
         else:
             media_type = "image/jpeg"
-        
+
         return Response(content=row["picture"], media_type=media_type)
     except HTTPException:
         # Re-lanzar HTTPException tal cual
@@ -291,6 +280,7 @@ async def get_article_image(
 # =============================================================================
 # ENDPOINTS DE IMÁGENES EN CLOUDINARY (Base de datos local)
 # =============================================================================
+
 
 @router.post(
     "/{co_art}/cloudinary-images",
@@ -308,18 +298,18 @@ async def upload_product_image_cloudinary(
 ):
     """
     📷 **Subir imagen de producto a Cloudinary**
-    
+
     Sube una imagen a Cloudinary y guarda la referencia en la base de datos local.
     La imagen queda asociada al código de artículo de Profit Plus (co_art).
-    
+
     **Requiere perfil administrador.**
-    
+
     Args:
         co_art: Código del artículo en Profit Plus
         file: Archivo de imagen
         is_main: Si debe ser la imagen principal (desmarca las anteriores)
         description: Descripción o texto alternativo de la imagen
-        
+
     Returns:
         Información de la imagen subida incluyendo URL de Cloudinary
     """
@@ -347,15 +337,15 @@ async def upload_product_image_from_url(
 ):
     """
     📷 **Subir imagen de producto desde URL a Cloudinary**
-    
+
     Descarga una imagen desde una URL externa y la sube a Cloudinary.
-    
+
     **Requiere perfil administrador.**
-    
+
     Args:
         co_art: Código del artículo en Profit Plus
         image_data: Datos de la imagen incluyendo URL origen
-        
+
     Returns:
         Información de la imagen subida
     """
@@ -381,22 +371,20 @@ async def get_product_cloudinary_images(
 ):
     """
     📷 **Obtener imágenes de Cloudinary de un producto**
-    
+
     Retorna todas las imágenes almacenadas en Cloudinary para un artículo.
     Las imágenes vienen ordenadas con la principal primero.
-    
+
     Args:
         co_art: Código del artículo en Profit Plus
-        
+
     Returns:
         Lista de imágenes del producto
     """
     images = product_image_service.get_images_by_article(co_art, db=db)
-    
+
     return ProductImageListResponse(
-        co_art_profit=co_art.strip().upper(),
-        images=[ProductImageResponse(**img) for img in images],
-        total=len(images)
+        co_art_profit=co_art.strip().upper(), images=[ProductImageResponse(**img) for img in images], total=len(images)
     )
 
 
@@ -412,14 +400,14 @@ async def delete_product_cloudinary_image(
 ):
     """
     🗑️ **Eliminar imagen de Cloudinary**
-    
+
     Elimina una imagen específica de Cloudinary y de la base de datos.
-    
+
     **Requiere perfil administrador.**
-    
+
     Args:
         image_id: ID de la imagen en la base de datos
-        
+
     Returns:
         Resultado de la eliminación
     """
@@ -439,14 +427,14 @@ async def delete_all_product_cloudinary_images(
 ):
     """
     🗑️ **Eliminar todas las imágenes de un producto**
-    
+
     Elimina todas las imágenes de Cloudinary asociadas a un artículo.
-    
+
     **Requiere perfil administrador.**
-    
+
     Args:
         co_art: Código del artículo en Profit Plus
-        
+
     Returns:
         Resultado de la eliminación masiva
     """
@@ -466,18 +454,17 @@ async def set_main_product_image(
 ):
     """
     ⭐ **Establecer imagen principal**
-    
+
     Marca una imagen como la imagen principal del producto.
     Las demás imágenes del mismo producto se desmarcan como principales.
-    
+
     **Requiere perfil administrador.**
-    
+
     Args:
         image_id: ID de la imagen a establecer como principal
-        
+
     Returns:
         Información de la imagen actualizada
     """
     result = await product_image_service.set_main_image(image_id, db=db)
     return SetMainImageResponse(**result)
-

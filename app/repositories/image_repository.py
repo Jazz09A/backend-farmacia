@@ -1,4 +1,5 @@
 """Implementación del repositorio de imágenes (saArtImagen)."""
+
 from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 from uuid import uuid4
@@ -25,7 +26,7 @@ class ImageRepository(ImageRepositoryProtocol):
 
     def get_by_guid(self, image_guid: str) -> dict[str, Any] | None:
         """Obtiene datos binarios y metadatos de una imagen por GUID."""
-        image_guid_clean = (image_guid or "").strip().upper().replace('{', '').replace('}', '')
+        image_guid_clean = (image_guid or "").strip().upper().replace("{", "").replace("}", "")
         if not image_guid_clean:
             self._source.logger.warning("Se recibió un GUID vacío")
             return None
@@ -33,12 +34,15 @@ class ImageRepository(ImageRepositoryProtocol):
         self._source.logger.info(f"Buscando imagen con GUID: {image_guid_clean}")
         conn, cursor = self._cursor()
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     picture, imagen_des, tip, co_art
                 FROM dbo.saArtImagen WITH (NOLOCK)
                 WHERE rowguid = CAST(%s AS UNIQUEIDENTIFIER)
-            """, (image_guid_clean,))
+            """,
+                (image_guid_clean,),
+            )
             row = cursor.fetchone()
 
             if row:
@@ -54,11 +58,14 @@ class ImageRepository(ImageRepositoryProtocol):
 
     def _check_tip_exists(self, tip: str, article_code: str, cursor) -> bool:
         """Verifica si un código tip ya existe para un artículo."""
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT COUNT(*) as count
             FROM dbo.saArtImagen WITH (NOLOCK)
             WHERE co_art = %s AND tip = %s
-        """, (article_code, tip))
+        """,
+            (article_code, tip),
+        )
         result = cursor.fetchone()
         return result.get("count", 0) > 0 if result else False
 
@@ -97,11 +104,11 @@ class ImageRepository(ImageRepositoryProtocol):
         if description:
             description_clean = description.strip()
             if len(description_clean) > 60:
-                if '.' in description_clean:
-                    name_part, ext = description_clean.rsplit('.', 1)
+                if "." in description_clean:
+                    name_part, ext = description_clean.rsplit(".", 1)
                     max_name_len = 60 - len(ext) - 1
                     if max_name_len > 0:
-                        description_clean = name_part[:max_name_len] + '.' + ext
+                        description_clean = name_part[:max_name_len] + "." + ext
                     else:
                         description_clean = description_clean[:60]
                 else:
@@ -112,16 +119,12 @@ class ImageRepository(ImageRepositoryProtocol):
 
         # co_us_in: char(6) - usar código corto, no email
         created_by_clean = (created_by or "API").strip()
-        if '@' in created_by_clean:
+        if "@" in created_by_clean:
             created_by_clean = "API"
-            self._source.logger.info(
-                f"Se recibió un email '{created_by}', se usará el código 'API' para co_us_in"
-            )
+            self._source.logger.info(f"Se recibió un email '{created_by}', se usará el código 'API' para co_us_in")
         if len(created_by_clean) > 6:
             created_by_clean = created_by_clean[:6]
-            self._source.logger.warning(
-                f"El código de usuario fue truncado de '{created_by}' a '{created_by_clean}'"
-            )
+            self._source.logger.warning(f"El código de usuario fue truncado de '{created_by}' a '{created_by_clean}'")
 
         sucursal_code = "CCS"
         new_guid = str(uuid4())
@@ -129,9 +132,7 @@ class ImageRepository(ImageRepositoryProtocol):
         try:
             if tip is None:
                 tip = self._generate_unique_tip(article_code_clean, cursor)
-                self._source.logger.info(
-                    f"Se generó automáticamente el código tip '{tip}' para {article_code_clean}"
-                )
+                self._source.logger.info(f"Se generó automáticamente el código tip '{tip}' para {article_code_clean}")
             else:
                 tip = tip.strip().upper()[:6]
                 if tip == "PRINC":
@@ -139,28 +140,29 @@ class ImageRepository(ImageRepositoryProtocol):
                         f"Se usará el código tip 'PRINC' para la imagen principal de {article_code_clean}"
                     )
                 if self._check_tip_exists(tip, article_code_clean, cursor):
-                    raise ValueError(
-                        f"El código tip '{tip}' ya existe para el artículo {article_code_clean}."
-                    )
+                    raise ValueError(f"El código tip '{tip}' ya existe para el artículo {article_code_clean}.")
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO dbo.saArtImagen (
                     co_art, imagen_des, picture, tip,
                     co_us_in, fe_us_in, co_sucu_in,
                     co_us_mo, fe_us_mo, co_sucu_mo, rowguid
                 )
                 VALUES (%s, %s, %s, %s, %s, GETDATE(), %s, %s, GETDATE(), %s, %s)
-            """, (
-                article_code_clean,
-                description_clean,
-                image_bytes,
-                tip,
-                created_by_clean,
-                sucursal_code,
-                created_by_clean,
-                sucursal_code,
-                new_guid,
-            ))
+            """,
+                (
+                    article_code_clean,
+                    description_clean,
+                    image_bytes,
+                    tip,
+                    created_by_clean,
+                    sucursal_code,
+                    created_by_clean,
+                    sucursal_code,
+                    new_guid,
+                ),
+            )
             conn.commit()
             return new_guid
         except ValueError:

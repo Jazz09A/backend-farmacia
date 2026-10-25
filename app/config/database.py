@@ -30,6 +30,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Create Base class for models
 Base = declarative_base()
 
+
 # Dependency to get database session
 def get_db():
     db = SessionLocal()
@@ -37,6 +38,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 # Function to create all tables (idempotente, no toca tablas existentes)
 def create_tables():

@@ -18,13 +18,16 @@ settings = Settings()
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     """Generate password hash."""
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create JWT access token."""
@@ -37,6 +40,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.jwt.SECRET_KEY, algorithm=settings.jwt.ALGORITHM)
     return encoded_jwt
+
 
 def create_refresh_token(data: dict) -> str:
     """Create JWT refresh token."""
@@ -111,13 +115,16 @@ def verify_token(token: str, token_type: str = "access") -> str:
 
     return email
 
+
 def generate_verification_token() -> str:
     """Generate a unique verification token."""
     return secrets.token_urlsafe(32)
 
+
 def generate_reset_token() -> str:
     """Generate a unique password reset token."""
     return secrets.token_urlsafe(32)
+
 
 def create_url_safe_token(data: dict, expires_hours: int = 24) -> str:
     """Create a URL-safe token for email verification and password reset."""
@@ -126,6 +133,7 @@ def create_url_safe_token(data: dict, expires_hours: int = 24) -> str:
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.jwt.SECRET_KEY, algorithm=settings.jwt.ALGORITHM)
     return encoded_jwt
+
 
 def verify_url_safe_token(token: str) -> dict | None:
     """Verify URL-safe token and return payload.

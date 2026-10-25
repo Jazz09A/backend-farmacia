@@ -11,6 +11,7 @@ Diseño:
 - Las funciones son seguras: nunca loggean cuerpos de respuesta, ni
   Authorization headers, ni query params con claves sensibles.
 """
+
 from __future__ import annotations
 
 import re

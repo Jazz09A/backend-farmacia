@@ -29,7 +29,6 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-chars-long-XXXX")
 os.environ.setdefault("SMTP_PASSWORD", "test-smtp-password")
 # Reducir ruido de logs durante los tests
-os.environ.setdefault("CACHE_ENABLED", "False")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -371,6 +370,25 @@ def mock_source_system_service(monkeypatch):
         if hasattr(mod, "source_system_service"):
             monkeypatch.setattr(mod, "source_system_service", fake)
     return fake
+
+
+@pytest.fixture
+def mock_profit_service(monkeypatch):
+    """MagicMock del servicio de Profit Plus inyectado en ArticleService
+    (lo usan los tests de flujo de cache; los tests de remediation usan
+    `mock_source_system_service` con fakes sin red)."""
+    from unittest.mock import MagicMock
+
+    import app.services.article_service as article_module
+
+    mock = MagicMock(name="mock_profit_service")
+    # Defaults silenciosos para evitar llamadas sorpresa: sin descuentos,
+    # catálogo vacío y detalle inexistente. Cada test sobreescribe lo que necesita.
+    mock.get_active_discounts_for_articles.return_value = {}
+    mock.get_articles_catalog.return_value = {"items": [], "total": 0}
+    mock.get_article_detail.return_value = None
+    monkeypatch.setattr(article_module.article_service, "_source_service", mock)
+    return mock
 
 
 # =============================================================================

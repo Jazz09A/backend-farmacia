@@ -41,7 +41,7 @@ __all__ = [
     "ProductImage",
     # Order models eliminados
     # "Order",
-    # "OrderItem", 
+    # "OrderItem",
     # "OrderAddress",
     # "OrderDiscount",
     # "OrderDiscountType",
@@ -51,4 +51,4 @@ __all__ = [
     "User",
     "UserFavorite",
     "UserPreferences",
-] 
+]

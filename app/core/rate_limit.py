@@ -3,6 +3,7 @@
 Backend en memoria (suficiente para un solo proceso; migrar a Redis en
 producción multi-worker si se requiere). Los límites se aplican por IP.
 """
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 

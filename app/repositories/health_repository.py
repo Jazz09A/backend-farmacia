@@ -1,4 +1,5 @@
 """Implementación del repositorio de health checks y métricas del pool."""
+
 from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
@@ -30,7 +31,7 @@ class HealthRepository(HealthRepositoryProtocol):
             stats = self._source.get_pool_stats()
             return {
                 "status": "healthy",
-                "server_time": str(result.get('server_time')) if result else None,
+                "server_time": str(result.get("server_time")) if result else None,
                 **stats,
             }
         except Exception as e:

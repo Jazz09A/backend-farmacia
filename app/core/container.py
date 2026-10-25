@@ -25,6 +25,7 @@ from app.services.source_system_service import SourceSystemService
 # Factories para repositorios
 # =========================================================================
 
+
 def get_source_system_service() -> SourceSystemService:
     """Retorna la instancia singleton de SourceSystemService.
 
@@ -33,6 +34,7 @@ def get_source_system_service() -> SourceSystemService:
     protocolos de dominio.
     """
     from app.services.source_system_service import source_system_service
+
     return source_system_service
 
 
@@ -80,6 +82,7 @@ SourceSystemSvc = Depends(get_source_system_service)
 # =========================================================================
 # Context managers para uso fuera de FastAPI (scripts, tests, CLI)
 # =========================================================================
+
 
 @contextmanager
 def customer_repo() -> Generator[CustomerRepositoryProtocol, None, None]:

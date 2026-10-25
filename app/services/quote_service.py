@@ -38,45 +38,45 @@ class QuoteService:
 
     def __init__(self, db: Session):
         self.db = db
-    
+
     def _get_customer_code_by_email(self, email: str) -> str | None:
         """
         Obtiene el código de cliente (co_cli) en DEMOA por email.
-        
+
         Args:
             email: Email del usuario
-            
+
         Returns:
             Código de cliente (co_cli) o None si no se encuentra
         """
         try:
             customer = source_system_service.get_customer_by_email(email)
             if customer:
-                return customer.get('customer_code')
+                return customer.get("customer_code")
             return None
         except Exception as e:
             logger.error(f"Error obteniendo código de cliente por email {email}: {e}")
             return None
-    
+
     def _determine_status(self, saldo: Decimal, fec_venc: datetime | None) -> str:
         """
         Determina el estado de una cotización basado en sus campos.
-        
+
         Args:
             saldo: Saldo pendiente
             fec_venc: Fecha de vencimiento
-            
+
         Returns:
             Estado: pending, converted, expired
         """
         now = get_ve_now()
-    
+
         # Convertir fec_venc a aware si es naive
         if fec_venc:
             # Si fec_venc es naive (sin timezone), asumimos que está en hora de Venezuela
             if fec_venc.tzinfo is None:
                 fec_venc = fec_venc.replace(tzinfo=VENEZUELA_TZ)
-        
+
         logger.debug(
             "Determinando estado de cotización",
             extra={
@@ -85,20 +85,20 @@ class QuoteService:
                 "now": now.isoformat(),
             },
         )
-        
+
         if fec_venc and fec_venc < now and saldo > 0:
             return "expired"
-        
+
         if saldo == 0:
             return "converted"  # Asumimos que saldo=0 significa convertida a pedido
-        
+
         return "pending"
 
     def _generate_doc_num_safe(self, cursor) -> str:
         """
         Genera un doc_num único de forma segura usando bloqueo pesimista.
         Obtiene el último doc_num numérico, lo incrementa y lo formatea.
-        
+
         Returns:
             Nuevo doc_num formateado con la convención de Profit (10 dígitos con ceros a la izquierda)
         """
@@ -111,9 +111,9 @@ class QuoteService:
         """
         cursor.execute(query_last)
         last_row = cursor.fetchone()
-        
-        if last_row and last_row.get('doc_num'):
-            last_num_str = str(last_row.get('doc_num')).strip()
+
+        if last_row and last_row.get("doc_num"):
+            last_num_str = str(last_row.get("doc_num")).strip()
             try:
                 # Convertir a entero, incrementar y formatear
                 last_num = int(last_num_str)
@@ -124,7 +124,7 @@ class QuoteService:
         else:
             # Primera cotización, empezar desde 1
             new_num = 1
-        
+
         # Formatear a 10 caracteres con ceros a la izquierda (Profit maneja char(10) y rellena con espacios)
         return str(new_num).zfill(10)
 
@@ -138,7 +138,7 @@ class QuoteService:
         """
         Inserta cotización en Profit Plus (saCotizacionCliente y saCotizacionClienteReng)
         siguiendo el flujo transaccional del script SQL.
-        
+
         Proceso:
         1. Genera doc_num de forma segura con bloqueo
         2. Obtiene datos del cliente (dirección de entrega)
@@ -157,15 +157,17 @@ class QuoteService:
                 expires_at_dt = expires_at_dt.replace(tzinfo=VENEZUELA_TZ)
         else:
             expires_at_dt = now + timedelta(days=30)
-        
+
         # Validar que fec_venc no sea anterior a la fecha actual
         # La restricción CHECK requiere que fec_venc >= fec_emis
         if expires_at_dt < now:
-            logger.warning(f"Fecha de vencimiento {expires_at_dt} es anterior a la fecha actual. Usando fecha actual + 30 días.")
+            logger.warning(
+                f"Fecha de vencimiento {expires_at_dt} es anterior a la fecha actual. Usando fecha actual + 30 días."
+            )
             expires_at_dt = now + timedelta(days=30)
-        
+
         currency_code = (payload.currency or "VES").strip()
-        
+
         # Obtener código de cliente: del payload o del usuario autenticado
         co_cli = None
         if payload.customer and payload.customer.code:
@@ -178,8 +180,10 @@ class QuoteService:
             else:
                 raise ValueError(f"No se encontró código de cliente para el usuario con email {user_email}")
         else:
-            raise ValueError("Customer code (co_cli) es requerido. Proporciónelo en el payload o asegúrese de que el usuario esté autenticado.")
-        
+            raise ValueError(
+                "Customer code (co_cli) es requerido. Proporciónelo en el payload o asegúrese de que el usuario esté autenticado."
+            )
+
         logger.info(f"Usando código de cliente: {co_cli}")
 
         # Valores por defecto según el script
@@ -187,8 +191,8 @@ class QuoteService:
         descrip_cotizacion = payload.notes or "Cotización desde E-Commerce"
         co_us_in = "SA"  # Usuario del sistema
         co_alma = "001"  # Almacén principal (ajustar según configuración)
-        tasa = Decimal('1.00')  # Tasa de cambio (1.00 para misma moneda, ajustar si es necesario)
-        porc_imp_default = Decimal('16.00')  # 16% IVA por defecto
+        tasa = Decimal("1.00")  # Tasa de cambio (1.00 para misma moneda, ajustar si es necesario)
+        porc_imp_default = Decimal("16.00")  # 16% IVA por defecto
 
         conn = None
         cursor = None
@@ -208,7 +212,7 @@ class QuoteService:
                 # PASO 1: Generar doc_num de forma segura
                 doc_num = self._generate_doc_num_safe(cursor)
                 logger.info(f"Generado doc_num: {doc_num} para cotización de cliente {co_cli}")
-            
+
             # PASO 1.5: Validar código de vendedor
             # Validar que el código de vendedor existe en la base de datos
             query_vendedor = """
@@ -218,12 +222,14 @@ class QuoteService:
             """
             cursor.execute(query_vendedor, (co_ven,))
             vendedor_row = cursor.fetchone()
-            
+
             if not vendedor_row:
-                raise ValueError(f"Código de vendedor '{co_ven}' no existe en la base de datos. Verifique el código configurado.")
-            
+                raise ValueError(
+                    f"Código de vendedor '{co_ven}' no existe en la base de datos. Verifique el código configurado."
+                )
+
             logger.info(f"Vendedor validado: {co_ven}")
-            
+
             # PASO 2: Obtener datos del cliente y validar dirección de entrega
             query_cliente = """
             SELECT 
@@ -240,7 +246,7 @@ class QuoteService:
             """
             cursor.execute(query_cliente, (co_cli,))
             cliente_row = cursor.fetchone()
-            
+
             # Validar que el cliente existe
             if not cliente_row:
                 # Si el cliente no existe y se proporcionó en el payload, intentar obtenerlo del usuario autenticado
@@ -259,12 +265,10 @@ class QuoteService:
                         # Reintentar la consulta con el nuevo código
                         cursor.execute(query_cliente, (co_cli,))
                         cliente_row = cursor.fetchone()
-                
+
                 # Si aún no existe, lanzar error descriptivo
                 if not cliente_row:
-                    error_msg = (
-                        f"Cliente con código '{co_cli}' no existe en la base de datos Profit Plus. "
-                    )
+                    error_msg = f"Cliente con código '{co_cli}' no existe en la base de datos Profit Plus. "
                     if user_email:
                         customer_code_from_email = self._get_customer_code_by_email(user_email)
                         if customer_code_from_email:
@@ -279,15 +283,15 @@ class QuoteService:
                             )
                     else:
                         error_msg += "Verifica el código de cliente o asegúrate de estar autenticado."
-                    
+
                     logger.error(f"Error validando cliente: {error_msg}")
                     raise ValueError(error_msg)
-            
+
             # Obtener datos del cliente desde la BD (para logging y validación)
-            cliente_email_bd = (cliente_row.get('email') or cliente_row.get('email_alterno') or '').strip()
-            cliente_name_bd = (cliente_row.get('cli_des') or '').strip()
-            cliente_phone_bd = (cliente_row.get('telefonos') or '').strip()
-            
+            cliente_email_bd = (cliente_row.get("email") or cliente_row.get("email_alterno") or "").strip()
+            cliente_name_bd = (cliente_row.get("cli_des") or "").strip()
+            cliente_phone_bd = (cliente_row.get("telefonos") or "").strip()
+
             # Log de datos obtenidos de la BD (si no se proporcionaron en el payload)
             if payload.customer:
                 if not payload.customer.email and cliente_email_bd:
@@ -296,12 +300,12 @@ class QuoteService:
                     logger.info(f"Nombre del cliente obtenido desde BD: {cliente_name_bd}")
                 if not payload.customer.phone and cliente_phone_bd:
                     logger.info(f"Teléfono del cliente obtenido desde BD: {cliente_phone_bd}")
-            
+
             # Obtener todas las direcciones del cliente
-            direc1 = (cliente_row.get('direc1') or '').strip() if cliente_row.get('direc1') else None
-            dir_ent2 = (cliente_row.get('dir_ent2') or '').strip() if cliente_row.get('dir_ent2') else None
-            direc2 = (cliente_row.get('direc2') or '').strip() if cliente_row.get('direc2') else None
-            
+            direc1 = (cliente_row.get("direc1") or "").strip() if cliente_row.get("direc1") else None
+            dir_ent2 = (cliente_row.get("dir_ent2") or "").strip() if cliente_row.get("dir_ent2") else None
+            direc2 = (cliente_row.get("direc2") or "").strip() if cliente_row.get("direc2") else None
+
             # Validar dirección si se proporciona
             direccion_entrega = None
             if payload.direc:
@@ -314,7 +318,7 @@ class QuoteService:
                     direcciones_validas.append(dir_ent2)
                 if direc2:
                     direcciones_validas.append(direc2)
-                
+
                 # Validar que la dirección proporcionada coincida con alguna de las direcciones del cliente
                 direccion_encontrada = False
                 for direc_valida in direcciones_validas:
@@ -323,7 +327,7 @@ class QuoteService:
                         direccion_encontrada = True
                         logger.info(f"Dirección validada para cliente {co_cli}: {direc_provided}")
                         break
-                
+
                 if not direccion_encontrada:
                     raise ValueError(
                         f"La dirección proporcionada '{direc_provided}' no coincide con ninguna dirección registrada "
@@ -336,12 +340,12 @@ class QuoteService:
                     logger.warning(f"No se encontró dirección principal (direc1) para cliente {co_cli}, usando NULL")
                 else:
                     logger.info(f"Usando dirección principal por defecto para cliente {co_cli}: {direccion_entrega}")
-            
+
             # PASO 2.5: Validar y obtener código de transporte
             co_tran = None
             if payload.delivery and payload.delivery.co_tran:
                 co_tran = payload.delivery.co_tran.strip()
-                
+
                 # Validar que el código de transporte existe
                 query_transporte = """
                 SELECT co_tran, des_tran
@@ -350,21 +354,23 @@ class QuoteService:
                 """
                 cursor.execute(query_transporte, (co_tran,))
                 transporte_row = cursor.fetchone()
-                
+
                 if not transporte_row:
-                    raise ValueError(f"Código de transporte '{co_tran}' no válido. Debe ser uno de: 001, 002, 003, 004, 005, 006, 007")
-                
+                    raise ValueError(
+                        f"Código de transporte '{co_tran}' no válido. Debe ser uno de: 001, 002, 003, 004, 005, 006, 007"
+                    )
+
                 logger.info(f"Transporte validado: {co_tran} - {transporte_row.get('des_tran')}")
             else:
                 # Si no se proporciona, usar el default "001" (ENTREGA DIRECTA)
                 co_tran = "001"
                 logger.info(f"Usando transporte por defecto: {co_tran} (ENTREGA DIRECTA)")
-            
+
             # PASO 2.6: Validar y obtener código de condición de pago
             co_cond = None
             payment_terms_input = payload.payment_terms or "CON"
             co_cond = payment_terms_input.strip()
-            
+
             # Validar que el código de condición de pago existe
             query_condicion = """
             SELECT co_cond, cond_des
@@ -373,20 +379,20 @@ class QuoteService:
             """
             cursor.execute(query_condicion, (co_cond,))
             condicion_row = cursor.fetchone()
-            
+
             if not condicion_row:
                 raise ValueError(
                     f"Código de condición de pago '{co_cond}' no válido. "
                     f"Debe ser uno de: CON, 3D, 5D, 7D, 10D, 12D, 14D, 15D, 16D, 20D, 21D, 30D, 360D"
                 )
-            
+
             logger.info(f"Condición de pago validada: {co_cond} - {condicion_row.get('cond_des')}")
-            
+
             # PASO 3: Obtener datos de artículos (descripción, tipo de impuesto, unidad de medida y PRECIO)
             co_arts = [item.product_code.strip() for item in payload.items if item.product_code]
             if not co_arts:
                 raise ValueError("No se proporcionaron artículos para la cotización")
-            
+
             placeholders = ",".join(["%s"] * len(co_arts))
             query_articulos = f"""
             SELECT 
@@ -408,22 +414,22 @@ class QuoteService:
             cursor.execute(query_articulos, tuple(co_arts))
             articulos_data = cursor.fetchall()
             articulos_map = {
-                (row.get('co_art') or '').strip(): {
-                    'art_des': row.get('art_des'),
-                    'tipo_imp': row.get('tipo_imp', '1'),
-                    'co_uni': (row.get('co_uni') or 'UND').strip(),
-                    'precio_base': Decimal(str(row.get('precio_base') or 0))
+                (row.get("co_art") or "").strip(): {
+                    "art_des": row.get("art_des"),
+                    "tipo_imp": row.get("tipo_imp", "1"),
+                    "co_uni": (row.get("co_uni") or "UND").strip(),
+                    "precio_base": Decimal(str(row.get("precio_base") or 0)),
                 }
                 for row in articulos_data
             }
-            
+
             # Validar que todos los artículos existen
             missing_arts = [art for art in co_arts if art not in articulos_map]
             if missing_arts:
                 raise ValueError(f"Artículos no encontrados: {', '.join(missing_arts)}")
-            
+
             # Validar que todas las unidades de medida existen en saUnidad
-            co_unis = [art_data.get('co_uni', 'UND') for art_data in articulos_map.values()]
+            co_unis = [art_data.get("co_uni", "UND") for art_data in articulos_map.values()]
             co_unis_unique = list(set(co_unis))
             if co_unis_unique:
                 placeholders_uni = ",".join(["%s"] * len(co_unis_unique))
@@ -434,40 +440,48 @@ class QuoteService:
                 """
                 cursor.execute(query_unidades, tuple(co_unis_unique))
                 unidades_data = cursor.fetchall()
-                unidades_validas = {row.get('co_uni', '').strip() for row in unidades_data}
-                
+                unidades_validas = {row.get("co_uni", "").strip() for row in unidades_data}
+
                 unidades_invalidas = [uni for uni in co_unis_unique if uni not in unidades_validas]
                 if unidades_invalidas:
-                    logger.warning(f"Unidades de medida no encontradas: {unidades_invalidas}. Usando 'UND' como default.")
+                    logger.warning(
+                        f"Unidades de medida no encontradas: {unidades_invalidas}. Usando 'UND' como default."
+                    )
                     # Reemplazar unidades inválidas con 'UND'
                     for art_data in articulos_map.values():
-                        if art_data.get('co_uni') in unidades_invalidas:
-                            art_data['co_uni'] = 'UND'
-            
+                        if art_data.get("co_uni") in unidades_invalidas:
+                            art_data["co_uni"] = "UND"
+
             # PASO 4: Insertar cabecera con totales en 0 (se actualizarán después)
             # Asegurar que todos los valores char respeten sus límites
             co_cli_value = co_cli[:16] if len(co_cli) > 16 else co_cli.ljust(16) if len(co_cli) < 16 else co_cli
             co_tran_value = co_tran[:6] if len(co_tran) > 6 else co_tran.ljust(6) if len(co_tran) < 6 else co_tran
             co_ven_value = co_ven[:6] if len(co_ven) > 6 else co_ven.ljust(6) if len(co_ven) < 6 else co_ven
-            currency_code_value = currency_code[:6] if len(currency_code) > 6 else currency_code.ljust(6) if len(currency_code) < 6 else currency_code
+            currency_code_value = (
+                currency_code[:6]
+                if len(currency_code) > 6
+                else currency_code.ljust(6)
+                if len(currency_code) < 6
+                else currency_code
+            )
             co_cond_value = co_cond[:6] if len(co_cond) > 6 else co_cond.ljust(6) if len(co_cond) < 6 else co_cond
             co_us_in_value = co_us_in[:6] if len(co_us_in) > 6 else co_us_in.ljust(6) if len(co_us_in) < 6 else co_us_in
             co_us_mo_value = co_us_in_value  # Usuario de modificación igual al de inserción inicialmente
-            
+
             # Valores por defecto para campos obligatorios
-            monto_desc_glob = Decimal('0.00')
-            monto_reca = Decimal('0.00')
-            monto_imp2 = Decimal('0.00')
-            monto_imp3 = Decimal('0.00')
-            otros1 = Decimal('0.00')
-            otros2 = Decimal('0.00')
-            otros3 = Decimal('0.00')
+            monto_desc_glob = Decimal("0.00")
+            monto_reca = Decimal("0.00")
+            monto_imp2 = Decimal("0.00")
+            monto_imp3 = Decimal("0.00")
+            otros1 = Decimal("0.00")
+            otros2 = Decimal("0.00")
+            otros3 = Decimal("0.00")
             contrib = 0  # No es contribuyente
             impresa = 0  # No impresa
-            
+
             # Convertir fecha aware a naive para SQL Server (smalldatetime no maneja timezone)
             expires_at_naive = expires_at_dt.replace(tzinfo=None) if expires_at_dt.tzinfo else expires_at_dt
-            
+
             insert_header = """
             INSERT INTO dbo.saCotizacionCliente
                 (doc_num, descrip, co_cli, co_tran, co_ven, co_mone, co_cond, tasa, fec_emis, fec_reg, fec_venc, 
@@ -504,36 +518,36 @@ class QuoteService:
                     co_us_mo_value,
                 ),
             )
-            
+
             # PASO 5: Insertar renglones y calcular totales
-            total_bruto = Decimal('0.00')
-            total_impuestos = Decimal('0.00')
-            total_descuentos = Decimal('0.00')  # Acumulador de descuentos
+            total_bruto = Decimal("0.00")
+            total_impuestos = Decimal("0.00")
+            total_descuentos = Decimal("0.00")  # Acumulador de descuentos
             reng_num = 1
-            
+
             # Lista para guardar descuentos aplicados (se incrementarán después del COMMIT)
             discounts_to_increment = []
-            
+
             # Valores por defecto para campos obligatorios de renglones
-            porc_imp2 = Decimal('0.00')
-            porc_imp3 = Decimal('0.00')
-            monto_imp2 = Decimal('0.00')
-            monto_imp3 = Decimal('0.00')
-            pendiente = Decimal('0.00')
-            pendiente2 = Decimal('0.00')
-            total_dev = Decimal('0.00')
-            monto_dev = Decimal('0.00')
-            otros = Decimal('0.00')
+            porc_imp2 = Decimal("0.00")
+            porc_imp3 = Decimal("0.00")
+            monto_imp2 = Decimal("0.00")
+            monto_imp3 = Decimal("0.00")
+            pendiente = Decimal("0.00")
+            pendiente2 = Decimal("0.00")
+            total_dev = Decimal("0.00")
+            monto_dev = Decimal("0.00")
+            otros = Decimal("0.00")
             lote_asignado = 0  # No asignado
-            monto_desc_glob_reng = Decimal('0.00')
-            monto_reca_glob_reng = Decimal('0.00')
-            otros1_glob_reng = Decimal('0.00')
-            otros2_glob_reng = Decimal('0.00')
-            otros3_glob_reng = Decimal('0.00')
-            monto_imp_afec_glob_reng = Decimal('0.00')
-            monto_imp2_afec_glob_reng = Decimal('0.00')
-            monto_imp3_afec_glob_reng = Decimal('0.00')
-            
+            monto_desc_glob_reng = Decimal("0.00")
+            monto_reca_glob_reng = Decimal("0.00")
+            otros1_glob_reng = Decimal("0.00")
+            otros2_glob_reng = Decimal("0.00")
+            otros3_glob_reng = Decimal("0.00")
+            monto_imp_afec_glob_reng = Decimal("0.00")
+            monto_imp2_afec_glob_reng = Decimal("0.00")
+            monto_imp3_afec_glob_reng = Decimal("0.00")
+
             insert_reng = """
             INSERT INTO dbo.saCotizacionClienteReng
                 (reng_num, doc_num, co_art, des_art, co_alma, total_art, stotal_art, co_uni, prec_vta,
@@ -546,51 +560,53 @@ class QuoteService:
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                  %s, %s, %s, %s, %s, %s, %s, %s, %s, GETDATE(), %s, GETDATE(), NEWID())
             """
-            
+
             # PASO 5: Procesar items de la cotización
             for idx, item in enumerate(payload.items, 1):
                 co_art = item.product_code.strip()
                 cantidad = Decimal(str(item.quantity))
-                
+
                 # Obtener datos del artículo desde la BD
                 art_data = articulos_map.get(co_art)
                 if not art_data:
                     raise ValueError(f"Artículo no encontrado: {co_art}")
-                
+
                 # Usar precio de la BD (ignorar el del payload)
-                precio_unit = art_data.get('precio_base', Decimal('0.00'))
+                precio_unit = art_data.get("precio_base", Decimal("0.00"))
                 if precio_unit <= 0:
                     raise ValueError(f"Artículo sin precio configurado: {co_art} (lista '01')")
-                
-                des_art = art_data.get('art_des') or ''
-                tipo_imp = art_data.get('tipo_imp', '1')
-                co_uni = art_data.get('co_uni', 'UND')
-                
+
+                des_art = art_data.get("art_des") or ""
+                tipo_imp = art_data.get("tipo_imp", "1")
+                co_uni = art_data.get("co_uni", "UND")
+
                 # Calcular descuento desde saDescArticulo si no se proporciona en el payload
                 monto_desc = Decimal(str(item.discount_amount or "0.00"))
-                
+
                 if monto_desc == 0:
                     try:
                         discount_info = source_system_service.get_article_discount(
-                            article_code=co_art,
-                            quantity=cantidad,
-                            existing_cursor=cursor
+                            article_code=co_art, quantity=cantidad, existing_cursor=cursor
                         )
-                        
-                        if discount_info and discount_info.get('disponibles', 0) > 0:
-                            discount_percentage = discount_info['discount_percentage']
-                            subtotal_bruto_temp = (cantidad * precio_unit)
-                            monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal(100)).quantize(Decimal('0.01'))
-                            
+
+                        if discount_info and discount_info.get("disponibles", 0) > 0:
+                            discount_percentage = discount_info["discount_percentage"]
+                            subtotal_bruto_temp = cantidad * precio_unit
+                            monto_desc = (subtotal_bruto_temp * discount_percentage / Decimal(100)).quantize(
+                                Decimal("0.01")
+                            )
+
                             # Guardar descuento para incrementar después del COMMIT
-                            field_to_increment = discount_info.get('field_to_increment', 'campo1')
-                            discounts_to_increment.append({
-                                'co_desc': discount_info['co_desc'],
-                                'quantity_used': int(cantidad),
-                                'field_name': field_to_increment,
-                                'co_art': co_art,
-                                'disponibles_antes': discount_info.get('disponibles', 0)
-                            })
+                            field_to_increment = discount_info.get("field_to_increment", "campo1")
+                            discounts_to_increment.append(
+                                {
+                                    "co_desc": discount_info["co_desc"],
+                                    "quantity_used": int(cantidad),
+                                    "field_name": field_to_increment,
+                                    "co_art": co_art,
+                                    "disponibles_antes": discount_info.get("disponibles", 0),
+                                }
+                            )
                             logger.info(
                                 f"Descuento aplicado | articulo={co_art} | "
                                 f"descuento={discount_percentage}% | monto={monto_desc}"
@@ -600,27 +616,31 @@ class QuoteService:
                         raise ValueError("No se puede crear cotización: error de conexión con BD") from conn_err
                     except Exception as e:
                         logger.warning(f"No se pudo obtener descuento | articulo={co_art} | {e}")
-                        monto_desc = Decimal('0.00')
-                
+                        monto_desc = Decimal("0.00")
+
                 # Cálculos
-                subtotal_bruto = (cantidad * precio_unit)
+                subtotal_bruto = cantidad * precio_unit
                 subtotal_neto = subtotal_bruto - monto_desc
-                
-                tax_amount_decimal = Decimal(str(item.tax_amount or '0.00'))
+
+                tax_amount_decimal = Decimal(str(item.tax_amount or "0.00"))
                 if tax_amount_decimal > 0 and subtotal_neto > 0:
                     monto_imp = tax_amount_decimal
-                    porc_imp = (monto_imp / subtotal_neto * 100).quantize(Decimal('0.01'))
+                    porc_imp = (monto_imp / subtotal_neto * 100).quantize(Decimal("0.01"))
                 else:
                     porc_imp = porc_imp_default
-                    monto_imp = (subtotal_neto * porc_imp / 100).quantize(Decimal('0.01')) if subtotal_neto > 0 else Decimal('0.00')
-                
+                    monto_imp = (
+                        (subtotal_neto * porc_imp / 100).quantize(Decimal("0.01"))
+                        if subtotal_neto > 0
+                        else Decimal("0.00")
+                    )
+
                 reng_neto = subtotal_neto + monto_imp
-                stotal_art = Decimal('0.00')
-                
+                stotal_art = Decimal("0.00")
+
                 # Formatear campos char
                 co_art_value = co_art[:30].ljust(30) if len(co_art) < 30 else co_art[:30]
                 co_uni_value = co_uni[:6].ljust(6) if len(co_uni) < 6 else co_uni[:6]
-                
+
                 # Insertar renglón
                 cursor.execute(
                     insert_reng,
@@ -661,7 +681,7 @@ class QuoteService:
                         co_us_mo_value,
                     ),
                 )
-                
+
                 # Acumular totales
                 total_bruto += subtotal_bruto
                 total_descuentos += monto_desc
@@ -669,7 +689,7 @@ class QuoteService:
                 reng_num += 1
             # PASO 6: Actualizar cabecera con totales calculados
             total_neto = total_bruto - total_descuentos + total_impuestos
-            
+
             update_totals = """
             UPDATE dbo.saCotizacionCliente
             SET
@@ -681,13 +701,12 @@ class QuoteService:
             WHERE doc_num = %s
             """
             cursor.execute(
-                update_totals,
-                (total_bruto, total_descuentos, total_impuestos, total_neto, total_neto, doc_num)
+                update_totals, (total_bruto, total_descuentos, total_impuestos, total_neto, total_neto, doc_num)
             )
-            
+
             # Confirmar transacción
             conn.commit()
-            
+
             # Obtener datos de items para email
             quote_items_for_email = []
             try:
@@ -708,58 +727,60 @@ class QuoteService:
                 """
                 email_cursor.execute(quote_items_query, (doc_num,))
                 quote_items_data = email_cursor.fetchall()
-                
+
                 for row in quote_items_data:
-                    co_art = (row.get('co_art') or '').strip()
+                    co_art = (row.get("co_art") or "").strip()
                     if co_art:
-                        art_des = (row.get('art_des') or '').strip()
-                        unit_price_raw = row.get('unit_price', 0) or 0
-                        quantity = row.get('quantity', 0) or 0
-                        
-                        quote_items_for_email.append({
-                            'co_art': co_art,
-                            'name': art_des if art_des else co_art,
-                            'unit_price': f"{float(unit_price_raw):.2f}" if unit_price_raw else '0.00',
-                            'quantity': f"{float(quantity):.2f}" if quantity else '0.00',
-                            'discount_amount': f"{float(row.get('discount_amount', 0) or 0):.2f}",
-                            'tax_amount': f"{float(row.get('tax_amount', 0) or 0):.2f}",
-                        })
-                
+                        art_des = (row.get("art_des") or "").strip()
+                        unit_price_raw = row.get("unit_price", 0) or 0
+                        quantity = row.get("quantity", 0) or 0
+
+                        quote_items_for_email.append(
+                            {
+                                "co_art": co_art,
+                                "name": art_des if art_des else co_art,
+                                "unit_price": f"{float(unit_price_raw):.2f}" if unit_price_raw else "0.00",
+                                "quantity": f"{float(quantity):.2f}" if quantity else "0.00",
+                                "discount_amount": f"{float(row.get('discount_amount', 0) or 0):.2f}",
+                                "tax_amount": f"{float(row.get('tax_amount', 0) or 0):.2f}",
+                            }
+                        )
+
                 email_cursor.close()
             except Exception as e:
                 logger.warning(f"Error obteniendo items para email | doc_num={doc_num} | {e}")
                 quote_items_for_email = []
-            
+
             cursor.close()
-            
+
             # Incrementar contadores de descuentos (después del commit, en transacciones separadas)
             if discounts_to_increment:
                 for discount_info in discounts_to_increment:
                     try:
                         source_system_service.increment_discount_usage(
-                            co_desc=discount_info['co_desc'],
-                            quantity_used=discount_info['quantity_used'],
-                            field_name=discount_info['field_name'],
-                            existing_cursor=None
+                            co_desc=discount_info["co_desc"],
+                            quantity_used=discount_info["quantity_used"],
+                            field_name=discount_info["field_name"],
+                            existing_cursor=None,
                         )
                     except Exception as inc_error:
                         # No fallar la cotización si falla el incremento (ya está creada)
                         logger.error(
                             f"Error incrementando descuento {discount_info['co_desc']} para {discount_info['co_art']}: {inc_error}",
-                            exc_info=True
+                            exc_info=True,
                         )
                         logger.warning(
                             f"La cotización fue creada pero el contador de descuento no se actualizó. "
                             f"Descuento: {discount_info['co_desc']}, Artículo: {discount_info['co_art']}"
                         )
-            
+
             logger.info(
                 f"Cotización creada exitosamente: doc_num={doc_num}, "
                 f"co_cli={co_cli}, total_bruto={total_bruto}, total_neto={total_neto}"
             )
-            
+
             quote_id = f"COT-{doc_num}"
-            
+
             # El email se enviará desde el endpoint async
             # Por ahora, email_sent_at será None y se actualizará en el endpoint si el email se envía exitosamente
             return QuoteCreatedResponse(
@@ -767,14 +788,14 @@ class QuoteService:
                 profit_plus_id=doc_num,
                 status="pending",
                 currency=currency_code,
-                total_net=str(total_bruto.quantize(Decimal('0.01'))),
-                total_tax=str(total_impuestos.quantize(Decimal('0.01'))),
-                total_gross=str(total_neto.quantize(Decimal('0.01'))),
+                total_net=str(total_bruto.quantize(Decimal("0.01"))),
+                total_tax=str(total_impuestos.quantize(Decimal("0.01"))),
+                total_gross=str(total_neto.quantize(Decimal("0.01"))),
                 expires_at=expires_at_dt.isoformat(),
                 email_sent_at=None,  # Se actualizará en el endpoint después de enviar el email
                 items_data=quote_items_for_email if quote_items_for_email else None,  # Datos de items para el email
             )
-            
+
         except Exception as e:
             # Revertir transacción en caso de error
             try:
@@ -787,7 +808,7 @@ class QuoteService:
                 f"Error creando cotización | user_id={user_id} | "
                 f"items={len(payload.items) if payload and payload.items else 0} | "
                 f"tipo_error={type(e).__name__} | error={e}",
-                exc_info=True
+                exc_info=True,
             )
             raise
         finally:
@@ -830,12 +851,12 @@ class QuoteService:
 
         # Calcular totales (estimados) con IVA 16% sobre precio 0.00 al no tener pricing aquí
         items_out: list[QuoteVerifyItemResult] = []
-        bruto = Decimal('0.00')
-        impuestos_total = Decimal('0.00')
+        bruto = Decimal("0.00")
+        impuestos_total = Decimal("0.00")
         for it in verify_req.items:
-            precio_unitario = Decimal('0.00')
-            subtotal = (precio_unitario * Decimal(str(it.cantidad)))
-            impuesto = (subtotal * Decimal('0.16')).quantize(Decimal('0.01')) if subtotal > 0 else Decimal('0.00')
+            precio_unitario = Decimal("0.00")
+            subtotal = precio_unitario * Decimal(str(it.cantidad))
+            impuesto = (subtotal * Decimal("0.16")).quantize(Decimal("0.01")) if subtotal > 0 else Decimal("0.00")
             bruto += subtotal
             impuestos_total += impuesto
 
@@ -843,8 +864,8 @@ class QuoteService:
                 QuoteVerifyItemResult(
                     co_art=it.co_art,
                     cantidad=it.cantidad,
-                    precio_unitario=str(precio_unitario.quantize(Decimal('0.01'))),
-                    subtotal=str(subtotal.quantize(Decimal('0.01'))),
+                    precio_unitario=str(precio_unitario.quantize(Decimal("0.01"))),
+                    subtotal=str(subtotal.quantize(Decimal("0.01"))),
                     impuestos=str(impuesto),
                     stock_ok=True,
                     nombre_articulo=art_map.get(it.co_art),
@@ -858,9 +879,9 @@ class QuoteService:
             co_cli=verify_req.co_cli,
             items_verificados=items_out,
             totales=QuoteVerifyTotals(
-                bruto=str(bruto.quantize(Decimal('0.01'))),
-                impuestos=str(impuestos_total.quantize(Decimal('0.01'))),
-                neto=str(neto.quantize(Decimal('0.01'))),
+                bruto=str(bruto.quantize(Decimal("0.01"))),
+                impuestos=str(impuestos_total.quantize(Decimal("0.01"))),
+                neto=str(neto.quantize(Decimal("0.01"))),
             ),
             expires_at=expires_at,
         )
@@ -876,7 +897,7 @@ class QuoteService:
     ) -> QuoteListResponse:
         """
         Lista cotizaciones del usuario desde Profit Plus.
-        
+
         Args:
             user_id: ID del usuario en la BD local
             source_system: Sistema fuente (profit_plus)
@@ -884,35 +905,33 @@ class QuoteService:
             date_range: Tupla con (from_date, to_date) en formato ISO
             page: Número de página
             page_size: Tamaño de página
-            
+
         Returns:
             QuoteListResponse con cotizaciones paginadas
         """
         try:
             # Obtener email del usuario desde la BD local
             from app.models.user import User
+
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 logger.warning(f"Usuario {user_id} no encontrado")
                 return QuoteListResponse(
-                    results=[],
-                    pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
+                    results=[], pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
                 )
             # Obtener código de cliente en DEMOA
             customer_code = self._get_customer_code_by_email(user.email)
             if not customer_code:
-                
                 return QuoteListResponse(
-                    results=[],
-                    pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
+                    results=[], pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
                 )
-            
+
             # Usar context manager para manejo seguro de conexiones
             offset = (page - 1) * page_size
-            
+
             with source_system_service.connection() as conn:
                 cursor = conn.cursor()
-                
+
                 # Contar total de cotizaciones (con NOLOCK para evitar bloqueos)
                 count_query = """
                 SELECT COUNT(DISTINCT c.doc_num) as total
@@ -920,8 +939,8 @@ class QuoteService:
                 WHERE c.co_cli = %s AND c.saldo > 0
                 """
                 cursor.execute(count_query, (customer_code,))
-                total_count = cursor.fetchone().get('total', 0)
-                
+                total_count = cursor.fetchone().get("total", 0)
+
                 # Obtener cotizaciones con paginación y conteo de items (con NOLOCK)
                 query = """
                 SELECT 
@@ -948,56 +967,55 @@ class QuoteService:
                 OFFSET %s ROWS
                 FETCH NEXT %s ROWS ONLY
                 """
-                
+
                 cursor.execute(query, (customer_code, offset, page_size))
                 quotes_data = cursor.fetchall()
-                
+
                 cursor.close()
-            
+
             # Transformar a QuoteListItem
             results = []
             for quote in quotes_data:
                 logger.debug(
                     "Procesando cotización para listado",
                     extra={
-                        "saldo": str(quote.get('saldo', 0)),
-                        "expires_at": quote.get('expires_at').isoformat()
-                        if isinstance(quote.get('expires_at'), datetime)
-                        else str(quote.get('expires_at')),
-                        "profit_plus_id": str(quote.get('profit_plus_id')),
+                        "saldo": str(quote.get("saldo", 0)),
+                        "expires_at": quote.get("expires_at").isoformat()
+                        if isinstance(quote.get("expires_at"), datetime)
+                        else str(quote.get("expires_at")),
+                        "profit_plus_id": str(quote.get("profit_plus_id")),
                     },
                 )
-                status = self._determine_status(
-                    Decimal(str(quote.get('saldo', 0))),
-                    quote.get('expires_at')
-                )
-                
+                status = self._determine_status(Decimal(str(quote.get("saldo", 0))), quote.get("expires_at"))
+
                 # Formatear fechas
-                created_at = quote.get('created_at')
-                expires_at = quote.get('expires_at')
+                created_at = quote.get("created_at")
+                expires_at = quote.get("expires_at")
                 if created_at and isinstance(created_at, datetime):
                     created_at = created_at.isoformat()
                 if expires_at and isinstance(expires_at, datetime):
                     expires_at = expires_at.isoformat()
-                
+
                 # Generar quote_id en formato COT-YYYY-XXXXX
-                profit_plus_id = str(quote.get('profit_plus_id', ''))
+                profit_plus_id = str(quote.get("profit_plus_id", ""))
                 quote_id = f"COT-{profit_plus_id}" if profit_plus_id else "COT-UNKNOWN"
-                
-                results.append(QuoteListItem(
-                    quote_id=quote_id,
-                    profit_plus_id=profit_plus_id,
-                    status=status,
-                    created_at=created_at or "",
-                    expires_at=expires_at or "",
-                    total_gross=str(quote.get('total_neto', 0)),
-                    currency=quote.get('currency_name', 'VES'),
-                    items_count=quote.get('items_count', 0),
-                    email_sent_at=created_at or "",
-                ))
-            
+
+                results.append(
+                    QuoteListItem(
+                        quote_id=quote_id,
+                        profit_plus_id=profit_plus_id,
+                        status=status,
+                        created_at=created_at or "",
+                        expires_at=expires_at or "",
+                        total_gross=str(quote.get("total_neto", 0)),
+                        currency=quote.get("currency_name", "VES"),
+                        items_count=quote.get("items_count", 0),
+                        email_sent_at=created_at or "",
+                    )
+                )
+
             total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
-            
+
             return QuoteListResponse(
                 results=results,
                 pagination=Pagination(
@@ -1007,17 +1025,14 @@ class QuoteService:
                     total_items=total_count,
                 ),
             )
-            
+
         except Exception as e:
-            logger.error(
-                f"Error listando cotizaciones | user_id={user_id} | "
-                f"tipo_error={type(e).__name__} | error={e}"
-            )
+            logger.error(f"Error listando cotizaciones | user_id={user_id} | tipo_error={type(e).__name__} | error={e}")
             import traceback
+
             traceback.print_exc()
             response = QuoteListResponse(
-                results=[],
-                pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
+                results=[], pagination=Pagination(page=page, page_size=page_size, total_pages=0, total_items=0)
             )
             return response
 
@@ -1029,12 +1044,12 @@ class QuoteService:
     ) -> QuoteDetailResponse | None:
         """
         Obtiene el detalle completo de una cotización desde Profit Plus.
-        
+
         Args:
             user_id: ID del usuario en la BD local
             quote_id: ID de la cotización (formato COT-XXXXX o solo el código)
             source_system: Sistema fuente (profit_plus)
-            
+
         Returns:
             QuoteDetailResponse con todos los detalles o None si no se encuentra
         """
@@ -1043,21 +1058,22 @@ class QuoteService:
             # Eliminar espacios en blanco al inicio y al final
             profit_plus_id = quote_id.replace("COT-", "") if quote_id.startswith("COT-") else quote_id
             profit_plus_id = profit_plus_id.strip()
-            
+
             # Obtener email del usuario
             from app.models.user import User
+
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 logger.warning(f"Usuario {user_id} no encontrado")
                 return None
-            
+
             # Obtener código de cliente y eliminar espacios en blanco
             customer_code = self._get_customer_code_by_email(user.email)
             if not customer_code:
                 logger.warning(f"Cliente no encontrado en DEMOA para email {user.email}")
                 return None
             customer_code = customer_code.strip() if customer_code else None
-            
+
             # Consulta para obtener los detalles de las cotizaciones
             # Usar context manager para manejo seguro de conexiones
             # Query con NOLOCK para evitar bloqueos entre lecturas concurrentes
@@ -1090,92 +1106,93 @@ class QuoteService:
               AND c.anulado = 0
             ORDER BY r.reng_num
             """
-            
+
             with source_system_service.connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(query, (profit_plus_id, customer_code))
                 all_data = cursor.fetchall()
                 cursor.close()
-                
+
                 if not all_data:
                     logger.warning(f"Cotización {profit_plus_id} no encontrada para cliente {customer_code}")
                     return None
-                
+
                 # El primer registro contiene la información del encabezado
                 first_row = all_data[0]
                 header = {
-                    'profit_plus_id': first_row.get('profit_plus_id'),
-                    'created_at': first_row.get('created_at'),
-                    'emission_date': first_row.get('emission_date'),
-                    'expires_at': first_row.get('expires_at'),
-                    'total_neto': first_row.get('total_neto'),
-                    'saldo': first_row.get('saldo'),
-                    'codigo_moneda': first_row.get('codigo_moneda'),
-                    'currency_name': first_row.get('currency_name'),
-                    'codigo_vendedor': first_row.get('codigo_vendedor'),
+                    "profit_plus_id": first_row.get("profit_plus_id"),
+                    "created_at": first_row.get("created_at"),
+                    "emission_date": first_row.get("emission_date"),
+                    "expires_at": first_row.get("expires_at"),
+                    "total_neto": first_row.get("total_neto"),
+                    "saldo": first_row.get("saldo"),
+                    "codigo_moneda": first_row.get("codigo_moneda"),
+                    "currency_name": first_row.get("currency_name"),
+                    "codigo_vendedor": first_row.get("codigo_vendedor"),
                 }
-                
+
                 # Todos los registros contienen los items (puede haber múltiples renglones)
                 items_data = []
                 for row in all_data:
-                    if row.get('product_code'):  # Solo agregar si tiene artículo
-                        items_data.append({
-                            'line_number': row.get('line_number'),
-                            'product_code': row.get('product_code'),
-                            'product_name': row.get('product_name'),
-                            'quantity': row.get('quantity'),
-                            'unit_price': row.get('unit_price'),
-                            'discount_amount': row.get('discount_amount'),
-                            'tax_amount': row.get('tax_amount'),
-                            'line_total': row.get('line_total'),
-                            'description': row.get('description'),
-                        })
-            
+                    if row.get("product_code"):  # Solo agregar si tiene artículo
+                        items_data.append(
+                            {
+                                "line_number": row.get("line_number"),
+                                "product_code": row.get("product_code"),
+                                "product_name": row.get("product_name"),
+                                "quantity": row.get("quantity"),
+                                "unit_price": row.get("unit_price"),
+                                "discount_amount": row.get("discount_amount"),
+                                "tax_amount": row.get("tax_amount"),
+                                "line_total": row.get("line_total"),
+                                "description": row.get("description"),
+                            }
+                        )
+
             # Transformar items
             items = []
-            total_discount = Decimal('0.00')
-            total_tax = Decimal('0.00')
-            
+            total_discount = Decimal("0.00")
+            total_tax = Decimal("0.00")
+
             for item in items_data:
-                discount = Decimal(str(item.get('discount_amount', 0) or 0))
-                tax = Decimal(str(item.get('tax_amount', 0) or 0))
+                discount = Decimal(str(item.get("discount_amount", 0) or 0))
+                tax = Decimal(str(item.get("tax_amount", 0) or 0))
                 total_discount += discount
                 total_tax += tax
-                
-                items.append(QuoteDetailItem(
-                    line_number=item.get('line_number', 0),
-                    product_code=str(item.get('product_code', '')),
-                    product_name=item.get('product_name') or item.get('description', '') or '',
-                    quantity=str(item.get('quantity', 0) or 0),
-                    unit_price=str(item.get('unit_price', 0) or 0),
-                    discount_amount=str(discount),
-                    tax_amount=str(tax),
-                    line_total=str(item.get('line_total', 0) or 0),
-                ))
-            
+
+                items.append(
+                    QuoteDetailItem(
+                        line_number=item.get("line_number", 0),
+                        product_code=str(item.get("product_code", "")),
+                        product_name=item.get("product_name") or item.get("description", "") or "",
+                        quantity=str(item.get("quantity", 0) or 0),
+                        unit_price=str(item.get("unit_price", 0) or 0),
+                        discount_amount=str(discount),
+                        tax_amount=str(tax),
+                        line_total=str(item.get("line_total", 0) or 0),
+                    )
+                )
+
             # Calcular totales
-            total_neto = Decimal(str(header.get('total_neto', 0)))
+            total_neto = Decimal(str(header.get("total_neto", 0)))
             totals = QuoteTotals(
                 total_net=str(total_neto),
                 total_tax=str(total_tax),
                 total_discount=str(total_discount),
                 total_gross=str(total_neto + total_tax - total_discount),
             )
-            
+
             # Determinar estado
-            status = self._determine_status(
-                Decimal(str(header.get('saldo', 0))),
-                header.get('expires_at')
-            )
-            
+            status = self._determine_status(Decimal(str(header.get("saldo", 0))), header.get("expires_at"))
+
             # Formatear fechas
-            created_at = header.get('created_at')
-            expires_at = header.get('expires_at')
+            created_at = header.get("created_at")
+            expires_at = header.get("expires_at")
             if created_at and isinstance(created_at, datetime):
                 created_at = created_at.isoformat()
             if expires_at and isinstance(expires_at, datetime):
                 expires_at = expires_at.isoformat()
-            
+
             # Historial básico
             history: list[QuoteHistoryEvent] = [
                 QuoteHistoryEvent(
@@ -1184,27 +1201,28 @@ class QuoteService:
                     detail="Cotización registrada en Profit Plus",
                 ),
             ]
-            
+
             return QuoteDetailResponse(
                 quote_id=quote_id,
-                profit_plus_id=str(header.get('profit_plus_id', profit_plus_id) or profit_plus_id),
+                profit_plus_id=str(header.get("profit_plus_id", profit_plus_id) or profit_plus_id),
                 status=status,
                 created_at=created_at or "",
                 expires_at=expires_at or "",
-                currency=header.get('currency_name', 'VES'),
+                currency=header.get("currency_name", "VES"),
                 payment_terms="CONTADO",  # TODO: Obtener de tabla si existe
                 delivery={"mode": "pickup"},  # TODO: Obtener de datos reales
                 totals=totals,
                 items=items,
                 history=history,
             )
-            
+
         except Exception as e:
             logger.error(
                 f"Error obteniendo detalle de cotización | quote_id={quote_id} | "
                 f"user_id={user_id} | tipo_error={type(e).__name__} | error={e}"
             )
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -1217,12 +1235,12 @@ class QuoteService:
         """
         Anula una cotización (soft delete) actualizando el campo anulado = 1.
         No elimina físicamente los registros para mantener integridad contable.
-        
+
         Args:
             user_id: ID del usuario en la BD local
             quote_id: ID de la cotización (formato COT-XXXXX o solo el código)
             source_system: Sistema fuente (profit_plus)
-            
+
         Returns:
             bool: True si se anuló exitosamente, False si no se encontró o ya estaba anulada
         """
@@ -1230,21 +1248,22 @@ class QuoteService:
             # Extraer profit_plus_id del quote_id
             profit_plus_id = quote_id.replace("COT-", "") if quote_id.startswith("COT-") else quote_id
             profit_plus_id = profit_plus_id.strip()
-            
+
             # Obtener email del usuario
             from app.models.user import User
+
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 logger.warning(f"Usuario {user_id} no encontrado")
                 return False
-            
+
             # Obtener código de cliente
             customer_code = self._get_customer_code_by_email(user.email)
             if not customer_code:
                 logger.warning(f"Cliente no encontrado en DEMOA para email {user.email}")
                 return False
             customer_code = customer_code.strip() if customer_code else None
-            
+
             # Verificar que la cotización existe y pertenece al cliente
             with source_system_service.connection() as conn:
                 cursor = conn.cursor()
@@ -1273,7 +1292,7 @@ class QuoteService:
                     return False
 
                 # Verificar si ya está anulada
-                if quote_data.get('anulado', 0) == 1:
+                if quote_data.get("anulado", 0) == 1:
                     conn.rollback()
                     logger.info(f"Cotización {profit_plus_id} ya está anulada")
                     return False
@@ -1342,17 +1361,17 @@ class QuoteService:
     ) -> CartValidationResponse:
         """
         Valida un carrito de compras enviado por el frontend.
-        
+
         Principio: Desconfianza absoluta. Solo se confía en co_art y cantidad.
         Todos los demás datos (precio, descripción, impuestos, disponibilidad)
         se obtienen y calculan desde la base de datos.
-        
+
         Args:
             cart_request: Request con lista de items (solo co_art y cantidad)
             user_email: Email del usuario autenticado (para obtener co_cli si es necesario)
             price_code: Código de lista de precios (default: "01")
             warehouse_code: Código de almacén para verificar stock (default: "001")
-            
+
         Returns:
             CartValidationResponse con datos autoritativos calculados por el backend
         """
@@ -1376,17 +1395,17 @@ class QuoteService:
         # Limpiar códigos de artículo (eliminar espacios)
         co_arts_clean = [co_art.strip() if co_art else "" for co_art in co_arts]
         co_arts_clean = [co_art for co_art in co_arts_clean if co_art]  # Eliminar vacíos
-        
+
         if not co_arts_clean:
             return CartValidationResponse(
                 valido=False,
                 items_verificados=[],
                 totales=CartValidationTotals(bruto="0.00", impuestos="0.00", neto="0.00"),
             )
-        
+
         # Construir placeholders para la consulta IN
         placeholders = ",".join(["%s"] * len(co_arts_clean))
-        
+
         # Query masiva con NOLOCK para evitar bloqueos entre lecturas concurrentes
         query = f"""
             SELECT
@@ -1416,17 +1435,17 @@ class QuoteService:
             ) precio_data
             WHERE RTRIM(a.co_art) IN ({placeholders})
         """
-        
+
         # Usar context manager para manejo seguro de conexiones
         with source_system_service.connection() as conn:
             cursor = conn.cursor()
-            
+
             # Parámetros: warehouse_code, price_code, luego los co_arts limpios
             params = [warehouse_code, price_code] + co_arts_clean
             cursor.execute(query, tuple(params))
             db_results = cursor.fetchall()
             cursor.close()
-            
+
             # Crear mapa de resultados por co_art (usando RTRIM para normalizar)
             article_map = {}
             for row in db_results:
@@ -1447,96 +1466,95 @@ class QuoteService:
 
         # 4. Procesar y validar cada item
         items_verificados: list[CartValidationItemResult] = []
-        total_bruto = Decimal('0.00')
-        total_impuestos = Decimal('0.00')
-        total_descuentos = Decimal('0.00')
+        total_bruto = Decimal("0.00")
+        total_impuestos = Decimal("0.00")
+        total_descuentos = Decimal("0.00")
         all_valid = True
 
         for item in cart_request.items:
             # Limpiar código de artículo (eliminar espacios)
             co_art = (item.co_art or "").strip()
             cantidad = Decimal(str(item.cantidad))
-            
+
             # Obtener datos del artículo desde el mapa (usando código limpio)
             article_data = article_map.get(co_art)
-            
+
             # Validaciones
             error_msg = None
-            precio_unitario = Decimal('0.00')
-            subtotal = Decimal('0.00')
-            impuestos = Decimal('0.00')
-            descuento = Decimal('0.00')
+            precio_unitario = Decimal("0.00")
+            subtotal = Decimal("0.00")
+            impuestos = Decimal("0.00")
+            descuento = Decimal("0.00")
             stock_ok = False
             descripcion = None
-            
+
             if not article_data:
                 # Artículo no existe
                 error_msg = "El artículo no existe o no está disponible."
                 all_valid = False
             else:
                 descripcion = article_data.get("art_des")
-                
+
                 # Validar que el artículo esté activo
                 if article_data.get("anulado", 1) != 0:
                     error_msg = "El artículo está anulado o no está disponible."
                     all_valid = False
                 else:
                     # Validar stock
-                    stock_disponible = article_data.get("stock", Decimal('0.00'))
+                    stock_disponible = article_data.get("stock", Decimal("0.00"))
                     if stock_disponible < cantidad:
                         error_msg = f"Stock insuficiente. Disponible: {stock_disponible}, Solicitado: {cantidad}."
                         all_valid = False
                         stock_ok = False
                     else:
                         stock_ok = True
-                    
+
                     # Calcular precio real (ignorar cualquier precio del frontend)
-                    precio_unitario = article_data.get("precio_base", Decimal('0.00'))
-                    
+                    precio_unitario = article_data.get("precio_base", Decimal("0.00"))
+
                     # Calcular subtotal bruto (antes de descuentos)
-                    subtotal_bruto = (precio_unitario * cantidad).quantize(Decimal('0.01'))
-                    
+                    subtotal_bruto = (precio_unitario * cantidad).quantize(Decimal("0.01"))
+
                     # Consultar descuento desde saDescArticulo
                     descuento_info_dict = None
                     try:
                         discount_info = source_system_service.get_article_discount(
-                            article_code=co_art,
-                            quantity=cantidad
+                            article_code=co_art, quantity=cantidad
                         )
-                        
-                        if discount_info and discount_info.get('disponibles', 0) > 0:
-                            discount_percentage = discount_info['discount_percentage']
+
+                        if discount_info and discount_info.get("disponibles", 0) > 0:
+                            discount_percentage = discount_info["discount_percentage"]
                             # Calcular monto de descuento
-                            descuento = (subtotal_bruto * discount_percentage / Decimal(100)).quantize(Decimal('0.01'))
-                            
+                            descuento = (subtotal_bruto * discount_percentage / Decimal(100)).quantize(Decimal("0.01"))
+
                             # Preparar información del descuento para la respuesta
                             descuento_info_dict = {
-                                "co_desc": discount_info.get('co_desc', ''),
+                                "co_desc": discount_info.get("co_desc", ""),
                                 "porcentaje": float(discount_percentage),
-                                "disponibles": discount_info.get('disponibles', 0),
-                                "limite_total": discount_info.get('limite_total', 0)
+                                "disponibles": discount_info.get("disponibles", 0),
+                                "limite_total": discount_info.get("limite_total", 0),
                             }
                     except ConnectionError as conn_err:
                         # Error de conexión - marcar item como inválido
                         logger.error(f"Error de conexión al validar descuento para {co_art}: {conn_err}")
                         error_msg = "Error de conexión con la base de datos"
                         all_valid = False
-                        descuento = Decimal('0.00')
+                        descuento = Decimal("0.00")
                     except Exception as e:
                         logger.warning(f"Error obteniendo descuento para artículo {co_art}: {e}")
                         # Continuar sin descuento si hay error (no es de conexión)
-                        descuento = Decimal('0.00')
-                    
+                        descuento = Decimal("0.00")
+
                     # Calcular subtotal después de descuento
-                    subtotal = (subtotal_bruto - descuento).quantize(Decimal('0.01'))
-                    
+                    subtotal = (subtotal_bruto - descuento).quantize(Decimal("0.01"))
+
                     # Calcular impuestos usando 16% fijo (IVA estándar) sobre el subtotal después de descuento
-                    tasa_impuesto = Decimal('16.00')  # 16% IVA
+                    tasa_impuesto = Decimal("16.00")  # 16% IVA
                     if subtotal > 0:
-                        impuestos = (subtotal * tasa_impuesto / Decimal(100)).quantize(Decimal('0.01'))
+                        impuestos = (subtotal * tasa_impuesto / Decimal(100)).quantize(Decimal("0.01"))
                     else:
-                        impuestos = Decimal('0.00')
-                    
+                        impuestos = Decimal("0.00")
+
                     # Acumular totales solo si el artículo es válido
                     total_bruto += subtotal_bruto
                     total_descuentos += descuento
@@ -1548,10 +1566,10 @@ class QuoteService:
                     co_art=co_art,
                     descripcion=descripcion,
                     cantidad=float(cantidad),
-                    precio_unitario_real=str(precio_unitario.quantize(Decimal('0.01'))),
-                    subtotal=str(subtotal.quantize(Decimal('0.01'))),
-                    impuestos=str(impuestos.quantize(Decimal('0.01'))),
-                    descuento=str(descuento.quantize(Decimal('0.01'))),
+                    precio_unitario_real=str(precio_unitario.quantize(Decimal("0.01"))),
+                    subtotal=str(subtotal.quantize(Decimal("0.01"))),
+                    impuestos=str(impuestos.quantize(Decimal("0.01"))),
+                    descuento=str(descuento.quantize(Decimal("0.01"))),
                     descuento_info=descuento_info_dict,
                     stock_ok=stock_ok,
                     error=error_msg,
@@ -1559,17 +1577,15 @@ class QuoteService:
             )
 
         # 5. Calcular totales finales (bruto - descuentos + impuestos)
-        total_neto = (total_bruto - total_descuentos + total_impuestos).quantize(Decimal('0.01'))
-        
+        total_neto = (total_bruto - total_descuentos + total_impuestos).quantize(Decimal("0.01"))
+
         return CartValidationResponse(
             valido=all_valid,
             items_verificados=items_verificados,
             totales=CartValidationTotals(
-                bruto=str(total_bruto.quantize(Decimal('0.01'))),
-                impuestos=str(total_impuestos.quantize(Decimal('0.01'))),
-                descuentos=str(total_descuentos.quantize(Decimal('0.01'))),
+                bruto=str(total_bruto.quantize(Decimal("0.01"))),
+                impuestos=str(total_impuestos.quantize(Decimal("0.01"))),
+                descuentos=str(total_descuentos.quantize(Decimal("0.01"))),
                 neto=str(total_neto),
             ),
         )
-
-

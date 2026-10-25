@@ -30,16 +30,13 @@ def _redact_email(email: str) -> str:
     if not email:
         return ""
     import hashlib
+
     return hashlib.sha256(email.lower().strip().encode()).hexdigest()[:16]
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/hour")
-async def register_user(
-    request: Request,
-    user_data: RegisterRequest,
-    db: Session = Depends(get_db)
-):
+async def register_user(request: Request, user_data: RegisterRequest, db: Session = Depends(get_db)):
     try:
         new_user = await AuthService(db).register_user(user_data)
         logger.info(
@@ -58,8 +55,10 @@ async def register_user(
     except Exception as e:
         # Error interno: loggear TODO con stack y devolver genérico.
         from app.utils.logging_helpers import log_internal_error
+
         tracking_id = log_internal_error(
-            request, e,
+            request,
+            e,
             context={"operation": "register_user", "email_hash": _redact_email(user_data.email)},
         )
         raise HTTPException(
@@ -67,6 +66,7 @@ async def register_user(
             detail="No se pudo completar el registro. Intente nuevamente.",
             headers={"X-Tracking-ID": tracking_id},
         )
+
 
 @router.get("/verify-email/{token}", response_model=AuthResponse)
 async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
@@ -94,11 +94,7 @@ async def verify_email_with_token(token: str, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
-async def login(
-    request: Request,
-    login_data: LoginRequest,
-    db: Session = Depends(get_db)
-):
+async def login(request: Request, login_data: LoginRequest, db: Session = Depends(get_db)):
     """
     Iniciar sesión con email y contraseña.
 
@@ -126,21 +122,15 @@ async def login(
         )
         raise
 
+
 @router.post("/refresh", response_model=Token)
-async def refresh_token(
-    request: Request,
-    refresh_data: RefreshTokenRequest,
-    db: Session = Depends(get_db)
-):
+async def refresh_token(request: Request, refresh_data: RefreshTokenRequest, db: Session = Depends(get_db)):
     """
     Actualizar token de acceso usando token de actualización.
     """
     if not refresh_data.refresh_token:
         log_security_event("refresh_token_missing", request=request)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Refresh token es requerido"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Refresh token es requerido")
 
     log_security_event(
         "refresh_attempt",
@@ -155,25 +145,22 @@ async def refresh_token(
         log_security_event("refresh_failed", request=request)
         raise
 
+
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: User = Depends(get_current_active_user)
-):
+async def get_current_user_info(current_user: User = Depends(get_current_active_user)):
     """
     Obtener información del usuario actual autenticado.
 
     Retorna el schema apropiado según el tipo de usuario.
     """
     from app.utils.logging_helpers import set_request_context
+
     set_request_context(user_id=str(current_user.id), user_email=str(current_user.email))
     return AuthService.get_user_info(current_user)
 
 
 @router.post("/resend-verification", response_model=AuthResponse)
-async def resend_verification_email(
-    resend_data: ResendVerificationRequest,
-    db: Session = Depends(get_db)
-):
+async def resend_verification_email(resend_data: ResendVerificationRequest, db: Session = Depends(get_db)):
     """
     Reenviar email de verificación.
     """
@@ -185,10 +172,7 @@ async def resend_verification_email(
 
 
 @router.get("/get-email-verification/{email}", response_model=AuthResponse)
-async def get_email_verification(
-    email: str,
-    db: Session = Depends(get_db)
-):
+async def get_email_verification(email: str, db: Session = Depends(get_db)):
     """
     Endpoint intencionalmente opaco: la respuesta es idéntica exista o no el
     usuario, para no permitir enumeración. El contenido útil debe obtenerse
@@ -199,20 +183,14 @@ async def get_email_verification(
         user_email=email,
     )
     return AuthResponse(
-        message=(
-            "Si las credenciales son correctas pero no tienes cuenta, "
-            "recibirás un email de activación"
-        ),
+        message=("Si las credenciales son correctas pero no tienes cuenta, recibirás un email de activación"),
         success=True,
     )
 
+
 @router.post("/forgot-password", response_model=AuthResponse)
 @limiter.limit("3/hour")
-async def forgot_password(
-    request: Request,
-    forgot_data: ForgotPasswordRequest,
-    db: Session = Depends(get_db)
-):
+async def forgot_password(request: Request, forgot_data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     Solicitar recuperación de contraseña.
 
@@ -225,12 +203,9 @@ async def forgot_password(
     )
     return await AuthService.send_reset_password_email(db, forgot_data.email)
 
+
 @router.post("/reset-password", response_model=AuthResponse)
-async def reset_password(
-    request: Request,
-    reset_data: ResetPasswordRequest,
-    db: Session = Depends(get_db)
-):
+async def reset_password(request: Request, reset_data: ResetPasswordRequest, db: Session = Depends(get_db)):
     """
     Restablecer contraseña con token de recuperación.
     """
@@ -250,9 +225,7 @@ async def reset_password(
 
 @router.post("/change-password", response_model=AuthResponse)
 async def change_password(
-    payload: ChangePasswordRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    payload: ChangePasswordRequest, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """
     Cambiar contraseña del usuario autenticado.
@@ -276,14 +249,9 @@ async def change_password(
 
 
 @router.post("/logout", response_model=AuthResponse)
-async def logout(
-    current_user: User = Depends(get_current_user)
-):
+async def logout(current_user: User = Depends(get_current_user)):
     """
     Cerrar sesión (invalidar token).
     """
     log_security_event("logout", user_email=str(current_user.email))
-    return AuthResponse(
-        message="Sesión cerrada exitosamente",
-        success=True
-    )
+    return AuthResponse(message="Sesión cerrada exitosamente", success=True)

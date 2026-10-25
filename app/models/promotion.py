@@ -23,6 +23,7 @@ class DiscountType(enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
 
+
 class FlashOffer(Base):
     __tablename__ = "flash_offers"
 
@@ -31,7 +32,7 @@ class FlashOffer(Base):
 
     # Product reference
     product_id = Column(String, ForeignKey("products.id"), nullable=True, index=True)
-    
+
     # Article code from Profit Plus (co_art)
     article_code = Column(String, nullable=False, index=True)
 
@@ -65,9 +66,9 @@ class FlashOffer(Base):
         """Check if flash offer is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active and
-            self.start_time <= now <= self.end_time and
-            (self.max_quantity is None or self.used_quantity < self.max_quantity)
+            self.is_active
+            and self.start_time <= now <= self.end_time
+            and (self.max_quantity is None or self.used_quantity < self.max_quantity)
         )
 
     def calculate_discount_amount(self, original_price: float) -> float:
@@ -76,6 +77,7 @@ class FlashOffer(Base):
             return original_price * (self.discount_value / 100)
         else:
             return min(self.discount_value, original_price)
+
 
 class PromotionalCode(Base):
     __tablename__ = "promotional_codes"
@@ -126,9 +128,9 @@ class PromotionalCode(Base):
         """Check if promotional code is currently valid."""
         now = get_ve_now()
         return (
-            self.is_active and
-            self.valid_from <= now <= self.valid_until and
-            (self.usage_limit is None or self.used_count < self.usage_limit)
+            self.is_active
+            and self.valid_from <= now <= self.valid_until
+            and (self.usage_limit is None or self.used_count < self.usage_limit)
         )
 
     def can_be_used_by_user(self, user_id: str) -> bool:
@@ -156,6 +158,7 @@ class PromotionalCode(Base):
             discount = min(discount, self.max_discount)
 
         return discount
+
 
 class PromotionUsage(Base):
     __tablename__ = "promotion_usages"
@@ -186,8 +189,10 @@ class PromotionUsage(Base):
     def __repr__(self):
         return f"<PromotionUsage(id={self.id}, code_id={self.promotional_code_id}, user_id={self.user_id})>"
 
+
 class QuantityDiscount(Base):
     """Modelo para descuentos automáticos basados en cantidad total de productos."""
+
     __tablename__ = "quantity_discounts"
 
     # Primary key
@@ -231,6 +236,7 @@ class QuantityDiscount(Base):
             return total_amount * (self.discount_value / 100)
         else:
             return min(self.discount_value, total_amount)
+
 
 # Legacy Promotion class for backward compatibility
 class Promotion(FlashOffer):

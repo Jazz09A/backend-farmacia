@@ -2,8 +2,8 @@
 
 Encapsula todo el SQL crudo y lógica de negocio específica de clientes.
 """
+
 from __future__ import annotations
-from decimal import Decimal
 from typing import Any, TYPE_CHECKING
 
 from app.repositories.protocols import CustomerRepositoryProtocol, _CursorProtocol
@@ -146,8 +146,9 @@ class CustomerRepository(CustomerRepositoryProtocol):
         en login/autoprovision.
         """
         from app.services.cache_service import cache_service
+
         cache_key = f"source:customer:by_email:{email.lower().strip()}"
-        cached = cache_service.get(cache_key)
+        cached = cache_service.get_sync(cache_key)
         if cached is not None:
             return cached if cached != "__NULL__" else None
         conn, cursor = self._cursor()
@@ -170,7 +171,7 @@ class CustomerRepository(CustomerRepositoryProtocol):
             """
             cursor.execute(query, (email, email))
             customer = cursor.fetchone()
-            cache_service.set(cache_key, customer if customer else "__NULL__", ttl=300)
+            cache_service.set_sync(cache_key, customer if customer else "__NULL__", ttl=300)
             return customer
         finally:
             cursor.close()
@@ -206,40 +207,52 @@ class CustomerRepository(CustomerRepositoryProtocol):
             addresses = []
 
             # Dirección principal (direc1)
-            if result.get('address1'):
-                addresses.append({
-                    'type': 'principal',
-                    'label': 'Dirección Principal',
-                    'address': result.get('address1', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
+            if result.get("address1"):
+                addresses.append(
+                    {
+                        "type": "principal",
+                        "label": "Dirección Principal",
+                        "address": result.get("address1", "").strip(),
+                        "city": result.get("city", "").strip() if result.get("city") else None,
+                        "postal_code": result.get("postal_code", "").strip() if result.get("postal_code") else None,
+                        "phones": result.get("phones", "").strip() if result.get("phones") else None,
+                        "customer_name": result.get("customer_name", "").strip()
+                        if result.get("customer_name")
+                        else None,
+                    }
+                )
 
             # Dirección de entrega 2 (dir_ent2)
-            if result.get('delivery_address2'):
-                addresses.append({
-                    'type': 'entrega',
-                    'label': 'Dirección de Entrega',
-                    'address': result.get('delivery_address2', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
+            if result.get("delivery_address2"):
+                addresses.append(
+                    {
+                        "type": "entrega",
+                        "label": "Dirección de Entrega",
+                        "address": result.get("delivery_address2", "").strip(),
+                        "city": result.get("city", "").strip() if result.get("city") else None,
+                        "postal_code": result.get("postal_code", "").strip() if result.get("postal_code") else None,
+                        "phones": result.get("phones", "").strip() if result.get("phones") else None,
+                        "customer_name": result.get("customer_name", "").strip()
+                        if result.get("customer_name")
+                        else None,
+                    }
+                )
 
             # Dirección secundaria (direc2)
-            if result.get('address2'):
-                addresses.append({
-                    'type': 'secundaria',
-                    'label': 'Dirección Secundaria',
-                    'address': result.get('address2', '').strip(),
-                    'city': result.get('city', '').strip() if result.get('city') else None,
-                    'postal_code': result.get('postal_code', '').strip() if result.get('postal_code') else None,
-                    'phones': result.get('phones', '').strip() if result.get('phones') else None,
-                    'customer_name': result.get('customer_name', '').strip() if result.get('customer_name') else None,
-                })
+            if result.get("address2"):
+                addresses.append(
+                    {
+                        "type": "secundaria",
+                        "label": "Dirección Secundaria",
+                        "address": result.get("address2", "").strip(),
+                        "city": result.get("city", "").strip() if result.get("city") else None,
+                        "postal_code": result.get("postal_code", "").strip() if result.get("postal_code") else None,
+                        "phones": result.get("phones", "").strip() if result.get("phones") else None,
+                        "customer_name": result.get("customer_name", "").strip()
+                        if result.get("customer_name")
+                        else None,
+                    }
+                )
 
             return addresses
         finally:
@@ -250,14 +263,10 @@ class CustomerRepository(CustomerRepositoryProtocol):
         """Obtiene perfil Profit del cliente (customer_code, tip_cli, customer_name)."""
         customer = self.get_by_email(email)
         if not customer:
-            raise ValueError(
-                f"No se encontró un cliente en Profit plus asociado al email {email}"
-            )
+            raise ValueError(f"No se encontró un cliente en Profit plus asociado al email {email}")
         customer_code = (customer.get("customer_code") or "").strip()
         if not customer_code:
-            raise ValueError(
-                f"El cliente asociado al email {email} no tiene código (co_cli) en Profit plus"
-            )
+            raise ValueError(f"El cliente asociado al email {email} no tiene código (co_cli) en Profit plus")
         tip_cli = (customer.get("tip_cli") or "").strip()
         if not tip_cli:
             tip_cli = "007"  # Default: cliente general

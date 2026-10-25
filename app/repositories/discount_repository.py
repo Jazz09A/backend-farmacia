@@ -1,4 +1,5 @@
 """Implementación del repositorio de descuentos (saDescArticulo, saTipoCliente, ofertas flash)."""
+
 from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any, TYPE_CHECKING
@@ -58,11 +59,11 @@ class DiscountRepository(DiscountRepositoryProtocol):
 
         conn, cursor = self._cursor()
         try:
-            placeholders = ','.join(['%s'] * len(normalized_codes))
+            placeholders = ",".join(["%s"] * len(normalized_codes))
             where_conditions = [
                 f"RTRIM(d.co_art) IN ({placeholders})",
                 "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
-                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
+                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())",
             ]
             params: list[Any] = list(normalized_codes)
 
@@ -137,9 +138,9 @@ class DiscountRepository(DiscountRepositoryProtocol):
             if not discount:
                 return None
 
-            hasta_vals = {i: _safe_decimal(discount.get(f'hasta{i}')) for i in range(1, 6)}
-            porc_vals = {i: _safe_decimal(discount.get(f'porc{i}')) for i in range(1, 6)}
-            campo_vals = {i: _safe_int(discount.get(f'campo{i}')) for i in range(1, 6)}
+            hasta_vals = {i: _safe_decimal(discount.get(f"hasta{i}")) for i in range(1, 6)}
+            porc_vals = {i: _safe_decimal(discount.get(f"porc{i}")) for i in range(1, 6)}
+            campo_vals = {i: _safe_int(discount.get(f"campo{i}")) for i in range(1, 6)}
 
             # Buscar tier aplicable (del más alto al más bajo)
             selected_tier = None
@@ -152,22 +153,21 @@ class DiscountRepository(DiscountRepositoryProtocol):
                 return None
 
             return {
-                'co_desc': str(discount.get('co_desc', '')).strip(),
-                'discount_percentage': porc_vals[selected_tier],
-                'range_applied': f'hasta{selected_tier}',
-                'field_to_increment': f'campo{selected_tier}',
-                'disponibles': 999999,
-                'limite_total': int(hasta_vals[selected_tier]),
-                'ya_usados': campo_vals[selected_tier],
+                "co_desc": str(discount.get("co_desc", "")).strip(),
+                "discount_percentage": porc_vals[selected_tier],
+                "range_applied": f"hasta{selected_tier}",
+                "field_to_increment": f"campo{selected_tier}",
+                "disponibles": 999999,
+                "limite_total": int(hasta_vals[selected_tier]),
+                "ya_usados": campo_vals[selected_tier],
             }
         except ConnectionError:
             raise
         except Exception as e:
-            error_code = getattr(e, 'args', [None])[0] if hasattr(e, 'args') and e.args else None
+            error_code = getattr(e, "args", [None])[0] if hasattr(e, "args") and e.args else None
             if error_code in (20002, 20003, 20047):
                 self._source.logger.error(
-                    f"Error de conexión obteniendo descuento | "
-                    f"articulo={article_code} | error_code={error_code} | {e}"
+                    f"Error de conexión obteniendo descuento | articulo={article_code} | error_code={error_code} | {e}"
                 )
                 raise ConnectionError(f"Error de conexión a SQL Server: {e}") from e
             self._source.logger.warning(f"No se pudo obtener descuento para {article_code}: {e}")
@@ -217,22 +217,35 @@ class DiscountRepository(DiscountRepositoryProtocol):
             exists = result["count"] > 0 if result else False
 
             common_values = [
-                _get_value("des_des"), co_art, tip_cli,
-                _get_value("fecha_ini"), _get_value("fecha_fin"),
-                _get_value("hasta1"), _get_value("porc1"),
-                _get_value("hasta2"), _get_value("porc2"),
-                _get_value("hasta3"), _get_value("porc3"),
-                _get_value("hasta4"), _get_value("porc4"),
-                _get_value("hasta5"), _get_value("porc5"),
+                _get_value("des_des"),
+                co_art,
+                tip_cli,
+                _get_value("fecha_ini"),
+                _get_value("fecha_fin"),
+                _get_value("hasta1"),
+                _get_value("porc1"),
+                _get_value("hasta2"),
+                _get_value("porc2"),
+                _get_value("hasta3"),
+                _get_value("porc3"),
+                _get_value("hasta4"),
+                _get_value("porc4"),
+                _get_value("hasta5"),
+                _get_value("porc5"),
                 _get_value("porc6"),
-                _get_value("campo1"), _get_value("campo2"),
-                _get_value("campo3"), _get_value("campo4"),
-                _get_value("campo5"), _get_value("campo6"),
-                _get_value("campo7"), _get_value("campo8"),
+                _get_value("campo1"),
+                _get_value("campo2"),
+                _get_value("campo3"),
+                _get_value("campo4"),
+                _get_value("campo5"),
+                _get_value("campo6"),
+                _get_value("campo7"),
+                _get_value("campo8"),
             ]
 
             if exists:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE dbo.saDescArticulo
                     SET des_des=%s, co_art=%s, tip_cli=%s,
                         fecha_ini=%s, fecha_fin=%s,
@@ -243,9 +256,12 @@ class DiscountRepository(DiscountRepositoryProtocol):
                         campo5=%s, campo6=%s, campo7=%s, campo8=%s,
                         co_us_mo=%s, co_sucu_mo=%s, fe_us_mo=GETDATE()
                     WHERE co_desc=%s
-                """, tuple(common_values + [co_us_mo, co_sucu_mo, co_desc]))
+                """,
+                    tuple(common_values + [co_us_mo, co_sucu_mo, co_desc]),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO dbo.saDescArticulo (
                         co_desc, des_des, co_art, tip_cli, fecha_ini, fecha_fin,
                         hasta1, porc1, hasta2, porc2, hasta3, porc3, hasta4, porc4,
@@ -262,9 +278,9 @@ class DiscountRepository(DiscountRepositoryProtocol):
                         %s, %s, GETDATE(),
                         NULL, NULL, NEWID()
                     )
-                """, tuple(
-                    [co_desc] + common_values + [co_us_in, co_sucu_in, co_us_mo, co_sucu_mo]
-                ))
+                """,
+                    tuple([co_desc] + common_values + [co_us_in, co_sucu_in, co_us_mo, co_sucu_mo]),
+                )
 
             conn.commit()
             return True
@@ -284,10 +300,22 @@ class DiscountRepository(DiscountRepositoryProtocol):
             return False
 
         valid_fields = [
-            "des_des", "fecha_ini", "fecha_fin", "tip_cli",
-            "hasta1", "porc1", "hasta2", "porc2", "hasta3", "porc3",
-            "hasta4", "porc4", "hasta5", "porc5",
-            "campo1", "campo2"
+            "des_des",
+            "fecha_ini",
+            "fecha_fin",
+            "tip_cli",
+            "hasta1",
+            "porc1",
+            "hasta2",
+            "porc2",
+            "hasta3",
+            "porc3",
+            "hasta4",
+            "porc4",
+            "hasta5",
+            "porc5",
+            "campo1",
+            "campo2",
         ]
 
         set_clauses = []
@@ -303,7 +331,7 @@ class DiscountRepository(DiscountRepositoryProtocol):
 
         query = f"""
             UPDATE dbo.saDescArticulo
-            SET {', '.join(set_clauses)}
+            SET {", ".join(set_clauses)}
             WHERE co_desc = %s
         """
         params.append(co_desc)
@@ -324,7 +352,8 @@ class DiscountRepository(DiscountRepositoryProtocol):
         """Obtiene un descuento por su código único."""
         conn, cursor = self._cursor()
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     d.co_desc, d.des_des, d.co_art,
                     d.fecha_ini, d.fecha_fin, d.tip_cli,
@@ -335,23 +364,25 @@ class DiscountRepository(DiscountRepositoryProtocol):
                     d.co_us_in, d.fe_us_in, d.co_us_mo, d.fe_us_mo
                 FROM dbo.saDescArticulo d
                 WHERE d.co_desc = %s
-            """, (co_desc,))
+            """,
+                (co_desc,),
+            )
             row = cursor.fetchone()
             if not row:
                 return None
 
             # Convertir fechas a isoformat
-            for date_field in ('fecha_ini', 'fecha_fin'):
-                if row.get(date_field) and hasattr(row[date_field], 'isoformat'):
+            for date_field in ("fecha_ini", "fecha_fin"):
+                if row.get(date_field) and hasattr(row[date_field], "isoformat"):
                     row[date_field] = row[date_field].isoformat()
 
             # Asegurar tipos numéricos
             for i in range(1, 6):
-                if row.get(f'campo{i}'):
+                if row.get(f"campo{i}"):
                     try:
-                        row[f'campo{i}'] = int(str(row[f'campo{i}']))
+                        row[f"campo{i}"] = int(str(row[f"campo{i}"]))
                     except (ValueError, TypeError):
-                        row[f'campo{i}'] = 0
+                        row[f"campo{i}"] = 0
 
             return row
         finally:
@@ -396,7 +427,8 @@ class DiscountRepository(DiscountRepositoryProtocol):
 
             # Data
             offset = (page - 1) * limit
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT
                     d.co_desc, d.co_art, a.art_des, d.tip_cli, tc.des_tipo,
                     d.des_des, d.fecha_ini, d.fecha_fin,
@@ -417,11 +449,14 @@ class DiscountRepository(DiscountRepositoryProtocol):
                 {where_clause}
                 ORDER BY d.fecha_ini DESC, d.co_desc
                 OFFSET %s ROWS FETCH NEXT %s ROWS ONLY
-            """, tuple(params + [offset, limit]))
+            """,
+                tuple(params + [offset, limit]),
+            )
             items = cursor.fetchall() or []
 
             # Stats
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT
                     SUM(CASE
                         WHEN (fecha_ini IS NULL OR fecha_ini <= GETDATE())
@@ -434,7 +469,9 @@ class DiscountRepository(DiscountRepositoryProtocol):
                     END) AS expired_count
                 FROM dbo.saDescArticulo d
                 {where_clause}
-            """, tuple(params))
+            """,
+                tuple(params),
+            )
             stats = cursor.fetchone()
             has_active = stats["active_count"] if stats else 0
             has_expired = stats["expired_count"] if stats else 0
@@ -463,7 +500,7 @@ class DiscountRepository(DiscountRepositoryProtocol):
             cursor = conn.cursor()
             where_conditions = [
                 "(d.fecha_ini IS NULL OR d.fecha_ini <= GETDATE())",
-                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())"
+                "(d.fecha_fin IS NULL OR d.fecha_fin >= GETDATE())",
             ]
             params = []
 
@@ -477,9 +514,10 @@ class DiscountRepository(DiscountRepositoryProtocol):
                 f"SELECT COUNT(*) AS total FROM dbo.saDescArticulo d WHERE {where_clause}",
                 tuple(params),
             )
-            total = cursor.fetchone()['total']
+            total = cursor.fetchone()["total"]
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT
                     d.co_desc AS id,
                     RTRIM(d.co_art) AS article_code,
@@ -495,21 +533,23 @@ class DiscountRepository(DiscountRepositoryProtocol):
                 WHERE {where_clause}
                 ORDER BY d.fe_us_in DESC
                 OFFSET %s ROWS FETCH NEXT %s ROWS ONLY
-            """, tuple(params + [skip, limit]))
+            """,
+                tuple(params + [skip, limit]),
+            )
             items = cursor.fetchall() or []
 
             results = []
             for item in items:
-                item['discount_type'] = 'percentage'
-                item['is_active'] = True
+                item["discount_type"] = "percentage"
+                item["is_active"] = True
                 try:
-                    c1 = int(item.get('campo1') or 0)
-                    c2 = int(item.get('campo2') or 0)
-                    item['max_quantity'] = c1
-                    item['remaining_quantity'] = c1 - c2
+                    c1 = int(item.get("campo1") or 0)
+                    c2 = int(item.get("campo2") or 0)
+                    item["max_quantity"] = c1
+                    item["remaining_quantity"] = c1 - c2
                 except (ValueError, TypeError):
-                    item['max_quantity'] = 0
-                    item['remaining_quantity'] = 0
+                    item["max_quantity"] = 0
+                    item["remaining_quantity"] = 0
                 results.append(item)
 
             return results, total
@@ -570,9 +610,7 @@ class DiscountRepository(DiscountRepositoryProtocol):
                 conn.commit()
 
             if rows_affected == 0:
-                self._source.logger.warning(
-                    f"Descuento no actualizado | co_desc={co_desc} no existe o no se modificó"
-                )
+                self._source.logger.warning(f"Descuento no actualizado | co_desc={co_desc} no existe o no se modificó")
         except Exception:
             if not use_existing and conn:
                 try:
@@ -628,17 +666,20 @@ class DiscountRepository(DiscountRepositoryProtocol):
         conn, cursor = self._cursor()
         try:
             like_pattern = f"{prefix_clean}%"
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT TOP 1 RTRIM(co_desc) AS co_desc
                 FROM dbo.saDescArticulo
                 WHERE co_desc LIKE %s
                 ORDER BY co_desc DESC
-            """, (like_pattern,))
+            """,
+                (like_pattern,),
+            )
             row = cursor.fetchone()
 
             if row and row.get("co_desc"):
                 last_code = row["co_desc"].strip()
-                numeric_part = last_code[len(prefix_clean):]
+                numeric_part = last_code[len(prefix_clean) :]
                 try:
                     next_number = int(numeric_part or "0") + 1
                 except ValueError:

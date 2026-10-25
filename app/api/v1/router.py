@@ -47,7 +47,6 @@ api_router.include_router(
 )
 
 
-
 # Órdenes del usuario
 
 

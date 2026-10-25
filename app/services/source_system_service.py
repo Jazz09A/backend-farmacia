@@ -13,6 +13,7 @@ Phase 2 del Plan de Refactorización de God Services (2026-08-30):
 - Toda la lógica SQL vive ahora en `app/repositories/{customer,article,discount,image,health,quote}_repository.py`
 - Los tests existentes (246) siguen pasando sin cambios gracias a la API backward compatible.
 """
+
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -157,9 +158,7 @@ class ConnectionPool:
                 try:
                     conn = self._create_connection()
                     if self._logger:
-                        self._logger.debug(
-                            f"Conexión overflow creada ({self._overflow_count}/{self._max_overflow})"
-                        )
+                        self._logger.debug(f"Conexión overflow creada ({self._overflow_count}/{self._max_overflow})")
                     return conn
                 except Exception as e:
                     self._overflow_count -= 1
@@ -264,26 +263,14 @@ class SourceSystemService:
 
         self.logger = get_logger("source_system")
 
-        self.server = (
-            settings.source_system.SYSTEM_SERVER.strip()
-            if settings.source_system.SYSTEM_SERVER
-            else None
-        )
+        self.server = settings.source_system.SYSTEM_SERVER.strip() if settings.source_system.SYSTEM_SERVER else None
         self.port = settings.source_system.SYSTEM_PORT
         self.database = (
-            settings.source_system.SYSTEM_DATABASE.strip()
-            if settings.source_system.SYSTEM_DATABASE
-            else None
+            settings.source_system.SYSTEM_DATABASE.strip() if settings.source_system.SYSTEM_DATABASE else None
         )
-        self.user = (
-            settings.source_system.SYSTEM_USER.strip()
-            if settings.source_system.SYSTEM_USER
-            else None
-        )
+        self.user = settings.source_system.SYSTEM_USER.strip() if settings.source_system.SYSTEM_USER else None
         self.password = (
-            settings.source_system.SYSTEM_PASSWORD.strip()
-            if settings.source_system.SYSTEM_PASSWORD
-            else None
+            settings.source_system.SYSTEM_PASSWORD.strip() if settings.source_system.SYSTEM_PASSWORD else None
         )
 
         pool_size = settings.source_system.POOL_SIZE
@@ -309,6 +296,7 @@ class SourceSystemService:
             HealthRepository,
             QuoteRepository,
         )
+
         self._customer_repo = CustomerRepository(self)
         self._article_repo = ArticleRepository(self)
         self._discount_repo = DiscountRepository(self)
@@ -568,9 +556,7 @@ class SourceSystemService:
         limit: int = 10,
         article_code: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
-        return self._discount_repo.get_all_flash_offers(
-            skip=skip, limit=limit, article_code=article_code
-        )
+        return self._discount_repo.get_all_flash_offers(skip=skip, limit=limit, article_code=article_code)
 
     def generate_discount_code(self, prefix: str = "DESC") -> str:
         return self._discount_repo.generate_discount_code(prefix)

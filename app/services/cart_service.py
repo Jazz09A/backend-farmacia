@@ -24,15 +24,13 @@ class CartService:
             .filter(
                 CartItem.user_id == user_id,
                 CartItem.product_id == product_id,
-                CartItem.selected_presentation == selected_presentation
+                CartItem.selected_presentation == selected_presentation,
             )
             .first()
         )
         # Si existe, validar stock contra el producto ya en la relación
         if existing_item and existing_item.product is None:
-            existing_item.product = (
-                self.db.query(Product).filter(Product.id == product_id).first()
-            )
+            existing_item.product = self.db.query(Product).filter(Product.id == product_id).first()
 
         if existing_item:
             product = existing_item.product
@@ -50,10 +48,7 @@ class CartService:
             if quantity > product.stock:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough stock available.")
             new_item = CartItem(
-                user_id=user_id,
-                product_id=product_id,
-                quantity=quantity,
-                selected_presentation=selected_presentation
+                user_id=user_id, product_id=product_id, quantity=quantity, selected_presentation=selected_presentation
             )
             self.db.add(new_item)
 
@@ -64,17 +59,17 @@ class CartService:
         Updates the quantity of a specific item in the cart.
         """
         cart_item = self._get_cart_item(user_id, item_id)
-        
+
         if new_quantity <= 0:
             # If quantity is zero or less, remove the item
             self.db.delete(cart_item)
             self.db.commit()
-            return None # Indicates item was removed
-        
+            return None  # Indicates item was removed
+
         # Check for available stock
         if new_quantity > cart_item.product.stock:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough stock available.")
-            
+
         cart_item.quantity = new_quantity
         self.db.commit()
         self.db.refresh(cart_item)
@@ -100,39 +95,37 @@ class CartService:
         Retrieves the user's cart with detailed product information and calculated totals.
         SISTEMA UNIFICADO USD: Todo calculado en USD únicamente.
         """
-        cart_items = self.db.query(CartItem).options(
-            joinedload(CartItem.product)
-        ).filter(CartItem.user_id == user_id).all()
+        cart_items = (
+            self.db.query(CartItem).options(joinedload(CartItem.product)).filter(CartItem.user_id == user_id).all()
+        )
 
         if not cart_items:
             return CartResponse(
-                items=[],
-                total_items=0,
-                total_unique_items=0,
-                total=Decimal('0.00'),
-                discounts=CartDiscountsInfo()
+                items=[], total_items=0, total_unique_items=0, total=Decimal("0.00"), discounts=CartDiscountsInfo()
             )
 
         response_items = []
-        total = Decimal('0.00')
+        total = Decimal("0.00")
 
         for item in cart_items:
             product = item.product
             # Calcular subtotal EN USD (product.price ya es USD)
-            subtotal = (product.price * item.quantity).quantize(Decimal('0.01'))
+            subtotal = (product.price * item.quantity).quantize(Decimal("0.01"))
             total += subtotal
 
             product_summary = ProductSummary.model_validate(product)
 
-            response_items.append(CartItemResponse(
-                id=item.id,
-                quantity=item.quantity,
-                selected_presentation=item.selected_presentation,
-                product=product_summary,
-                subtotal=subtotal,  # USD únicamente
-                created_at=item.created_at,
-                updated_at=item.updated_at
-            ))
+            response_items.append(
+                CartItemResponse(
+                    id=item.id,
+                    quantity=item.quantity,
+                    selected_presentation=item.selected_presentation,
+                    product=product_summary,
+                    subtotal=subtotal,  # USD únicamente
+                    created_at=item.created_at,
+                    updated_at=item.updated_at,
+                )
+            )
 
         # Calcular descuentos aplicables
         discount_service = DiscountService(self.db)
@@ -145,29 +138,29 @@ class CartService:
             flash_discounts=discounts_info["flash_discounts"],
             flash_discount_total=discounts_info["flash_discount_total"],
             total_discount=discounts_info["total_discount"],
-            subtotal_after_discounts=discounts_info["subtotal_after_discounts"]
+            subtotal_after_discounts=discounts_info["subtotal_after_discounts"],
         )
 
         return CartResponse(
             items=response_items,
             total_items=sum(item.quantity for item in cart_items),
             total_unique_items=len(cart_items),
-            total=total.quantize(Decimal('0.01')),  # USD únicamente
-            discounts=discounts
+            total=total.quantize(Decimal("0.01")),  # USD únicamente
+            discounts=discounts,
         )
 
     def _get_cart_item(self, user_id: str, item_id: str) -> CartItem:
         """
         A helper method to retrieve a specific cart item and ensure it belongs to the user.
         """
-        cart_item = self.db.query(CartItem).options(
-            joinedload(CartItem.product)
-        ).filter(
-            CartItem.id == item_id,
-            CartItem.user_id == user_id
-        ).first()
+        cart_item = (
+            self.db.query(CartItem)
+            .options(joinedload(CartItem.product))
+            .filter(CartItem.id == item_id, CartItem.user_id == user_id)
+            .first()
+        )
 
         if not cart_item:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart item not found.")
-        
+
         return cart_item
