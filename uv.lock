@@ -198,7 +198,6 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.13.0" },
     { name = "pymssql", specifier = ">=2.3.8" },
     { name = "pytest", specifier = ">=8.4.2" },

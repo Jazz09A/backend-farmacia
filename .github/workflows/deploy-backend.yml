@@ -31,6 +31,9 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
+      - name: Dependency parity (requirements.txt vs pyproject.toml)
+        run: python scripts/check_dep_parity.py
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
